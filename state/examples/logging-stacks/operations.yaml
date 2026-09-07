@@ -13,6 +13,14 @@ spec:
     lokiPackageVersion: "3.7.2"
     grafanaPackageVersion: "13.1.0"
     alloyPackageVersion: "1.17.1-1"
+  metrics:
+    backend:
+      listenAddress: 127.0.0.1
+      port: 9090
+      storagePath: /var/lib/prometheus-cloudfall
+      retentionHours: 360
+    collection:
+      intervalSeconds: 60
   backend:
     server: h1
     listenAddress: 127.0.0.1

@@ -125,6 +125,23 @@ def test_host_profile_rejects_duplicate_firewall_rules(
     assert error.value.issue.code == "firewall_rule_duplicate"
 
 
+def test_logging_stack_rejects_conflicting_listener_ports(
+    tmp_path: Path,
+) -> None:
+    state_directory = tmp_path / "state"
+    shutil.copytree(ROOT / "state" / "examples", state_directory)
+    logging_path = state_directory / "logging-stacks" / "operations.yaml"
+    conflicting = logging_path.read_text(encoding="utf-8").replace(
+        "port: 9090", "port: 3100", 1
+    )
+    logging_path.write_text(conflicting, encoding="utf-8")
+
+    with pytest.raises(StateValidationError) as error:
+        validate_state(state_directory, SCHEMAS)
+
+    assert error.value.issue.code == "logging_port_conflict"
+
+
 def test_logging_collector_must_reference_an_existing_server(
     tmp_path: Path,
 ) -> None:

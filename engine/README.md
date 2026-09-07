@@ -7,14 +7,17 @@ switching, and rollback mechanics.
 The engine acts on explicit inputs and must not silently modify declarative
 state.
 
-## Parallel logging pilot
+## Parallel observability pilot
 
-`ansible/playbooks/logging.yml` installs pinned Loki and Grafana packages on one
-declared backend, exposes only the Loki push endpoint through an mTLS Nginx
-gateway, and installs Alloy on declared collectors. Loki and Grafana bind to
-loopback. The roles validate pre-provisioned secret files and native service
-configuration before restart, deploy one host at a time, and never manage
-Filebeat or the existing Elastic path:
+`ansible/playbooks/logging.yml` installs pinned Loki and Grafana packages plus
+Prometheus on one declared backend, exposes only the Loki push and Prometheus
+remote-write endpoints through an mTLS Nginx gateway, and installs Alloy on
+declared collectors. Alloy ships journal and file logs and pushes host
+metrics from its embedded unix exporter, so collectors open no metrics port.
+Loki, Prometheus, and Grafana bind to loopback, and Grafana is provisioned
+with both data sources. The roles validate pre-provisioned secret files and
+native service configuration before restart, deploy one host at a time, and
+never manage Filebeat or the existing Elastic path:
 
 ```console
 task logging:check STATE_DIR=state/examples

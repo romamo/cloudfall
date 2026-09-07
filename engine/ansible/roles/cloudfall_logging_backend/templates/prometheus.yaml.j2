@@ -1,0 +1,12 @@
+# Managed by Cloudfall. Local changes will be overwritten.
+global:
+  scrape_interval: {{ cloudfall_logging_backend_stack.metrics.collection.intervalSeconds }}s
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets:
+          - "{{ cloudfall_logging_backend_stack.metrics.backend.listenAddress }}:{{ cloudfall_logging_backend_stack.metrics.backend.port }}"
+        labels:
+          environment: "{{ cloudfall_logging_backend_stack.environment }}"
+          server: "{{ cloudfall_logging_backend_stack.backend.server }}"

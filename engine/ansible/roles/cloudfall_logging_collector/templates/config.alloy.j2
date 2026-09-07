@@ -39,6 +39,34 @@ loki.source.journal "systemd" {
     source = "journal",
   }
 }
+
+prometheus.exporter.unix "host" {
+}
+
+prometheus.scrape "host" {
+  targets         = prometheus.exporter.unix.host.targets
+  forward_to      = [prometheus.remote_write.cloudfall.receiver]
+  scrape_interval = "{{ cloudfall_logging_collector_stack.metrics.collection.intervalSeconds }}s"
+}
+
+prometheus.remote_write "cloudfall" {
+  external_labels = {
+    environment = "{{ cloudfall_logging_collector_stack.environment }}",
+    server      = "{{ cloudfall_server_id }}",
+  }
+
+  endpoint {
+    url = "https://{{ cloudfall_logging_collector_stack.gateway.serverName }}:{{ cloudfall_logging_collector_stack.gateway.port }}/api/v1/write"
+
+    tls_config {
+      ca_file     = "{{ cloudfall_logging_collector_stack.collectors.clientTls.caPath }}"
+      cert_file   = "{{ cloudfall_logging_collector_stack.collectors.clientTls.certificatePath }}"
+      key_file    = "{{ cloudfall_logging_collector_stack.collectors.clientTls.keyPath }}"
+      server_name = "{{ cloudfall_logging_collector_stack.gateway.serverName }}"
+      min_version = "TLS12"
+    }
+  }
+}
 {% for item in cloudfall_logging_collector_stack.collectors.files %}
 {% if cloudfall_server_id in item.servers %}
 

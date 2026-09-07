@@ -53,12 +53,69 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 100
+            },
+            "prometheusPackageVersion": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
             }
           },
           "required": [
             "lokiPackageVersion",
             "grafanaPackageVersion",
             "alloyPackageVersion"
+          ],
+          "additionalProperties": false
+        },
+        "metrics": {
+          "type": "object",
+          "properties": {
+            "backend": {
+              "type": "object",
+              "properties": {
+                "listenAddress": {
+                  "const": "127.0.0.1"
+                },
+                "port": {
+                  "type": "integer",
+                  "minimum": 1024,
+                  "maximum": 65535
+                },
+                "storagePath": {
+                  "$ref": "common.schema.json#/$defs/absolutePath"
+                },
+                "retentionHours": {
+                  "type": "integer",
+                  "minimum": 24,
+                  "maximum": 8760
+                }
+              },
+              "required": [
+                "listenAddress",
+                "port",
+                "storagePath",
+                "retentionHours"
+              ],
+              "additionalProperties": false
+            },
+            "collection": {
+              "type": "object",
+              "properties": {
+                "intervalSeconds": {
+                  "type": "integer",
+                  "minimum": 5,
+                  "maximum": 300
+                }
+              },
+              "required": [
+                "intervalSeconds"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "backend",
+            "collection"
           ],
           "additionalProperties": false
         },
@@ -278,6 +335,7 @@
         "environment",
         "migration",
         "software",
+        "metrics",
         "backend",
         "gateway",
         "grafana",

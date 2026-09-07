@@ -38,6 +38,37 @@ argument_specs:
               alloyPackageVersion:
                 type: str
                 required: true
+              prometheusPackageVersion:
+                type: str
+          metrics:
+            type: dict
+            required: true
+            options:
+              backend:
+                type: dict
+                required: true
+                options:
+                  listenAddress:
+                    type: str
+                    choices:
+                      - 127.0.0.1
+                    required: true
+                  port:
+                    type: int
+                    required: true
+                  storagePath:
+                    type: path
+                    required: true
+                  retentionHours:
+                    type: int
+                    required: true
+              collection:
+                type: dict
+                required: true
+                options:
+                  intervalSeconds:
+                    type: int
+                    required: true
           backend:
             type: dict
             required: true

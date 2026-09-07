@@ -506,6 +506,7 @@ def _validate_logging_references(
     _require_server_environment(backend_server, environment, document.source)
 
     _validate_logging_secret_paths(spec, document.source)
+    _validate_logging_ports(spec, document.source)
 
     collectors = _required_mapping(spec, "collectors", document.source)
     collector_ids = _resource_id_list(collectors, "servers", document.source)
@@ -623,6 +624,44 @@ def _validate_logging_secret_paths(
             )
             raise StateValidationError(issue)
         seen.add(path)
+
+
+def _validate_logging_ports(
+    spec: Mapping[str, object], source: SourceLocation
+) -> None:
+    backend = _required_mapping(spec, "backend", source)
+    gateway = _required_mapping(spec, "gateway", source)
+    grafana = _required_mapping(spec, "grafana", source)
+    metrics = _required_mapping(spec, "metrics", source)
+    metrics_backend = _required_mapping(metrics, "backend", source)
+    listeners = (
+        ("backend", backend.get("port")),
+        ("gateway", gateway.get("port")),
+        ("grafana", grafana.get("port")),
+        ("metrics.backend", metrics_backend.get("port")),
+    )
+    seen: dict[int, str] = {}
+    for name, raw_port in listeners:
+        if isinstance(raw_port, bool) or not isinstance(raw_port, int):
+            issue = ValidationIssue(
+                code="internal_state_shape_invalid",
+                message=f"validated logging {name} port is not an integer",
+                source=source,
+                field_path=("spec", name, "port"),
+            )
+            raise StateValidationError(issue)
+        if raw_port in seen:
+            issue = ValidationIssue(
+                code="logging_port_conflict",
+                message=(
+                    f"logging {name} port {raw_port} conflicts with "
+                    f"{seen[raw_port]}"
+                ),
+                source=source,
+                field_path=("spec", name, "port"),
+            )
+            raise StateValidationError(issue)
+        seen[raw_port] = name
 
 
 def _require_server_environment(

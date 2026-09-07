@@ -38,6 +38,22 @@ argument_specs:
               alloyPackageVersion:
                 type: str
                 required: true
+              prometheusPackageVersion:
+                type: str
+          metrics:
+            type: dict
+            required: true
+            options:
+              backend:
+                type: dict
+                required: true
+              collection:
+                type: dict
+                required: true
+                options:
+                  intervalSeconds:
+                    type: int
+                    required: true
           backend:
             type: dict
             required: true

@@ -25,13 +25,14 @@ One command turns an installed Debian host into a compliant Cloudfall server.
 - nftables firewall role: default-deny inbound, allowances declared in state,
   firewall evidence in observations and audit ✔
 - Systemd timer units modeled and audited alongside services ✔
-- `node_exporter` plus the existing Loki/Grafana/Alloy roles as the default
-  single-node observability stack
+- Host metrics through the Loki/Grafana/Alloy stack ✔ — Alloy's embedded
+  unix exporter pushes to a loopback Prometheus over the existing mTLS
+  gateway, so no standalone `node_exporter` port is exposed
 
 Exit: the baseline run is idempotent (second run reports no changes) and
 `cloudfall audit` reports the host compliant, including firewall and timers.
-Remaining before exit: the observability default and a live idempotence run
-on a disposable host.
+Remaining before exit: a live idempotence and observability run on a
+disposable host.
 
 ## M2 — Layer 2: service catalog v1
 

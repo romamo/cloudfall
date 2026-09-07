@@ -9,6 +9,9 @@
       - cloudfall_logging_backend_stack.migration.preserveLegacyAgents | bool
       - cloudfall_logging_backend_stack.backend.listenAddress == "127.0.0.1"
       - cloudfall_logging_backend_stack.grafana.listenAddress == "127.0.0.1"
+      - >-
+        cloudfall_logging_backend_stack.metrics.backend.listenAddress
+        == "127.0.0.1"
     fail_msg: >-
       Logging deployment requires its declared Debian backend and the guarded
       parallel migration mode
@@ -154,12 +157,76 @@
     mode: "0644"
   notify: Restart Loki
 
+- name: Create Prometheus service group before package configuration
+  ansible.builtin.group:
+    name: prometheus
+    system: true
+    state: present
+
+- name: Create Prometheus service account before package configuration
+  ansible.builtin.user:
+    name: prometheus
+    group: prometheus
+    shell: /usr/sbin/nologin
+    create_home: false
+    system: true
+    state: present
+
+- name: Create Prometheus configuration directory before package configuration
+  ansible.builtin.file:
+    path: /etc/prometheus
+    state: directory
+    owner: root
+    group: prometheus
+    mode: "0750"
+
+- name: Create Prometheus storage directory before package configuration
+  ansible.builtin.file:
+    path: "{{ cloudfall_logging_backend_stack.metrics.backend.storagePath }}"
+    state: directory
+    owner: prometheus
+    group: prometheus
+    mode: "0750"
+
+- name: Install managed Prometheus configuration before package configuration
+  ansible.builtin.template:
+    src: prometheus.yaml.j2
+    dest: /etc/prometheus/cloudfall.yaml
+    owner: root
+    group: prometheus
+    mode: "0640"
+  notify: Restart Prometheus
+
+- name: Install managed Prometheus arguments before package configuration
+  ansible.builtin.template:
+    src: prometheus-defaults.j2
+    dest: /etc/default/prometheus
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart Prometheus
+
 - name: Install pinned logging backend packages
   ansible.builtin.apt:
     name:
       - "loki={{ cloudfall_logging_backend_stack.software.lokiPackageVersion }}"
       - "grafana={{ cloudfall_logging_backend_stack.software.grafanaPackageVersion }}"
       - nginx
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+    policy_rc_d: 101
+
+- name: Install the Prometheus metrics backend
+  ansible.builtin.apt:
+    name: >-
+      {{
+        'prometheus=' ~
+        cloudfall_logging_backend_stack.software.prometheusPackageVersion
+        if 'prometheusPackageVersion'
+        in cloudfall_logging_backend_stack.software
+        else 'prometheus'
+      }}
     state: present
     update_cache: true
     cache_valid_time: 3600
@@ -219,6 +286,15 @@
     mode: "0640"
   notify: Restart Grafana
 
+- name: Provision the local Prometheus Grafana data source
+  ansible.builtin.template:
+    src: prometheus-datasource.yml.j2
+    dest: /etc/grafana/provisioning/datasources/cloudfall-prometheus.yml
+    owner: root
+    group: grafana
+    mode: "0640"
+  notify: Restart Grafana
+
 - name: Install mTLS-only Loki ingestion gateway
   ansible.builtin.template:
     src: nginx-loki-gateway.conf.j2
@@ -244,6 +320,16 @@
   changed_when: false
   when: not ansible_check_mode
 
+- name: Validate Prometheus configuration
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/promtool
+      - check
+      - config
+      - /etc/prometheus/cloudfall.yaml
+  changed_when: false
+  when: not ansible_check_mode
+
 - name: Validate Nginx configuration
   ansible.builtin.command:
     argv:
@@ -263,6 +349,7 @@
     daemon_reload: true
   loop:
     - loki.service
+    - prometheus.service
     - nginx.service
     - grafana-server.service
 
@@ -275,6 +362,17 @@
   retries: 12
   delay: 5
   until: cloudfall_logging_backend_loki_readiness.status == 200
+  when: not ansible_check_mode
+
+- name: Wait for Prometheus readiness
+  ansible.builtin.uri:
+    url: "http://{{ cloudfall_logging_backend_stack.metrics.backend.listenAddress }}:{{ cloudfall_logging_backend_stack.metrics.backend.port }}/-/ready"
+    status_code: 200
+    return_content: false
+  register: cloudfall_logging_backend_prometheus_readiness
+  retries: 12
+  delay: 5
+  until: cloudfall_logging_backend_prometheus_readiness.status == 200
   when: not ansible_check_mode
 
 - name: Wait for Grafana readiness

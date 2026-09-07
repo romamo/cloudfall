@@ -16,8 +16,9 @@ Unknown properties are rejected.
 The current contract includes `Server`, `HostProfile`, `Project`, `Component`,
 `Domain`, `SshPublicKey`, and `LoggingStack` desired-state resources. A
 `LoggingStack` pins the guarded parallel migration, backend and collector
-placement, package versions, loopback listeners, mTLS paths, retention, and
-explicit journal/file sources. A `Domain` pins the proxy
+placement, package versions, loopback listeners (including the Prometheus
+metrics backend), mTLS paths, retention, and explicit journal/file sources;
+collectors push host metrics through the same gateway. A `Domain` pins the proxy
 and origin servers, public names, edge mode, TLS policy, configuration evidence
 path, and end-to-end health contract. Public keys are non-secret and are
 scoped to an environment; private keys never belong in state. A server profile

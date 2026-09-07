@@ -495,11 +495,37 @@ class SshPublicKeyInventory:
 
 @dataclass(frozen=True, slots=True)
 class LoggingSoftware:
-    """Pinned package versions for the logging stack."""
+    """Pinned package versions for the observability stack."""
 
     loki: PackageVersion
     grafana: PackageVersion
     alloy: PackageVersion
+    prometheus: PackageVersion | None
+
+
+@dataclass(frozen=True, slots=True)
+class MetricsBackend:
+    """Loopback-only Prometheus backend colocated with the logging backend."""
+
+    listen_address: IpAddress
+    port: TcpPort
+    storage_path: AbsolutePath
+    retention_hours: PositiveCount
+
+
+@dataclass(frozen=True, slots=True)
+class MetricsCollection:
+    """Host metrics collection contract for every declared collector."""
+
+    interval_seconds: PositiveCount
+
+
+@dataclass(frozen=True, slots=True)
+class LoggingMetrics:
+    """Push-only host metrics topology through the mTLS gateway."""
+
+    backend: MetricsBackend
+    collection: MetricsCollection
 
 
 @dataclass(frozen=True, slots=True)
@@ -609,6 +635,7 @@ class LoggingStackInventory:
     migration_mode: LoggingMigrationMode
     preserve_legacy_agents: bool
     software: LoggingSoftware
+    metrics: LoggingMetrics
     backend: LoggingBackend
     gateway: LoggingGateway
     grafana: LoggingGrafana
@@ -616,6 +643,13 @@ class LoggingStackInventory:
 
     def as_dict(self) -> dict[str, object]:
         """Serialize the logging topology without certificate contents."""
+        software: dict[str, object] = {
+            "lokiPackageVersion": self.software.loki.value,
+            "grafanaPackageVersion": self.software.grafana.value,
+            "alloyPackageVersion": self.software.alloy.value,
+        }
+        if self.software.prometheus is not None:
+            software["prometheusPackageVersion"] = self.software.prometheus.value
         return {
             "id": self.resource_id.value,
             "environment": self.environment.value,
@@ -623,10 +657,21 @@ class LoggingStackInventory:
                 "mode": self.migration_mode.value,
                 "preserveLegacyAgents": self.preserve_legacy_agents,
             },
-            "software": {
-                "lokiPackageVersion": self.software.loki.value,
-                "grafanaPackageVersion": self.software.grafana.value,
-                "alloyPackageVersion": self.software.alloy.value,
+            "software": software,
+            "metrics": {
+                "backend": {
+                    "listenAddress": self.metrics.backend.listen_address.value,
+                    "port": self.metrics.backend.port.value,
+                    "storagePath": self.metrics.backend.storage_path.value,
+                    "retentionHours": (
+                        self.metrics.backend.retention_hours.value
+                    ),
+                },
+                "collection": {
+                    "intervalSeconds": (
+                        self.metrics.collection.interval_seconds.value
+                    ),
+                },
             },
             "backend": {
                 "server": self.backend.server_id.value,
@@ -996,6 +1041,10 @@ def _logging_stack_inventory(
     spec = _mapping(document.content, "spec")
     migration = _mapping(spec, "migration")
     software = _mapping(spec, "software")
+    raw_prometheus = software.get("prometheusPackageVersion")
+    metrics = _mapping(spec, "metrics")
+    metrics_backend = _mapping(metrics, "backend")
+    metrics_collection = _mapping(metrics, "collection")
     backend = _mapping(spec, "backend")
     storage = _mapping(backend, "storage")
     gateway = _mapping(spec, "gateway")
@@ -1015,6 +1064,30 @@ def _logging_stack_inventory(
             loki=PackageVersion.from_boundary(software.get("lokiPackageVersion")),
             grafana=PackageVersion.from_boundary(software.get("grafanaPackageVersion")),
             alloy=PackageVersion.from_boundary(software.get("alloyPackageVersion")),
+            prometheus=(
+                PackageVersion.from_boundary(raw_prometheus)
+                if raw_prometheus is not None
+                else None
+            ),
+        ),
+        metrics=LoggingMetrics(
+            backend=MetricsBackend(
+                listen_address=IpAddress.from_boundary(
+                    metrics_backend.get("listenAddress")
+                ),
+                port=TcpPort.from_boundary(metrics_backend.get("port")),
+                storage_path=AbsolutePath.from_boundary(
+                    metrics_backend.get("storagePath")
+                ),
+                retention_hours=PositiveCount.from_boundary(
+                    metrics_backend.get("retentionHours")
+                ),
+            ),
+            collection=MetricsCollection(
+                interval_seconds=PositiveCount.from_boundary(
+                    metrics_collection.get("intervalSeconds")
+                ),
+            ),
         ),
         backend=LoggingBackend(
             server_id=ResourceId.from_boundary(backend.get("server")),

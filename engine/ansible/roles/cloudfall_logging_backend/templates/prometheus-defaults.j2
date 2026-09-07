@@ -1,0 +1,2 @@
+# Managed by Cloudfall. Local changes will be overwritten.
+ARGS="--config.file=/etc/prometheus/cloudfall.yaml --web.listen-address={{ cloudfall_logging_backend_stack.metrics.backend.listenAddress }}:{{ cloudfall_logging_backend_stack.metrics.backend.port }} --web.enable-remote-write-receiver --storage.tsdb.path={{ cloudfall_logging_backend_stack.metrics.backend.storagePath }} --storage.tsdb.retention.time={{ cloudfall_logging_backend_stack.metrics.backend.retentionHours }}h"

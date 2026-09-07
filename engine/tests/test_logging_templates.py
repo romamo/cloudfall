@@ -56,10 +56,36 @@ def test_backend_templates_render_safe_endpoints() -> None:
     assert datasource["datasources"][0]["url"] == "http://127.0.0.1:3100"
     assert "$__file{/etc/cloudfall/logging/grafana-admin-password}" in grafana
     assert "ssl_verify_client on;" in gateway
-    assert gateway.count("proxy_pass") == 1
+    assert gateway.count("proxy_pass") == 2
     assert "location = /loki/api/v1/push" in gateway
+    assert "location = /api/v1/write" in gateway
+    assert "proxy_pass http://127.0.0.1:9090;" in gateway
     assert "location /" in gateway
     assert "-config.file=/etc/loki/cloudfall-operations.yaml" in loki_override
+
+
+def test_backend_metrics_templates_render_loopback_prometheus() -> None:
+    stack = _logging_stack()
+    context = {"cloudfall_logging_backend_stack": stack}
+
+    prometheus = yaml.safe_load(
+        _render(BACKEND_TEMPLATES, "prometheus.yaml.j2", **context)
+    )
+    defaults = _render(BACKEND_TEMPLATES, "prometheus-defaults.j2", **context)
+    datasource = yaml.safe_load(
+        _render(BACKEND_TEMPLATES, "prometheus-datasource.yml.j2", **context)
+    )
+
+    assert prometheus["global"]["scrape_interval"] == "60s"
+    scrape_targets = prometheus["scrape_configs"][0]["static_configs"][0]
+    assert scrape_targets["targets"] == ["127.0.0.1:9090"]
+    assert "--web.listen-address=127.0.0.1:9090" in defaults
+    assert "--web.enable-remote-write-receiver" in defaults
+    assert "--storage.tsdb.retention.time=360h" in defaults
+    assert "--storage.tsdb.path=/var/lib/prometheus-cloudfall" in defaults
+    assert "--config.file=/etc/prometheus/cloudfall.yaml" in defaults
+    assert datasource["datasources"][0]["url"] == "http://127.0.0.1:9090"
+    assert datasource["datasources"][0]["isDefault"] is False
 
 
 def test_collector_template_renders_mtls_and_bounded_labels() -> None:
@@ -78,10 +104,13 @@ def test_collector_template_renders_mtls_and_bounded_labels() -> None:
     )
 
     assert 'url = "https://logs.example.internal:3101/loki/api/v1/push"' in rendered
+    assert 'url = "https://logs.example.internal:3101/api/v1/write"' in rendered
+    assert 'prometheus.exporter.unix "host"' in rendered
+    assert 'scrape_interval = "60s"' in rendered
     assert 'server_name = "logs.example.internal"' in rendered
-    assert 'min_version = "TLS12"' in rendered
-    assert 'environment = "production"' in rendered
-    assert 'server      = "h1"' in rendered
+    assert rendered.count('min_version = "TLS12"') == 2
+    assert rendered.count('environment = "production"') == 2
+    assert rendered.count('server      = "h1"') == 2
     assert '"project"  = "crm"' in rendered
     assert '"component" = "crm-backend"' in rendered
     assert "request_id" not in rendered

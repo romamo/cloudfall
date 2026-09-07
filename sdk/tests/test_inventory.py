@@ -121,6 +121,16 @@ def test_inventory_serialization_excludes_secret_references() -> None:
     assert logging_stacks[0]["id"] == "operations"
     assert logging_stacks[0]["migration"]["preserveLegacyAgents"] is True
     assert logging_stacks[0]["backend"]["listenAddress"] == "127.0.0.1"
+    assert logging_stacks[0]["metrics"] == {
+        "backend": {
+            "listenAddress": "127.0.0.1",
+            "port": 9090,
+            "storagePath": "/var/lib/prometheus-cloudfall",
+            "retentionHours": 360,
+        },
+        "collection": {"intervalSeconds": 60},
+    }
+    assert "prometheusPackageVersion" not in logging_stacks[0]["software"]
     assert profiles[0]["id"] == "debian-application"
     serialized = json.dumps(payload).lower()
     assert "private key" not in serialized
