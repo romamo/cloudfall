@@ -1,0 +1,53 @@
+---
+name: CI
+
+"on":
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Type-check
+        run: uv run mypy
+
+      - name: Test
+        run: uv run pytest
+
+      - name: Validate example state
+        run: uv run atlas state validate state/examples
+
+      - name: Render Ansible inventory
+        run: >-
+          uv run atlas-engine inventory render state/examples
+          --schemas state/schemas/v1 --output tmp/ansible-inventory.json
+
+      - name: Ansible syntax checks
+        env:
+          ANSIBLE_CONFIG: engine/ansible/ansible.cfg
+        run: |
+          for playbook in bootstrap inspect logging time; do
+            uv run ansible-playbook --syntax-check \
+              --inventory tmp/ansible-inventory.json \
+              "engine/ansible/playbooks/${playbook}.yml"
+          done
+
+      - name: Ansible lint
+        env:
+          ANSIBLE_CONFIG: engine/ansible/ansible.cfg
+        run: uv run ansible-lint engine/ansible

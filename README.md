@@ -1,43 +1,56 @@
 # Atlas
 
-Atlas is an AI-native, self-hosted control plane for operating standalone SaaS
-applications across dedicated Debian servers without Kubernetes.
+Atlas is an open-source, AI-native control plane for moving SaaS applications
+off cloud PaaS platforms onto self-hosted bare metal or VPS servers — and
+operating them there without Kubernetes.
 
-The repository is organized as a monorepo with three modules:
+The target workflow: take one fresh Debian host, run Atlas, and get a hardened
+baseline, firewall, monitoring, logging, your infrastructure services, and
+your application deployed with health checks and rollback. Then cut DNS and
+stop paying PaaS margins. See the [roadmap](ROADMAP.md) for the milestone
+plan; the wedge use case is a migration from Render onto a Hetzner-class
+server.
 
-- [`state/`](state/README.md) defines and validates declarative platform state.
-- [`engine/`](engine/README.md) executes explicit plans against servers.
-- [`sdk/`](sdk/README.md) provides the stable API used by agents and tooling.
+## Why Atlas
 
-See [`PROJECT_CONTEXT.md`](PROJECT_CONTEXT.md) for the current architecture,
-requirements, and implementation sequence.
+- **Declarative and auditable.** Servers, projects, components, and domains
+  are typed YAML validated against JSON Schemas. A read-only inspection
+  pipeline collects evidence from hosts, and `atlas audit` reports drift
+  between desired and observed state with distinct exit codes
+- **Evidence over inference.** Deployments produce receipts; status is
+  derived from validated observations. Atlas never reports success it cannot
+  prove
+- **AI-agent native.** Agents operate through a stable SDK and structured
+  JSON results instead of inventing shell commands over SSH. An MCP server is
+  on the roadmap
+- **systemd, not containers.** Applications run as native systemd services
+  with artifact releases and symlink rollback on long-lived Debian servers
 
-The first guarded replacement-logging slice is available for a parallel pilot.
-It deploys Loki, loopback-only Grafana, an mTLS ingestion gateway, and Alloy
-without changing legacy agents. Follow the
-[`logging service guide`](docs/logging-service-guide.md); production state does
-not declare a logging stack by default.
+## Architecture
 
-New two-drive servers use a RAID1 system area plus independent storage tails
-for data that is replicated to other hosts. Review the
-[`hybrid storage design`](docs/hybrid-storage-design.md), then follow the
-destructive, new-server-only
-[`storage provisioning guide`](docs/new-server-storage-guide.md). Neither
-document authorizes storage changes on an existing server.
+Three modules with strict boundaries:
 
-## Dependency boundaries
+- [`state/`](state/README.md) — declarative platform state and JSON Schemas
+- [`sdk/`](sdk/README.md) — the stable Python API used by agents and tooling
+- [`engine/`](engine/README.md) — Ansible-based execution of explicit plans
 
-- State contains configuration and schemas only.
-- The SDK reads and validates state without depending on Ansible internals.
-- The engine consumes validated inputs and never silently rewrites state.
-- Future CLI and MCP entry points call the SDK rather than Ansible directly.
+Rules: state contains no execution logic, the SDK reads and validates state
+without Ansible internals, the engine never silently rewrites state, and
+entry points call the SDK rather than Ansible directly. See
+[`PROJECT_CONTEXT.md`](PROJECT_CONTEXT.md) for the full architecture.
 
-These boundaries allow the modules to be split into separate repositories later
-if their release cycles or access-control requirements diverge.
+## Status
 
-## Validate example state
+Atlas is pre-1.0. Implemented today: state validation, typed inventory,
+deterministic Ansible inventory rendering, read-only server inspection,
+desired-versus-observed drift audit, a Debian bootstrap role, a UTC time
+baseline, a guarded Loki/Grafana/Alloy logging stack, and an evidence-derived
+operations dashboard. The deploy slice, service catalog, and migration
+importer are the next milestones.
 
-Atlas requires Python 3.14 and uses `uv` for dependency and command execution.
+## Quickstart
+
+Atlas requires Python 3.14 and uses [`uv`](https://docs.astral.sh/uv/):
 
 ```console
 uv run atlas state validate state/examples
@@ -47,105 +60,64 @@ The command validates every YAML document against the v1 JSON Schemas and then
 checks cross-resource references. Successful and failed results are emitted as
 structured JSON.
 
-The SDK can also return a non-secret platform inventory:
+Show the non-secret platform inventory and render it as deterministic Ansible
+JSON:
 
 ```console
 uv run atlas inventory show state/examples
-```
-
-The engine converts that typed inventory into deterministic Ansible JSON:
-
-```console
 uv run atlas-engine inventory render state/examples
 ```
 
-## Check the bootstrap role
-
-The bootstrap role assumes Debian is already installed, RAID is configured, and
-the inventory SSH account can connect and become root. It installs baseline
-packages and creates project users and `/srv/apps` directory structures.
-
-```console
-task ansible:syntax
-```
-
-The equivalent commands are defined in [`Taskfile.yml`](Taskfile.yml). No live
-host changes are made by this syntax-and-lint workflow.
-
 ## Inspect servers and audit drift
 
-Each `Server` references a reusable `HostProfile` that describes its required
-Debian version, software RAID, mounted filesystem capacity, packages, systemd
+Each `Server` references a reusable `HostProfile` describing its required
+Debian version, software RAID, filesystem capacity, packages, systemd
 services, and allowlisted configuration evidence.
 
-Render inventory and collect a read-only snapshot from every reachable server:
+Collect a read-only snapshot from every reachable server, then compare it
+with desired state:
 
 ```console
 task inspect
-```
-
-Snapshots are written on the controller to `tmp/observed/<server>.json` with
-mode `0600`. The directory is ignored by Git. The collector records hardware,
-block devices, mounts, `/proc/mdstat`, the `mdadm` scan, installed-package
-facts, systemd service facts, structured read-only NVMe SMART evidence when
-`smartctl` is available, and allowlisted file metadata or SHA-256 hashes. It
-never copies configuration-file contents.
-
-Compare those observations with desired state:
-
-```console
 task audit
 ```
 
-The direct SDK command is:
+Snapshots are written to `tmp/observed/<server>.json` with mode `0600` and
+never include configuration-file contents. The audit emits one JSON report:
+exit code `0` compliant, `1` drift, `2` invalid input, `3` compliance unknown.
+Task workflows are defined in [`Taskfile.yml`](Taskfile.yml); direct `uv run`
+equivalents exist for every task.
+
+## Operations dashboard
+
+Atlas projects validated state, observations, and audit results into a local
+read-only dashboard with an evidence-derived task queue and a public-service
+lifecycle (planned → ready → deployed → configured → healthy):
 
 ```console
-uv run atlas audit state/examples --observed tmp/observed
+task dashboard
 ```
 
-The command emits one JSON report. Exit code `0` means compliant, `1` means
-drift, `2` means invalid state or observations, and `3` means compliance is
-unknown because an observation is missing. A schema-valid compliant example is
-available in `state/tests/observed/compliant/`.
+The build writes `tmp/dashboard/index.html` and machine-readable
+`tmp/dashboard/operations.json`. Missing receipts or observations remain
+visible as `no` or `unknown`; Atlas does not infer deployment merely because
+a playbook exists.
 
-## Build the operations dashboard
+## Logging and storage guides
 
-Atlas can project validated state, observations, and audit results into a local
-read-only dashboard:
+- A guarded parallel logging slice deploys Loki, loopback-only Grafana, an
+  mTLS ingestion gateway, and Alloy without touching legacy agents: see the
+  [logging service guide](docs/logging-service-guide.md)
+- New two-drive servers use a RAID1 system area plus independent storage
+  tails: review the [hybrid storage design](docs/hybrid-storage-design.md)
+  and the destructive, new-server-only
+  [storage provisioning guide](docs/new-server-storage-guide.md)
 
-```console
-task dashboard STATE_DIR=state/examples
-```
+## Contributing and security
 
-The build writes `tmp/dashboard/index.html` and a stable machine-readable
-`tmp/dashboard/operations.json`. The initial task queue is evidence-derived: it
-includes desired-state drift, missing or stale observations, persistent
-filesystems at 85%/95% warning and critical thresholds, and failed systemd
-services. Failed SMART health, NVMe critical warnings, exhausted endurance,
-low spare capacity, and media errors become critical tasks. Tasks cannot be
-acknowledged or executed in this first slice.
+See [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
 
-Public services have a separate evidence-derived lifecycle. Desired `Domain`
-resources are planned; active referenced servers make them ready to deploy; a
-successful Ansible receipt makes them deployed; server inspection establishes
-whether the service and configuration are compliant; and DNS, edge, TLS,
-origin, and public HTTP probes establish route health:
+## License
 
-```console
-task inspect STATE_DIR=state/examples
-task services:inspect STATE_DIR=state/examples
-task services:status STATE_DIR=state/examples
-task dashboard STATE_DIR=state/examples
-```
-
-The equivalent direct status command is:
-
-```console
-uv run atlas services status state/examples \
-  --observed tmp/observed \
-  --service-observed tmp/observed-services \
-  --deployments tmp/deployments
-```
-
-Missing receipts or observations remain visible as `no` or `unknown`; Atlas
-does not infer deployment merely because a playbook exists.
+Atlas is licensed under the [GNU AGPL-3.0-or-later](LICENSE). Commercial
+licensing exceptions are available from the copyright holder.
