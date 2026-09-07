@@ -7,11 +7,11 @@ import shutil
 from pathlib import Path
 
 import pytest
-from atlas.audit import AuditReport, AuditStatus, audit_inventory
-from atlas.cli import main
-from atlas.inventory import PlatformInventory
-from atlas.observation import load_observations
-from atlas.validation import StateValidationError, validate_state
+from cloudfall.audit import AuditReport, AuditStatus, audit_inventory
+from cloudfall.cli import main
+from cloudfall.inventory import PlatformInventory
+from cloudfall.observation import load_observations
+from cloudfall.validation import StateValidationError, validate_state
 
 ROOT = Path(__file__).parents[2]
 SCHEMAS = ROOT / "state" / "schemas" / "v1"

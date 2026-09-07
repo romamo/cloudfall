@@ -1,5 +1,5 @@
 ---
-apiVersion: atlas/v1
+apiVersion: cloudfall/v1
 kind: Component
 metadata:
   id: crm-backend

@@ -1,5 +1,5 @@
 ---
-apiVersion: atlas/v1
+apiVersion: cloudfall/v1
 kind: Server
 metadata:
   id: h2
@@ -11,7 +11,7 @@ spec:
   profile: debian-application
   lifecycle: active
   ssh:
-    user: atlas
+    user: cloudfall
     port: 22
   labels:
     region: eu-central

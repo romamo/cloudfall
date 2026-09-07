@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://atlas.internal/schemas/v1/observed-domain.schema.json",
-  "title": "Atlas observed public domain route",
+  "$id": "https://cloudfall.internal/schemas/v1/observed-domain.schema.json",
+  "title": "Cloudfall observed public domain route",
   "$defs": {
     "nullableError": {
       "type": [

@@ -6,10 +6,10 @@ import json
 from pathlib import Path
 
 import pytest
-from atlas.cli import main
-from atlas.domain import ResourceId
-from atlas.inventory import PlatformInventory
-from atlas.validation import validate_state
+from cloudfall.cli import main
+from cloudfall.domain import ResourceId
+from cloudfall.inventory import PlatformInventory
+from cloudfall.validation import validate_state
 
 ROOT = Path(__file__).parents[2]
 SCHEMAS = ROOT / "state" / "schemas" / "v1"

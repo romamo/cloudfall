@@ -1,6 +1,6 @@
 # State
 
-This module is the declarative source of truth for Atlas. It will contain
+This module is the declarative source of truth for Cloudfall. It will contain
 versioned JSON Schemas and YAML documents for servers, projects, components,
 clusters, domains, monitoring, backups, and secret references.
 

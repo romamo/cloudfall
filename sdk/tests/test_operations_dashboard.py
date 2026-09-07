@@ -7,10 +7,10 @@ import shutil
 from datetime import UTC, datetime
 from pathlib import Path
 
-from atlas.dashboard import build_dashboard
-from atlas.inventory import PlatformInventory
-from atlas.observation import load_observations
-from atlas.operations import (
+from cloudfall.dashboard import build_dashboard
+from cloudfall.inventory import PlatformInventory
+from cloudfall.observation import load_observations
+from cloudfall.operations import (
     FleetOperations,
     OperationsHealth,
     TaskKind,
@@ -18,8 +18,8 @@ from atlas.operations import (
     UtcTimestamp,
     build_operations_view,
 )
-from atlas.service_evidence import DeploymentReceiptSet, DomainObservationSet
-from atlas.validation import validate_state
+from cloudfall.service_evidence import DeploymentReceiptSet, DomainObservationSet
+from cloudfall.validation import validate_state
 
 ROOT = Path(__file__).parents[2]
 SCHEMAS = ROOT / "state" / "schemas" / "v1"
@@ -135,7 +135,7 @@ def test_dashboard_build_writes_html_and_machine_readable_json(
 
     html = artifacts.index.read_text(encoding="utf-8")
     payload = json.loads(artifacts.operations.read_text(encoding="utf-8"))
-    assert "Atlas Operations" in html
+    assert "Cloudfall Operations" in html
     assert "No open tasks from current evidence" in html
     assert payload["health"] == "healthy"
     assert payload["summary"]["tasks"]["open"] == 0

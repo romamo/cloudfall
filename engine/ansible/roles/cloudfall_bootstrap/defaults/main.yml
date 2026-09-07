@@ -1,0 +1,11 @@
+---
+cloudfall_bootstrap_apps_root: /srv/apps
+cloudfall_bootstrap_packages:
+  - acl
+  - ca-certificates
+  - curl
+  - git
+  - rsync
+  - unzip
+cloudfall_bootstrap_projects: []
+cloudfall_bootstrap_components: []

@@ -1,12 +1,12 @@
 # Contributing
 
-Thanks for your interest in Atlas. The project is young and the fastest way to
+Thanks for your interest in Cloudfall. The project is young and the fastest way to
 help is to try the wedge workflow on a disposable Debian host and report where
 it breaks.
 
 ## Development environment
 
-Atlas requires Python 3.14 and [`uv`](https://docs.astral.sh/uv/). All commands
+Cloudfall requires Python 3.14 and [`uv`](https://docs.astral.sh/uv/). All commands
 run through `uv run`.
 
 ```console
@@ -22,7 +22,7 @@ Every change must pass the same suite CI runs:
 uv run ruff check .
 uv run mypy
 uv run pytest
-uv run atlas state validate state/examples
+uv run cloudfall state validate state/examples
 uv run ansible-lint engine/ansible
 ```
 

@@ -1,24 +1,24 @@
-# Atlas
+# Cloudfall
 
-Atlas is an open-source, AI-native control plane for moving SaaS applications
+Cloudfall is an open-source, AI-native control plane for moving SaaS applications
 off cloud PaaS platforms onto self-hosted bare metal or VPS servers — and
 operating them there without Kubernetes.
 
-The target workflow: take one fresh Debian host, run Atlas, and get a hardened
+The target workflow: take one fresh Debian host, run Cloudfall, and get a hardened
 baseline, firewall, monitoring, logging, your infrastructure services, and
 your application deployed with health checks and rollback. Then cut DNS and
 stop paying PaaS margins. See the [roadmap](ROADMAP.md) for the milestone
 plan; the wedge use case is a migration from Render onto a Hetzner-class
 server.
 
-## Why Atlas
+## Why Cloudfall
 
 - **Declarative and auditable.** Servers, projects, components, and domains
   are typed YAML validated against JSON Schemas. A read-only inspection
-  pipeline collects evidence from hosts, and `atlas audit` reports drift
+  pipeline collects evidence from hosts, and `cloudfall audit` reports drift
   between desired and observed state with distinct exit codes
 - **Evidence over inference.** Deployments produce receipts; status is
-  derived from validated observations. Atlas never reports success it cannot
+  derived from validated observations. Cloudfall never reports success it cannot
   prove
 - **AI-agent native.** Agents operate through a stable SDK and structured
   JSON results instead of inventing shell commands over SSH. An MCP server is
@@ -41,7 +41,7 @@ entry points call the SDK rather than Ansible directly. See
 
 ## Status
 
-Atlas is pre-1.0. Implemented today: state validation, typed inventory,
+Cloudfall is pre-1.0. Implemented today: state validation, typed inventory,
 deterministic Ansible inventory rendering, read-only server inspection,
 desired-versus-observed drift audit, a Debian bootstrap role, a UTC time
 baseline, a guarded Loki/Grafana/Alloy logging stack, and an evidence-derived
@@ -50,10 +50,10 @@ importer are the next milestones.
 
 ## Quickstart
 
-Atlas requires Python 3.14 and uses [`uv`](https://docs.astral.sh/uv/):
+Cloudfall requires Python 3.14 and uses [`uv`](https://docs.astral.sh/uv/):
 
 ```console
-uv run atlas state validate state/examples
+uv run cloudfall state validate state/examples
 ```
 
 The command validates every YAML document against the v1 JSON Schemas and then
@@ -64,8 +64,8 @@ Show the non-secret platform inventory and render it as deterministic Ansible
 JSON:
 
 ```console
-uv run atlas inventory show state/examples
-uv run atlas-engine inventory render state/examples
+uv run cloudfall inventory show state/examples
+uv run cloudfall-engine inventory render state/examples
 ```
 
 ## Inspect servers and audit drift
@@ -90,7 +90,7 @@ equivalents exist for every task.
 
 ## Operations dashboard
 
-Atlas projects validated state, observations, and audit results into a local
+Cloudfall projects validated state, observations, and audit results into a local
 read-only dashboard with an evidence-derived task queue and a public-service
 lifecycle (planned → ready → deployed → configured → healthy):
 
@@ -100,7 +100,7 @@ task dashboard
 
 The build writes `tmp/dashboard/index.html` and machine-readable
 `tmp/dashboard/operations.json`. Missing receipts or observations remain
-visible as `no` or `unknown`; Atlas does not infer deployment merely because
+visible as `no` or `unknown`; Cloudfall does not infer deployment merely because
 a playbook exists.
 
 ## Logging and storage guides
@@ -119,5 +119,5 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
 
 ## License
 
-Atlas is licensed under the [GNU AGPL-3.0-or-later](LICENSE). Commercial
+Cloudfall is licensed under the [GNU AGPL-3.0-or-later](LICENSE). Commercial
 licensing exceptions are available from the copyright holder.

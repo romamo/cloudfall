@@ -1,0 +1,10 @@
+---
+argument_specs:
+  main:
+    short_description: Enforce the Cloudfall UTC time baseline
+    options:
+      cloudfall_time_timezone:
+        type: str
+        choices:
+          - Etc/UTC
+        default: Etc/UTC

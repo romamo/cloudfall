@@ -210,8 +210,8 @@ specific disk. Never copy an existing RAID-member partition number.
 Optionally set the GPT type and labels after substituting the verified numbers:
 
 ```console
-sgdisk --typecode=N:8e00 --change-name=N:atlas-data0 /dev/nvme0n1
-sgdisk --typecode=N:8e00 --change-name=N:atlas-data1 /dev/nvme1n1
+sgdisk --typecode=N:8e00 --change-name=N:cloudfall-data0 /dev/nvme0n1
+sgdisk --typecode=N:8e00 --change-name=N:cloudfall-data1 /dev/nvme1n1
 partprobe /dev/nvme0n1
 partprobe /dev/nvme1n1
 udevadm settle
@@ -427,7 +427,7 @@ smartctl -x /dev/nvme0n1
 smartctl -x /dev/nvme1n1
 ```
 
-## 11. Register and inspect the server with Atlas
+## 11. Register and inspect the server with Cloudfall
 
 Add the new `Server` only after the operating system and SSH access are stable.
 Create a dedicated hybrid-storage `HostProfile`; do not reuse
@@ -439,7 +439,7 @@ packages, services, ownership, and capacity thresholds to the actual server:
 
 ```yaml
 ---
-apiVersion: atlas/v1
+apiVersion: cloudfall/v1
 kind: HostProfile
 metadata:
   id: debian-hybrid-storage
@@ -487,7 +487,7 @@ spec:
         mode: "0644"
 ```
 
-In Atlas v1, `minimumUsableBytes` refers in practice to the largest observed MD
+In Cloudfall v1, `minimumUsableBytes` refers in practice to the largest observed MD
 device rather than total capacity across all arrays. A 90 GB threshold is
 therefore appropriate for the example 96 GiB root array; do not enter the sum
 of swap, boot, and root, or the total capacity of both drives.
@@ -505,7 +505,7 @@ task audit STATE_DIR=state/production
 `tmp/dashboard/index.html`, storage observations, MD state, SMART evidence,
 mount capacities, and service results.
 
-Atlas v1 does not yet prove that every MD array has two healthy members, parse
+Cloudfall v1 does not yet prove that every MD array has two healthy members, parse
 `nofail`, verify physical-to-VG placement, or inspect `RequiresMountsFor=`.
 Complete the manual checklist below even when `task audit` reports compliance.
 
@@ -567,7 +567,7 @@ or loss of the host/replica breaks cluster quorum.
 - [ ] MD checks, SMART monitoring, filesystem usage alerts, and `fstrim.timer`
       are active.
 - [ ] Both one-drive boot tests passed and the arrays returned to `[UU]`.
-- [ ] Atlas state validates, inspection is current, audit results were reviewed,
+- [ ] Cloudfall state validates, inspection is current, audit results were reviewed,
       and the operations dashboard has no unexplained critical task.
 
 ## Troubleshooting

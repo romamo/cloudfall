@@ -1,11 +1,11 @@
 ---
-- name: Inspect Atlas servers without changing remote state
-  hosts: atlas_servers
+- name: Inspect Cloudfall servers without changing remote state
+  hosts: cloudfall_servers
   become: true
   gather_facts: true
   any_errors_fatal: true
   serial: 1
   roles:
-    - role: atlas_inspect
-      atlas_inspect_server_id: "{{ atlas_server_id }}"
-      atlas_inspect_profile: "{{ atlas_host_profile }}"
+    - role: cloudfall_inspect
+      cloudfall_inspect_server_id: "{{ cloudfall_server_id }}"
+      cloudfall_inspect_profile: "{{ cloudfall_host_profile }}"

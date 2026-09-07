@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://atlas.internal/schemas/v1/project.schema.json",
-  "title": "Atlas project",
-  "x-atlas-kind": "Project",
+  "$id": "https://cloudfall.internal/schemas/v1/project.schema.json",
+  "title": "Cloudfall project",
+  "x-cloudfall-kind": "Project",
   "type": "object",
   "properties": {
     "apiVersion": {

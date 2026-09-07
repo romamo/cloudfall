@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://atlas.internal/schemas/v1/deployment-receipt.schema.json",
-  "title": "Atlas domain deployment receipt",
+  "$id": "https://cloudfall.internal/schemas/v1/deployment-receipt.schema.json",
+  "title": "Cloudfall domain deployment receipt",
   "type": "object",
   "properties": {
     "apiVersion": {

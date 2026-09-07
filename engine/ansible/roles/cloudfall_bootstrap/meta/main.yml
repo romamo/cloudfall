@@ -1,0 +1,13 @@
+---
+galaxy_info:
+  role_name: cloudfall_bootstrap
+  author: Cloudfall
+  description: Prepare Debian application hosts for Cloudfall deployments
+  license: proprietary
+  min_ansible_version: "2.21"
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+        - trixie
+dependencies: []

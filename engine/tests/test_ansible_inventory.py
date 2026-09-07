@@ -6,10 +6,10 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from atlas.inventory import PlatformInventory
-from atlas.validation import validate_state
-from atlas_engine.ansible_inventory import render_ansible_inventory
-from atlas_engine.cli import main
+from cloudfall.inventory import PlatformInventory
+from cloudfall.validation import validate_state
+from cloudfall_engine.ansible_inventory import render_ansible_inventory
+from cloudfall_engine.cli import main
 
 if TYPE_CHECKING:
     import pytest
@@ -37,15 +37,15 @@ def _inventory_children(rendered: dict[str, object]) -> dict[str, object]:
 
 def test_inventory_renders_ansible_host_variables() -> None:
     children = _inventory_children(_rendered_inventory())
-    servers_group = _mapping_entry(children, "atlas_servers")
+    servers_group = _mapping_entry(children, "cloudfall_servers")
     hostvars = _mapping_entry(servers_group, "hosts")
     h1 = dict(_mapping_entry(hostvars, "h1"))
-    logging_backend = _mapping_entry(h1, "atlas_logging_backend")
-    logging_collector = _mapping_entry(h1, "atlas_logging_collector")
-    ssh_public_keys = h1["atlas_ssh_public_keys"]
-    del h1["atlas_logging_backend"]
-    del h1["atlas_logging_collector"]
-    del h1["atlas_ssh_public_keys"]
+    logging_backend = _mapping_entry(h1, "cloudfall_logging_backend")
+    logging_collector = _mapping_entry(h1, "cloudfall_logging_collector")
+    ssh_public_keys = h1["cloudfall_ssh_public_keys"]
+    del h1["cloudfall_logging_backend"]
+    del h1["cloudfall_logging_collector"]
+    del h1["cloudfall_ssh_public_keys"]
 
     assert isinstance(ssh_public_keys, list)
     assert len(ssh_public_keys) == 1
@@ -57,8 +57,8 @@ def test_inventory_renders_ansible_host_variables() -> None:
     assert h1 == {
         "ansible_host": "h1.example.internal",
         "ansible_port": 22,
-        "ansible_user": "atlas",
-        "atlas_components": [
+        "ansible_user": "cloudfall",
+        "cloudfall_components": [
             {
                 "id": "crm-backend",
                 "install_root": "/srv/apps/crm/backend",
@@ -66,10 +66,10 @@ def test_inventory_renders_ansible_host_variables() -> None:
                 "project_user": "crm",
             }
         ],
-        "atlas_domains": [],
-        "atlas_origin_domains": [],
-        "atlas_environment": "production",
-        "atlas_host_profile": {
+        "cloudfall_domains": [],
+        "cloudfall_origin_domains": [],
+        "cloudfall_environment": "production",
+        "cloudfall_host_profile": {
             "configuration": {
                 "files": [
                     {
@@ -122,14 +122,14 @@ def test_inventory_renders_ansible_host_variables() -> None:
                 },
             },
         },
-        "atlas_hostname": "h1.example.internal",
-        "atlas_labels": {
+        "cloudfall_hostname": "h1.example.internal",
+        "cloudfall_labels": {
             "region": "eu-central",
             "workload": "application",
         },
-        "atlas_lifecycle": "active",
-        "atlas_projects": [{"approval": "manual", "id": "crm", "user": "crm"}],
-        "atlas_server_id": "h1",
+        "cloudfall_lifecycle": "active",
+        "cloudfall_projects": [{"approval": "manual", "id": "crm", "user": "crm"}],
+        "cloudfall_server_id": "h1",
     }
     assert logging_backend["id"] == "operations"
     assert _mapping_entry(logging_backend, "backend")["server"] == "h1"
@@ -145,15 +145,15 @@ def test_inventory_renders_ansible_host_variables() -> None:
 
 def test_inventory_renders_environment_project_and_component_groups() -> None:
     children = _inventory_children(_rendered_inventory())
-    environments = _mapping_entry(children, "atlas_environments")
+    environments = _mapping_entry(children, "cloudfall_environments")
     environment_groups = _mapping_entry(environments, "children")
-    projects = _mapping_entry(children, "atlas_projects")
+    projects = _mapping_entry(children, "cloudfall_projects")
     project_groups = _mapping_entry(projects, "children")
-    components = _mapping_entry(children, "atlas_components")
+    components = _mapping_entry(children, "cloudfall_components")
     component_groups = _mapping_entry(components, "children")
-    logging_backends = _mapping_entry(children, "atlas_logging_backends")
-    logging_collectors = _mapping_entry(children, "atlas_logging_collectors")
-    domain_origins = _mapping_entry(children, "atlas_domain_origins")
+    logging_backends = _mapping_entry(children, "cloudfall_logging_backends")
+    logging_collectors = _mapping_entry(children, "cloudfall_logging_collectors")
+    domain_origins = _mapping_entry(children, "cloudfall_domain_origins")
 
     assert environment_groups["environment_production"] == {
         "hosts": {"h1": {}, "h2": {}},
@@ -187,12 +187,12 @@ def test_engine_cli_emits_ansible_json(
     payload = json.loads(captured.out)
     assert exit_code == 0
     assert (
-        payload["all"]["children"]["atlas_servers"]["hosts"]["h1"]["ansible_user"]
-        == "atlas"
+        payload["all"]["children"]["cloudfall_servers"]["hosts"]["h1"]["ansible_user"]
+        == "cloudfall"
     )
     assert (
         "component_crm_backend"
-        in payload["all"]["children"]["atlas_components"]["children"]
+        in payload["all"]["children"]["cloudfall_components"]["children"]
     )
     assert captured.err == ""
 
@@ -221,7 +221,7 @@ def test_engine_cli_can_write_inventory_file(
         "status": "ok",
     }
     written = json.loads(output_path.read_text(encoding="utf-8"))
-    assert sorted(written["all"]["children"]["atlas_servers"]["hosts"]) == [
+    assert sorted(written["all"]["children"]["cloudfall_servers"]["hosts"]) == [
         "h1",
         "h2",
     ]

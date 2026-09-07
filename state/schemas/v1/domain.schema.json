@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://atlas.internal/schemas/v1/domain.schema.json",
-  "title": "Atlas public domain route",
-  "x-atlas-kind": "Domain",
+  "$id": "https://cloudfall.internal/schemas/v1/domain.schema.json",
+  "title": "Cloudfall public domain route",
+  "x-cloudfall-kind": "Domain",
   "type": "object",
   "properties": {
     "apiVersion": {

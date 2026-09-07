@@ -1,13 +1,13 @@
 # Roadmap
 
-Atlas is built toward one complete story first:
+Cloudfall is built toward one complete story first:
 
 > A SaaS running on a PaaS such as Render gets one fresh Debian bare-metal or
-> VPS host, runs Atlas, and within an hour has: a hardened baseline, firewall,
+> VPS host, runs Cloudfall, and within an hour has: a hardened baseline, firewall,
 > monitoring, logging, PostgreSQL, Nginx with TLS, its application deployed
 > from GitHub with health checks and rollback, and a DNS cutover checklist.
 
-Every milestone keeps the invariants that define Atlas: no action without
+Every milestone keeps the invariants that define Cloudfall: no action without
 declared state, no status without evidence, no compliance without audit.
 
 ## M0 — Publishable base
@@ -17,7 +17,7 @@ declared state, no status without evidence, no compliance without audit.
 
 ## M1 — Layer 1: server baseline
 
-One command turns an installed Debian host into a compliant Atlas server.
+One command turns an installed Debian host into a compliant Cloudfall server.
 
 - Baseline packages, project users, `/srv/apps`, UTC enforcement, SSH
   hardening from declared `SshPublicKey` resources, unattended security
@@ -29,7 +29,7 @@ One command turns an installed Debian host into a compliant Atlas server.
   single-node observability stack
 
 Exit: the baseline run is idempotent (second run reports no changes) and
-`atlas audit` reports the host compliant, including firewall and timers.
+`cloudfall audit` reports the host compliant, including firewall and timers.
 
 ## M2 — Layer 2: service catalog v1
 
@@ -66,7 +66,7 @@ bad release rolls back automatically.
 
 ## M4 — Migration importer
 
-- `atlas import render`: map `render.yaml` / Render API resources to Atlas
+- `cloudfall import render`: map `render.yaml` / Render API resources to Cloudfall
   projects, components, cron jobs, and services, with a gap report for
   anything unmappable
 - Data migration: managed-Postgres dump and restore with verification

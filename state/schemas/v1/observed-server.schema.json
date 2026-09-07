@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://atlas.internal/schemas/v1/observed-server.schema.json",
-  "title": "Atlas observed server snapshot",
+  "$id": "https://cloudfall.internal/schemas/v1/observed-server.schema.json",
+  "title": "Cloudfall observed server snapshot",
   "$defs": {
     "nullableString": {
       "type": [

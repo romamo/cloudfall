@@ -1,35 +1,35 @@
 ---
-- name: Validate Atlas logging deployment inventory
+- name: Validate Cloudfall logging deployment inventory
   hosts: localhost
   gather_facts: false
   tasks:
     - name: Require one declared logging backend and at least one collector
       ansible.builtin.assert:
         that:
-          - groups["atlas_logging_backends"] | length == 1
-          - groups["atlas_logging_collectors"] | length > 0
+          - groups["cloudfall_logging_backends"] | length == 1
+          - groups["cloudfall_logging_collectors"] | length > 0
         fail_msg: >-
           Validated state must declare exactly one logging backend and at least
           one collector before deployment
 
-- name: Deploy Atlas logging backend
-  hosts: atlas_logging_backends
+- name: Deploy Cloudfall logging backend
+  hosts: cloudfall_logging_backends
   become: true
   gather_facts: true
   any_errors_fatal: true
   serial: 1
   roles:
-    - role: atlas_logging_backend
-      atlas_logging_backend_stack: >-
-        {{ hostvars[inventory_hostname].atlas_logging_backend }}
+    - role: cloudfall_logging_backend
+      cloudfall_logging_backend_stack: >-
+        {{ hostvars[inventory_hostname].cloudfall_logging_backend }}
 
-- name: Deploy Atlas logging collectors
-  hosts: atlas_logging_collectors
+- name: Deploy Cloudfall logging collectors
+  hosts: cloudfall_logging_collectors
   become: true
   gather_facts: true
   any_errors_fatal: true
   serial: 1
   roles:
-    - role: atlas_logging_collector
-      atlas_logging_collector_stack: >-
-        {{ hostvars[inventory_hostname].atlas_logging_collector }}
+    - role: cloudfall_logging_collector
+      cloudfall_logging_collector_stack: >-
+        {{ hostvars[inventory_hostname].cloudfall_logging_collector }}

@@ -1,5 +1,5 @@
 ---
-apiVersion: atlas/v1
+apiVersion: cloudfall/v1
 kind: LoggingStack
 metadata:
   id: operations
@@ -19,28 +19,28 @@ spec:
     port: 3100
     storage:
       type: filesystem
-      path: /var/lib/loki-atlas
+      path: /var/lib/loki-cloudfall
     retentionHours: 720
   gateway:
     serverName: logs.example.internal
     listenAddress: 0.0.0.0
     port: 3101
     tls:
-      certificatePath: /etc/atlas/logging/server.crt
-      keyPath: /etc/atlas/logging/server.key
-      clientCaPath: /etc/atlas/logging/client-ca.crt
+      certificatePath: /etc/cloudfall/logging/server.crt
+      keyPath: /etc/cloudfall/logging/server.key
+      clientCaPath: /etc/cloudfall/logging/client-ca.crt
   grafana:
     listenAddress: 127.0.0.1
     port: 3000
-    adminPasswordPath: /etc/atlas/logging/grafana-admin-password
+    adminPasswordPath: /etc/cloudfall/logging/grafana-admin-password
   collectors:
     servers:
       - h1
       - h2
     clientTls:
-      caPath: /etc/atlas/logging/ca.crt
-      certificatePath: /etc/atlas/logging/client.crt
-      keyPath: /etc/atlas/logging/client.key
+      caPath: /etc/cloudfall/logging/ca.crt
+      certificatePath: /etc/cloudfall/logging/client.crt
+      keyPath: /etc/cloudfall/logging/client.key
     journal:
       enabled: true
       maxAgeHours: 24

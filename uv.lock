@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.14"
 resolution-markers = [
     "python_full_version >= '3.15'",
@@ -120,43 +120,6 @@ wheels = [
 ]
 
 [[package]]
-name = "atlas"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "jsonschema", extra = ["format"] },
-    { name = "pyyaml" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "ansible-core" },
-    { name = "ansible-lint" },
-    { name = "mypy" },
-    { name = "pytest" },
-    { name = "ruff" },
-    { name = "types-jsonschema" },
-    { name = "types-pyyaml" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "jsonschema", extras = ["format"], specifier = ">=4.23,<5" },
-    { name = "pyyaml", specifier = ">=6,<7" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "ansible-core", specifier = ">=2.21,<2.22" },
-    { name = "ansible-lint", specifier = ">=26,<27" },
-    { name = "mypy", specifier = ">=1.13" },
-    { name = "pytest", specifier = ">=8" },
-    { name = "ruff", specifier = ">=0.8" },
-    { name = "types-jsonschema", specifier = ">=4.23" },
-    { name = "types-pyyaml", specifier = ">=6" },
-]
-
-[[package]]
 name = "attrs"
 version = "26.1.0"
 source = { registry = "https://pypi.org/simple" }
@@ -265,6 +228,43 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/76/d4/81420972a676e8ffea40450d8c8c92943e7218a78fe9b64359836cc9876b/click-8.4.2.tar.gz", hash = "sha256:9a6cea6e60b17ebe0a44c5cc636d94f09bd66142c1cd7d8b4cd731c4917a15f6", size = 338000, upload-time = "2026-06-24T17:45:15.148Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/fb/e2/79c688af8b210d232694e31e59da9f6ec747bae31c3f5946e4e9b98860d5/click-8.4.2-py3-none-any.whl", hash = "sha256:e6f9f66136c816745b9d65817da91d61d957fb16e02e4dcd0552553c5a197b76", size = 119243, upload-time = "2026-06-24T17:45:13.73Z" },
+]
+
+[[package]]
+name = "cloudfall"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "jsonschema", extra = ["format"] },
+    { name = "pyyaml" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "ansible-core" },
+    { name = "ansible-lint" },
+    { name = "mypy" },
+    { name = "pytest" },
+    { name = "ruff" },
+    { name = "types-jsonschema" },
+    { name = "types-pyyaml" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "jsonschema", extras = ["format"], specifier = ">=4.23,<5" },
+    { name = "pyyaml", specifier = ">=6,<7" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "ansible-core", specifier = ">=2.21,<2.22" },
+    { name = "ansible-lint", specifier = ">=26,<27" },
+    { name = "mypy", specifier = ">=1.13" },
+    { name = "pytest", specifier = ">=8" },
+    { name = "ruff", specifier = ">=0.8" },
+    { name = "types-jsonschema", specifier = ">=4.23" },
+    { name = "types-pyyaml", specifier = ">=6" },
 ]
 
 [[package]]

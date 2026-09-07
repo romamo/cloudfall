@@ -1,6 +1,6 @@
 # Engine
 
-This module executes validated Atlas operations using Ansible. It owns
+This module executes validated Cloudfall operations using Ansible. It owns
 inventories, playbooks, roles, templates, deployment health checks, symlink
 switching, and rollback mechanics.
 
@@ -27,7 +27,7 @@ declaring a `LoggingStack` for live hosts.
 Its first executable capability is deterministic Ansible inventory rendering:
 
 ```console
-uv run atlas-engine inventory render state/examples
+uv run cloudfall-engine inventory render state/examples
 ```
 
 The renderer consumes the SDK's typed inventory and creates host variables plus
@@ -35,13 +35,13 @@ environment, project, and component groups. It never includes secret values or
 secret references.
 
 Active environment-scoped SSH public keys are rendered as
-`atlas_ssh_public_keys`. Rendering alone does not change authorized keys.
+`cloudfall_ssh_public_keys`. Rendering alone does not change authorized keys.
 
 ## UTC time baseline
 
 `ansible/playbooks/time.yml` enforces `Etc/UTC`, keeps the hardware clock in
 UTC, enables systemd network time synchronization, and waits for the host clock
-to synchronize. The play targets the complete Atlas inventory and runs one host
+to synchronize. The play targets the complete Cloudfall inventory and runs one host
 at a time; use `TIME_LIMIT` for a bounded deployment:
 
 ```console
@@ -51,7 +51,7 @@ task time:deploy STATE_DIR=state/examples TIME_LIMIT=h1
 
 ## Bootstrap role
 
-`ansible/roles/atlas_bootstrap` prepares an already-installed Debian host for
+`ansible/roles/cloudfall_bootstrap` prepares an already-installed Debian host for
 application deployment. It:
 
 - validates that the host is Debian with systemd;
@@ -65,7 +65,7 @@ policy, fetch secrets, deploy artifacts, or start application services.
 
 ## Read-only inspection role
 
-`ansible/roles/atlas_inspect` collects normalized evidence without changing the
+`ansible/roles/cloudfall_inspect` collects normalized evidence without changing the
 remote host. It reads Ansible facts, the Debian package database through
 `dpkg-query`, service facts, `lsblk`, `findmnt`, `/proc/mdstat`,
 `mdadm --detail --scan`, read-only NVMe reports from `smartctl`, and `stat` data for the

@@ -1,9 +1,9 @@
 ---
-- name: Enforce the Atlas UTC time baseline
-  hosts: atlas_servers
+- name: Enforce the Cloudfall UTC time baseline
+  hosts: cloudfall_servers
   become: true
   gather_facts: true
   any_errors_fatal: true
   serial: 1
   roles:
-    - role: atlas_time
+    - role: cloudfall_time

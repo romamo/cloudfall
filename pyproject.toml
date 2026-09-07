@@ -1,5 +1,5 @@
 [project]
-name = "atlas"
+name = "cloudfall"
 version = "0.1.0"
 description = "AI-native control plane for dedicated Debian application fleets"
 readme = "README.md"
@@ -12,15 +12,15 @@ dependencies = [
 ]
 
 [project.scripts]
-atlas = "atlas.cli:run"
-atlas-engine = "atlas_engine.cli:run"
+cloudfall = "cloudfall.cli:run"
+cloudfall-engine = "cloudfall_engine.cli:run"
 
 [build-system]
 requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["sdk/src/atlas", "engine/src/atlas_engine"]
+packages = ["sdk/src/cloudfall", "engine/src/cloudfall_engine"]
 
 [dependency-groups]
 dev = [

@@ -1,0 +1,28 @@
+server {
+{% if cloudfall_logging_backend_stack.gateway.listenAddress == '::' %}
+    listen [::]:{{ cloudfall_logging_backend_stack.gateway.port }} ssl;
+{% else %}
+    listen {{ cloudfall_logging_backend_stack.gateway.listenAddress }}:{{ cloudfall_logging_backend_stack.gateway.port }} ssl;
+{% endif %}
+    server_name {{ cloudfall_logging_backend_stack.gateway.serverName }};
+
+    ssl_certificate {{ cloudfall_logging_backend_stack.gateway.tls.certificatePath }};
+    ssl_certificate_key {{ cloudfall_logging_backend_stack.gateway.tls.keyPath }};
+    ssl_client_certificate {{ cloudfall_logging_backend_stack.gateway.tls.clientCaPath }};
+    ssl_verify_client on;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_tickets off;
+
+    client_max_body_size 16m;
+
+    location = /loki/api/v1/push {
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_pass http://{{ cloudfall_logging_backend_stack.backend.listenAddress }}:{{ cloudfall_logging_backend_stack.backend.port }};
+    }
+
+    location / {
+        return 404;
+    }
+}

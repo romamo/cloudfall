@@ -7,9 +7,9 @@ import shutil
 from pathlib import Path
 
 import pytest
-from atlas.cli import main
-from atlas.domain import ResourceId, ResourceKind
-from atlas.validation import StateValidationError, validate_state
+from cloudfall.cli import main
+from cloudfall.domain import ResourceId, ResourceKind
+from cloudfall.validation import StateValidationError, validate_state
 
 ROOT = Path(__file__).parents[2]
 SCHEMAS = ROOT / "state" / "schemas" / "v1"
@@ -149,7 +149,7 @@ def test_logging_secret_paths_stay_in_managed_directory(
     shutil.copytree(ROOT / "state" / "examples", state_directory)
     logging_path = state_directory / "logging-stacks" / "operations.yaml"
     invalid = logging_path.read_text(encoding="utf-8").replace(
-        "/etc/atlas/logging/server.key", "/var/lib/atlas-unsafe/server.key"
+        "/etc/cloudfall/logging/server.key", "/var/lib/cloudfall-unsafe/server.key"
     )
     logging_path.write_text(invalid, encoding="utf-8")
 

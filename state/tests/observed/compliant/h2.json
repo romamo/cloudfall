@@ -1,9 +1,9 @@
 {
-  "apiVersion": "atlas/v1",
+  "apiVersion": "cloudfall/v1",
   "kind": "ObservedServer",
   "metadata": {
     "id": "h2",
-    "description": "Read-only server evidence collected by Atlas"
+    "description": "Read-only server evidence collected by Cloudfall"
   },
   "spec": {
     "server": "h2",

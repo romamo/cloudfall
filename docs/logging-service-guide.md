@@ -1,4 +1,4 @@
-# Deploy the first Atlas logging service
+# Deploy the first Cloudfall logging service
 
 Status: implemented parallel-migration slice; no production `LoggingStack` is
 declared yet.
@@ -42,20 +42,20 @@ release:
 apt-cache policy loki grafana alloy
 ```
 
-Use the complete APT version strings in state. Atlas deliberately fails rather
+Use the complete APT version strings in state. Cloudfall deliberately fails rather
 than silently replacing an unavailable pin with the newest package.
 
 ## 2. Materialize secrets and mTLS files
 
-Atlas state contains paths only. Use the existing PKI and secret-delivery
+Cloudfall state contains paths only. Use the existing PKI and secret-delivery
 process to materialize these files before running either logging task:
 
 | Backend host | Collector hosts |
 | --- | --- |
-| `/etc/atlas/logging/server.crt` | `/etc/atlas/logging/ca.crt` |
-| `/etc/atlas/logging/server.key` | `/etc/atlas/logging/client.crt` |
-| `/etc/atlas/logging/client-ca.crt` | `/etc/atlas/logging/client.key` |
-| `/etc/atlas/logging/grafana-admin-password` | |
+| `/etc/cloudfall/logging/server.crt` | `/etc/cloudfall/logging/ca.crt` |
+| `/etc/cloudfall/logging/server.key` | `/etc/cloudfall/logging/client.crt` |
+| `/etc/cloudfall/logging/client-ca.crt` | `/etc/cloudfall/logging/client.key` |
+| `/etc/cloudfall/logging/grafana-admin-password` | |
 
 Each collector may use a different client certificate while keeping the same
 path. The client CA must validate every collector certificate. The collector
@@ -92,19 +92,19 @@ Do not recursively broaden unrelated `/var/log` permissions.
 ## 4. Validate and inspect the plan
 
 ```console
-uv run atlas state validate state/production
-uv run atlas inventory show state/production
-uv run atlas-engine inventory render state/production \
+uv run cloudfall state validate state/production
+uv run cloudfall inventory show state/production
+uv run cloudfall-engine inventory render state/production \
   --output tmp/ansible-inventory.json
 uv run ansible-inventory --inventory tmp/ansible-inventory.json \
-  --graph atlas_logging_backends
+  --graph cloudfall_logging_backends
 uv run ansible-inventory --inventory tmp/ansible-inventory.json \
-  --graph atlas_logging_collectors
+  --graph cloudfall_logging_collectors
 ```
 
 Validation rejects missing servers, environment mismatches, duplicate stacks,
 file sources outside component placement, secret paths outside
-`/etc/atlas/logging`, and any attempt to disable the parallel-migration guard.
+`/etc/cloudfall/logging`, and any attempt to disable the parallel-migration guard.
 
 ## 5. Check and deploy
 
@@ -127,9 +127,9 @@ command history through environment variables:
 
 ```console
 curl --fail --silent --show-error \
-  --cacert "$ATLAS_LOGGING_CA" \
-  --cert "$ATLAS_LOGGING_CERT" \
-  --key "$ATLAS_LOGGING_KEY" \
+  --cacert "$CLOUDFALL_LOGGING_CA" \
+  --cert "$CLOUDFALL_LOGGING_CERT" \
+  --key "$CLOUDFALL_LOGGING_KEY" \
   "https://logs.internal.example:3101/loki/api/v1/push" \
   --request POST \
   --header 'Content-Type: application/json' \
@@ -139,10 +139,10 @@ curl --fail --silent --show-error \
 Open Grafana through an SSH tunnel:
 
 ```console
-ssh -L 3000:127.0.0.1:3000 atlas@logging-host
+ssh -L 3000:127.0.0.1:3000 cloudfall@logging-host
 ```
 
-Then inspect `http://127.0.0.1:3000`, confirm the provisioned `Atlas Loki` data
+Then inspect `http://127.0.0.1:3000`, confirm the provisioned `Cloudfall Loki` data
 source, and query each declared `server`, `source`, `job`, `project`, and
 `component`. Compare counts, timestamps, multiline behavior, ingestion delay,
 and alert coverage with the legacy Elastic path for the full proving window.

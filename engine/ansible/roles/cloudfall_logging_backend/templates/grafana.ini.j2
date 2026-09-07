@@ -1,0 +1,20 @@
+[server]
+protocol = http
+http_addr = {{ cloudfall_logging_backend_stack.grafana.listenAddress }}
+http_port = {{ cloudfall_logging_backend_stack.grafana.port }}
+
+[security]
+admin_user = admin
+admin_password = {{ '$__file{' ~ cloudfall_logging_backend_stack.grafana.adminPasswordPath ~ '}' }}
+disable_gravatar = true
+
+[users]
+allow_sign_up = false
+
+[analytics]
+reporting_enabled = false
+check_for_updates = false
+check_for_plugin_updates = false
+
+[log]
+mode = console

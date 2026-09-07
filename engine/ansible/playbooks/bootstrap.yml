@@ -1,11 +1,11 @@
 ---
-- name: Bootstrap Atlas application servers
-  hosts: atlas_servers
+- name: Bootstrap Cloudfall application servers
+  hosts: cloudfall_servers
   become: true
   gather_facts: true
   any_errors_fatal: true
   serial: 1
   roles:
-    - role: atlas_bootstrap
-      atlas_bootstrap_projects: "{{ atlas_projects }}"
-      atlas_bootstrap_components: "{{ atlas_components }}"
+    - role: cloudfall_bootstrap
+      cloudfall_bootstrap_projects: "{{ cloudfall_projects }}"
+      cloudfall_bootstrap_components: "{{ cloudfall_components }}"

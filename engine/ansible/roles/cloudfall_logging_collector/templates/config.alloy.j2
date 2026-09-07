@@ -1,0 +1,67 @@
+logging {
+  level  = "info"
+  format = "logfmt"
+}
+
+loki.relabel "journal" {
+  forward_to = []
+
+  rule {
+    source_labels = ["__journal__systemd_unit"]
+    target_label  = "unit"
+  }
+}
+
+loki.write "cloudfall" {
+  external_labels = {
+    environment = "{{ cloudfall_logging_collector_stack.environment }}",
+    server      = "{{ cloudfall_server_id }}",
+  }
+
+  endpoint {
+    url = "https://{{ cloudfall_logging_collector_stack.gateway.serverName }}:{{ cloudfall_logging_collector_stack.gateway.port }}/loki/api/v1/push"
+
+    tls_config {
+      ca_file     = "{{ cloudfall_logging_collector_stack.collectors.clientTls.caPath }}"
+      cert_file   = "{{ cloudfall_logging_collector_stack.collectors.clientTls.certificatePath }}"
+      key_file    = "{{ cloudfall_logging_collector_stack.collectors.clientTls.keyPath }}"
+      server_name = "{{ cloudfall_logging_collector_stack.gateway.serverName }}"
+      min_version = "TLS12"
+    }
+  }
+}
+
+loki.source.journal "systemd" {
+  forward_to    = [loki.write.cloudfall.receiver]
+  relabel_rules = loki.relabel.journal.rules
+  max_age       = "{{ cloudfall_logging_collector_stack.collectors.journal.maxAgeHours }}h"
+  labels = {
+    source = "journal",
+  }
+}
+{% for item in cloudfall_logging_collector_stack.collectors.files %}
+{% if cloudfall_server_id in item.servers %}
+
+local.file_match "{{ item.id | replace('-', '_') }}" {
+  path_targets = [
+    {
+      "__path__" = "{{ item.path }}",
+      "source"   = "file",
+      "job"      = "{{ item.id }}",
+{% if item.project is defined %}
+      "project"  = "{{ item.project }}",
+{% endif %}
+{% if item.component is defined %}
+      "component" = "{{ item.component }}",
+{% endif %}
+    },
+  ]
+}
+
+loki.source.file "{{ item.id | replace('-', '_') }}" {
+  targets       = local.file_match.{{ item.id | replace('-', '_') }}.targets
+  forward_to    = [loki.write.cloudfall.receiver]
+  tail_from_end = true
+}
+{% endif %}
+{% endfor %}

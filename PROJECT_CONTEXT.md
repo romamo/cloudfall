@@ -127,7 +127,7 @@ Engine ↓ Servers
 
 ### Repository Layout
 
-Atlas starts as a monorepo with three architectural modules:
+Cloudfall starts as a monorepo with three architectural modules:
 
 -   `state/` -- declarative configuration and JSON Schemas
 -   `engine/` -- Ansible-based execution
@@ -377,7 +377,7 @@ component.schema.json observed-server.schema.json
 
 The SDK loads YAML, validates it against JSON Schema Draft 2020-12, checks
 cross-resource references, and exposes a typed read-only index. The
-`atlas state validate` command emits structured success and error responses.
+`cloudfall state validate` command emits structured success and error responses.
 
 The SDK also exposes typed non-secret inventory projections and placement
 queries. The engine renders those projections as deterministic Ansible JSON with
@@ -387,10 +387,10 @@ Servers reference typed HostProfile resources. A read-only Ansible inspection
 role collects normalized OS, hardware, block-device, filesystem, software RAID,
 package, service, and allowlisted configuration metadata/hash evidence into
 local JSON snapshots. The SDK validates those snapshots before comparing them
-with desired profiles. `atlas audit` emits structured per-check drift reports
+with desired profiles. `cloudfall audit` emits structured per-check drift reports
 and distinct exit codes for compliant, drifted, invalid, and unknown results.
 
-An initial `atlas_bootstrap` role prepares an already-installed Debian system by
+An initial `cloudfall_bootstrap` role prepares an already-installed Debian system by
 installing baseline packages, creating project service accounts, and creating
 the `/srv/apps` project/component directory tree. Syntax validation and the
 ansible-lint production profile pass; live-host validation remains outstanding.

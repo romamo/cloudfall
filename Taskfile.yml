@@ -8,13 +8,13 @@ vars:
   OBSERVATION_DIR: '{{ .OBSERVATION_DIR | default "tmp/observed" }}'
   SERVICE_OBSERVATION_DIR: '{{ .SERVICE_OBSERVATION_DIR | default "tmp/observed-services" }}'
   DEPLOYMENT_DIR: '{{ .DEPLOYMENT_DIR | default "tmp/deployments" }}'
-  TIME_LIMIT: '{{ .TIME_LIMIT | default "atlas_servers" }}'
+  TIME_LIMIT: '{{ .TIME_LIMIT | default "cloudfall_servers" }}'
 
 tasks:
   validate:
-    desc: Validate declarative Atlas state
+    desc: Validate declarative Cloudfall state
     cmds:
-      - uv run atlas state validate {{ .STATE_DIR }} --schemas {{ .SCHEMA_DIR }}
+      - uv run cloudfall state validate {{ .STATE_DIR }} --schemas {{ .SCHEMA_DIR }}
 
   inventory:
     desc: Render validated state as Ansible JSON inventory
@@ -22,7 +22,7 @@ tasks:
       - validate
     cmds:
       - >-
-        uv run atlas-engine inventory render {{ .STATE_DIR }}
+        uv run cloudfall-engine inventory render {{ .STATE_DIR }}
         --schemas {{ .SCHEMA_DIR }} --output {{ .INVENTORY_FILE }}
 
   ansible:inventory:
@@ -44,9 +44,9 @@ tasks:
         uv run ansible-playbook --inventory {{ .INVENTORY_FILE }}
         engine/ansible/playbooks/inspect.yml
         --extra-vars
-        atlas_inspect_output_directory={{ .ROOT_DIR }}/{{ .OBSERVATION_DIR }}
+        cloudfall_inspect_output_directory={{ .ROOT_DIR }}/{{ .OBSERVATION_DIR }}
       - >-
-        uv run atlas dashboard build {{ .STATE_DIR }}
+        uv run cloudfall dashboard build {{ .STATE_DIR }}
         --schemas {{ .SCHEMA_DIR }} --observed {{ .OBSERVATION_DIR }}
         --output {{ .ROOT_DIR }}/tmp/dashboard
 
@@ -56,7 +56,7 @@ tasks:
       - validate
     cmds:
       - >-
-        uv run atlas audit {{ .STATE_DIR }} --schemas {{ .SCHEMA_DIR }}
+        uv run cloudfall audit {{ .STATE_DIR }} --schemas {{ .SCHEMA_DIR }}
         --observed {{ .OBSERVATION_DIR }}
 
   services:inspect:
@@ -65,7 +65,7 @@ tasks:
       - validate
     cmds:
       - >-
-        uv run atlas services inspect {{ .STATE_DIR }}
+        uv run cloudfall services inspect {{ .STATE_DIR }}
         --schemas {{ .SCHEMA_DIR }} --output {{ .SERVICE_OBSERVATION_DIR }}
 
   services:status:
@@ -74,7 +74,7 @@ tasks:
       - validate
     cmds:
       - >-
-        uv run atlas services status {{ .STATE_DIR }}
+        uv run cloudfall services status {{ .STATE_DIR }}
         --schemas {{ .SCHEMA_DIR }} --observed {{ .OBSERVATION_DIR }}
         --service-observed {{ .SERVICE_OBSERVATION_DIR }}
         --deployments {{ .DEPLOYMENT_DIR }}
@@ -134,7 +134,7 @@ tasks:
       - validate
     cmds:
       - >-
-        uv run atlas dashboard build {{ .STATE_DIR }}
+        uv run cloudfall dashboard build {{ .STATE_DIR }}
         --schemas {{ .SCHEMA_DIR }} --observed {{ .OBSERVATION_DIR }}
         --service-observed {{ .SERVICE_OBSERVATION_DIR }}
         --deployments {{ .DEPLOYMENT_DIR }}

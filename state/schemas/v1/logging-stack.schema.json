@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://atlas.internal/schemas/v1/logging-stack.schema.json",
-  "title": "Atlas logging stack",
-  "x-atlas-kind": "LoggingStack",
+  "$id": "https://cloudfall.internal/schemas/v1/logging-stack.schema.json",
+  "title": "Cloudfall logging stack",
+  "x-cloudfall-kind": "LoggingStack",
   "type": "object",
   "properties": {
     "apiVersion": {

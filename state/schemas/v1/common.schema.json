@@ -1,10 +1,10 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://atlas.internal/schemas/v1/common.schema.json",
-  "title": "Atlas common definitions",
+  "$id": "https://cloudfall.internal/schemas/v1/common.schema.json",
+  "title": "Cloudfall common definitions",
   "$defs": {
     "apiVersion": {
-      "const": "atlas/v1"
+      "const": "cloudfall/v1"
     },
     "resourceId": {
       "type": "string",

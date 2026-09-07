@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://atlas.internal/schemas/v1/host-profile.schema.json",
-  "title": "Atlas host profile",
-  "x-atlas-kind": "HostProfile",
+  "$id": "https://cloudfall.internal/schemas/v1/host-profile.schema.json",
+  "title": "Cloudfall host profile",
+  "x-cloudfall-kind": "HostProfile",
   "type": "object",
   "properties": {
     "apiVersion": {

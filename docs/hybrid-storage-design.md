@@ -33,7 +33,7 @@ data.
 
 | Event | Expected local result | Required fleet result |
 | --- | --- | --- |
-| Either drive fails | The RAID1 system remains bootable in degraded mode. | Atlas and hardware monitoring raise a critical alert. |
+| Either drive fails | The RAID1 system remains bootable in degraded mode. | Cloudfall and hardware monitoring raise a critical alert. |
 | A data tail is lost | Its filesystems do not mount and their dependent services do not start. | Replicas on other servers continue serving the affected datasets. |
 | The other data tail remains healthy | Its filesystems and unrelated services remain available. | No workload may require both local data tails to operate. |
 | The entire server is lost | No local service is available. | The cluster tolerates the complete host failure. |
@@ -163,13 +163,13 @@ boot from the other physical drive. The acceptance test must make one complete
 drive unavailable, using the provider console or another controlled physical
 method, while the server is still disposable.
 
-## Atlas audit boundaries
+## Cloudfall audit boundaries
 
-Create a dedicated Atlas `HostProfile` for this storage class. Do not reuse a
+Create a dedicated Cloudfall `HostProfile` for this storage class. Do not reuse a
 legacy profile whose root and RAID capacity thresholds describe a full-disk
 mirror.
 
-Atlas v1 observations are useful for ongoing evidence, but the current audit
+Cloudfall v1 observations are useful for ongoing evidence, but the current audit
 does not prove the complete failure contract:
 
 - `softwareRaid.minimumUsableBytes` is compared with the largest observed MD
@@ -181,7 +181,7 @@ does not prove the complete failure contract:
 - the audit does not validate each service's `RequiresMountsFor=` dependency.
 
 Keep the manual activation checklist in the provisioning guide until those
-constraints are represented directly in Atlas state and audit logic.
+constraints are represented directly in Cloudfall state and audit logic.
 
 ## Primary references
 

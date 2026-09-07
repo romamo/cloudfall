@@ -1,6 +1,6 @@
 # Security policy
 
-Atlas manages servers over SSH and renders infrastructure configuration, so
+Cloudfall manages servers over SSH and renders infrastructure configuration, so
 security reports are taken seriously.
 
 ## Reporting a vulnerability
@@ -18,7 +18,7 @@ reproduction, and the impact you believe it has.
   are designed to reject them. A way to smuggle credentials into rendered
   inventory or observations is a vulnerability
 - The inspection pipeline is read-only by design. Any code path through which
-  `atlas_inspect` or the audit toolchain modifies a target host is a
+  `cloudfall_inspect` or the audit toolchain modifies a target host is a
   vulnerability
 - Rendered configuration that weakens documented trust boundaries (proxy
   header trust, mTLS requirements, loopback-only listeners) is a vulnerability
