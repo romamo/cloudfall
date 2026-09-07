@@ -1,0 +1,10 @@
+# Managed by Cloudfall. Local changes will be overwritten.
+[Unit]
+Description=Cloudfall PostgreSQL backup schedule for {{ cloudfall_postgresql_service.id }}
+
+[Timer]
+OnCalendar={{ cloudfall_postgresql_service.backup.onCalendar }}
+Persistent=true
+
+[Install]
+WantedBy=timers.target

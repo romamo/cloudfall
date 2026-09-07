@@ -32,6 +32,8 @@ from cloudfall.domain import (
     PackageName,
     PackageVersion,
     PositiveCount,
+    PostgresDatabaseName,
+    PostgresMajorVersion,
     ProviderServerId,
     RaidLevel,
     RequiredServiceState,
@@ -40,10 +42,12 @@ from cloudfall.domain import (
     ResourceId,
     ResourceKind,
     ServerLifecycle,
+    ServiceKind,
     ServiceManager,
     ServiceName,
     Sha256Digest,
     SshPublicKeyLifecycle,
+    SystemdCalendar,
     SystemdUnitName,
     TcpPort,
     TlsMode,
@@ -467,6 +471,89 @@ class DomainInventory:
 
 
 @dataclass(frozen=True, slots=True)
+class ServiceBind:
+    """Loopback listener contract for an infrastructure service."""
+
+    address: IpAddress
+    port: TcpPort
+
+
+@dataclass(frozen=True, slots=True)
+class PostgresDatabase:
+    """One project-owned PostgreSQL database."""
+
+    name: PostgresDatabaseName
+    project_id: ResourceId
+    owner: LinuxUser
+
+    def as_dict(self) -> dict[str, object]:
+        """Serialize the database with its resolved owner role."""
+        return {
+            "name": self.name.value,
+            "project": self.project_id.value,
+            "owner": self.owner.value,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class PostgresqlService:
+    """PostgreSQL-specific service contract."""
+
+    major_version: PostgresMajorVersion
+    package_version: PackageVersion | None
+    databases: tuple[PostgresDatabase, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ServiceBackup:
+    """Scheduled dump-and-prune backup contract."""
+
+    directory: AbsolutePath
+    on_calendar: SystemdCalendar
+    retention_days: PositiveCount
+
+
+@dataclass(frozen=True, slots=True)
+class ServiceInventory:
+    """Typed desired state for one infrastructure service."""
+
+    resource_id: ResourceId
+    service_kind: ServiceKind
+    environment: ResourceId
+    server_id: ResourceId
+    bind: ServiceBind
+    postgresql: PostgresqlService
+    backup: ServiceBackup
+
+    def as_dict(self) -> dict[str, object]:
+        """Serialize the service without secret material."""
+        postgresql: dict[str, object] = {
+            "majorVersion": self.postgresql.major_version.value,
+            "databases": [
+                database.as_dict() for database in self.postgresql.databases
+            ],
+        }
+        if self.postgresql.package_version is not None:
+            postgresql["packageVersion"] = self.postgresql.package_version.value
+        return {
+            "id": self.resource_id.value,
+            "serviceKind": self.service_kind.value,
+            "environment": self.environment.value,
+            "server": self.server_id.value,
+            "bind": {
+                "address": self.bind.address.value,
+                "port": self.bind.port.value,
+            },
+            "postgresql": postgresql,
+            "backup": {
+                "directory": self.backup.directory.value,
+                "onCalendar": self.backup.on_calendar.value,
+                "retentionDays": self.backup.retention_days.value,
+            },
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class SshPublicKeyInventory:
     """Validated public key scoped to one Cloudfall environment."""
 
@@ -725,6 +812,7 @@ class PlatformInventory:
     projects: tuple[ProjectInventory, ...]
     components: tuple[ComponentInventory, ...]
     domains: tuple[DomainInventory, ...]
+    services: tuple[ServiceInventory, ...]
     ssh_public_keys: tuple[SshPublicKeyInventory, ...]
     logging_stacks: tuple[LoggingStackInventory, ...]
 
@@ -751,6 +839,11 @@ class PlatformInventory:
             _domain_inventory(document)
             for document in state.resources(ResourceKind.DOMAIN)
         )
+        projects_by_id = {project.resource_id: project for project in projects}
+        services = tuple(
+            _service_inventory(document, projects_by_id)
+            for document in state.resources(ResourceKind.SERVICE)
+        )
         ssh_public_keys = tuple(
             _ssh_public_key_inventory(document)
             for document in state.resources(ResourceKind.SSH_PUBLIC_KEY)
@@ -765,6 +858,7 @@ class PlatformInventory:
             projects=projects,
             components=components,
             domains=domains,
+            services=services,
             ssh_public_keys=ssh_public_keys,
             logging_stacks=logging_stacks,
         )
@@ -825,6 +919,7 @@ class PlatformInventory:
             "projects": [project.as_dict() for project in self.projects],
             "components": [component.as_dict() for component in self.components],
             "domains": [domain.as_dict() for domain in self.domains],
+            "services": [service.as_dict() for service in self.services],
             "sshPublicKeys": [key.as_dict() for key in self.ssh_public_keys],
             "loggingStacks": [stack.as_dict() for stack in self.logging_stacks],
         }
@@ -1019,6 +1114,66 @@ def _domain_inventory(document: ResourceDocument) -> DomainInventory:
             ),
             timeout_seconds=PositiveCount.from_boundary(health.get("timeoutSeconds")),
         ),
+    )
+
+
+def _service_inventory(
+    document: ResourceDocument,
+    projects_by_id: Mapping[ResourceId, ProjectInventory],
+) -> ServiceInventory:
+    spec = _mapping(document.content, "spec")
+    bind = _mapping(spec, "bind")
+    postgresql = _mapping(spec, "postgresql")
+    backup = _mapping(spec, "backup")
+    raw_package_version = postgresql.get("packageVersion")
+    return ServiceInventory(
+        resource_id=document.key.resource_id,
+        service_kind=ServiceKind.from_boundary(spec.get("serviceKind")),
+        environment=ResourceId.from_boundary(spec.get("environment")),
+        server_id=ResourceId.from_boundary(spec.get("server")),
+        bind=ServiceBind(
+            address=IpAddress.from_boundary(bind.get("address")),
+            port=TcpPort.from_boundary(bind.get("port")),
+        ),
+        postgresql=PostgresqlService(
+            major_version=PostgresMajorVersion.from_boundary(
+                postgresql.get("majorVersion")
+            ),
+            package_version=(
+                PackageVersion.from_boundary(raw_package_version)
+                if raw_package_version is not None
+                else None
+            ),
+            databases=tuple(
+                _postgres_database(item, projects_by_id)
+                for item in _mapping_list(
+                    postgresql.get("databases"), "service databases"
+                )
+            ),
+        ),
+        backup=ServiceBackup(
+            directory=AbsolutePath.from_boundary(backup.get("directory")),
+            on_calendar=SystemdCalendar.from_boundary(backup.get("onCalendar")),
+            retention_days=PositiveCount.from_boundary(
+                backup.get("retentionDays")
+            ),
+        ),
+    )
+
+
+def _postgres_database(
+    content: Mapping[str, object],
+    projects_by_id: Mapping[ResourceId, ProjectInventory],
+) -> PostgresDatabase:
+    project_id = ResourceId.from_boundary(content.get("project"))
+    project = projects_by_id.get(project_id)
+    if project is None:
+        message = f"service database references an unknown project: {project_id}"
+        raise KeyError(message)
+    return PostgresDatabase(
+        name=PostgresDatabaseName.from_boundary(content.get("name")),
+        project_id=project_id,
+        owner=project.linux_user,
     )
 
 

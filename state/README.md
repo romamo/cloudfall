@@ -14,7 +14,10 @@ has an `apiVersion`, `kind`, strict `metadata.id`, and kind-specific `spec`.
 Unknown properties are rejected.
 
 The current contract includes `Server`, `HostProfile`, `Project`, `Component`,
-`Domain`, `SshPublicKey`, and `LoggingStack` desired-state resources. A
+`Domain`, `Service`, `SshPublicKey`, and `LoggingStack` desired-state
+resources. A `Service` declares one infrastructure service (v1: PostgreSQL)
+with a loopback-only bind, project-owned databases resolved to peer-auth
+roles, and a scheduled dump-and-prune backup contract. A
 `LoggingStack` pins the guarded parallel migration, backend and collector
 placement, package versions, loopback listeners (including the Prometheus
 metrics backend), mTLS paths, retention, and explicit journal/file sources;

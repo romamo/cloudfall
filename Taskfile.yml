@@ -102,6 +102,29 @@ tasks:
         uv run ansible-playbook --inventory {{ .INVENTORY_FILE }}
         engine/ansible/playbooks/baseline.yml
 
+  services:deploy:check:
+    desc: Check declared infrastructure services without changing hosts
+    deps:
+      - inventory
+    env:
+      ANSIBLE_CONFIG: engine/ansible/ansible.cfg
+    cmds:
+      - >-
+        uv run ansible-playbook --check --diff
+        --inventory {{ .INVENTORY_FILE }}
+        engine/ansible/playbooks/services.yml
+
+  services:deploy:
+    desc: Converge declared infrastructure services
+    deps:
+      - inventory
+    env:
+      ANSIBLE_CONFIG: engine/ansible/ansible.cfg
+    cmds:
+      - >-
+        uv run ansible-playbook --inventory {{ .INVENTORY_FILE }}
+        engine/ansible/playbooks/services.yml
+
   logging:check:
     desc: Check the guarded parallel logging deployment without applying it
     deps:
@@ -182,6 +205,10 @@ tasks:
         uv run ansible-playbook --syntax-check
         --inventory {{ .INVENTORY_FILE }}
         engine/ansible/playbooks/baseline.yml
+      - >-
+        uv run ansible-playbook --syntax-check
+        --inventory {{ .INVENTORY_FILE }}
+        engine/ansible/playbooks/services.yml
       - >-
         uv run ansible-playbook --syntax-check
         --inventory {{ .INVENTORY_FILE }}

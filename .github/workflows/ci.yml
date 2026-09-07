@@ -41,7 +41,7 @@ jobs:
         env:
           ANSIBLE_CONFIG: engine/ansible/ansible.cfg
         run: |
-          for playbook in baseline bootstrap inspect logging time; do
+          for playbook in baseline bootstrap inspect logging services time; do
             uv run ansible-playbook --syntax-check \
               --inventory tmp/ansible-inventory.json \
               "engine/ansible/playbooks/${playbook}.yml"

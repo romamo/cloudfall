@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Managed by Cloudfall. Local changes will be overwritten.
+set -euo pipefail
+
+backup_directory="{{ cloudfall_postgresql_service.backup.directory }}"
+port="{{ cloudfall_postgresql_service.bind.port }}"
+retention_days="{{ cloudfall_postgresql_service.backup.retentionDays }}"
+timestamp="$(date --utc +%Y%m%dT%H%M%SZ)"
+
+{% for database in cloudfall_postgresql_service.postgresql.databases %}
+pg_dump --port "${port}" --format=custom \
+  --file "${backup_directory}/{{ database.name }}-${timestamp}.dump" \
+  "{{ database.name }}"
+{% endfor %}
+
+find "${backup_directory}" -name '*.dump' -type f \
+  -mtime "+${retention_days}" -delete

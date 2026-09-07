@@ -66,6 +66,26 @@ def test_inventory_renders_ansible_host_variables() -> None:
                 "project_user": "crm",
             }
         ],
+        "cloudfall_services": [
+            {
+                "id": "postgresql-main",
+                "serviceKind": "postgresql",
+                "environment": "production",
+                "server": "h1",
+                "bind": {"address": "127.0.0.1", "port": 5432},
+                "postgresql": {
+                    "majorVersion": "17",
+                    "databases": [
+                        {"name": "crm", "project": "crm", "owner": "crm"}
+                    ],
+                },
+                "backup": {
+                    "directory": "/var/backups/cloudfall/postgresql-main",
+                    "onCalendar": "*-*-* 02:00:00 UTC",
+                    "retentionDays": 14,
+                },
+            }
+        ],
         "cloudfall_domains": [],
         "cloudfall_origin_domains": [],
         "cloudfall_environment": "production",

@@ -1,0 +1,80 @@
+---
+argument_specs:
+  main:
+    short_description: Converge one declared PostgreSQL service
+    options:
+      cloudfall_postgresql_service:
+        type: dict
+        required: true
+        options:
+          id:
+            type: str
+            required: true
+          serviceKind:
+            type: str
+            choices:
+              - postgresql
+            required: true
+          environment:
+            type: str
+            required: true
+          server:
+            type: str
+            required: true
+          bind:
+            type: dict
+            required: true
+            options:
+              address:
+                type: str
+                choices:
+                  - 127.0.0.1
+                required: true
+              port:
+                type: int
+                required: true
+          postgresql:
+            type: dict
+            required: true
+            options:
+              majorVersion:
+                type: str
+                required: true
+              packageVersion:
+                type: str
+              databases:
+                type: list
+                elements: dict
+                required: true
+                options:
+                  name:
+                    type: str
+                    required: true
+                  project:
+                    type: str
+                    required: true
+                  owner:
+                    type: str
+                    required: true
+          backup:
+            type: dict
+            required: true
+            options:
+              directory:
+                type: path
+                required: true
+              onCalendar:
+                type: str
+                required: true
+              retentionDays:
+                type: int
+                required: true
+      cloudfall_postgresql_repository_key_url:
+        type: str
+        default: https://www.postgresql.org/media/keys/ACCC4CF8.asc
+      cloudfall_postgresql_repository_key_path:
+        type: path
+        default: /etc/apt/keyrings/postgresql.asc
+      cloudfall_postgresql_repository_url:
+        type: str
+        default: https://apt.postgresql.org/pub/repos/apt

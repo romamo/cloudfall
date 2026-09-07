@@ -73,6 +73,7 @@ class ResourceKind(StrEnum):
     DOMAIN = "Domain"
     SSH_PUBLIC_KEY = "SshPublicKey"
     LOGGING_STACK = "LoggingStack"
+    SERVICE = "Service"
 
     @classmethod
     def from_boundary(cls, value: object) -> ResourceKind:
@@ -535,6 +536,71 @@ class FirewallPolicy(StrEnum):
     def from_boundary(cls, value: object) -> FirewallPolicy:
         """Coerce a boundary value into a firewall policy."""
         return cls(_required_string(value, "firewall policy"))
+
+
+class ServiceKind(StrEnum):
+    """Infrastructure service kinds supported by Cloudfall v1."""
+
+    POSTGRESQL = "postgresql"
+
+    @classmethod
+    def from_boundary(cls, value: object) -> ServiceKind:
+        """Coerce a boundary value into a service kind."""
+        return cls(_required_string(value, "service kind"))
+
+
+@dataclass(frozen=True, slots=True)
+class PostgresDatabaseName:
+    """Validated PostgreSQL database name safe for quoted identifiers."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        """Enforce the conservative database naming accepted by state."""
+        if not re.fullmatch(r"[a-z][a-z0-9_]{0,62}", self.value):
+            message = f"invalid PostgreSQL database name: {self.value!r}"
+            raise ValueError(message)
+
+    @classmethod
+    def from_boundary(cls, value: object) -> PostgresDatabaseName:
+        """Coerce a boundary value into a database name."""
+        return cls(_required_string(value, "PostgreSQL database name"))
+
+
+@dataclass(frozen=True, slots=True)
+class PostgresMajorVersion:
+    """Validated PostgreSQL major version."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        """Reject non-numeric major versions."""
+        if not re.fullmatch(r"[0-9]{2}", self.value):
+            message = f"invalid PostgreSQL major version: {self.value!r}"
+            raise ValueError(message)
+
+    @classmethod
+    def from_boundary(cls, value: object) -> PostgresMajorVersion:
+        """Coerce a boundary value into a PostgreSQL major version."""
+        return cls(_required_string(value, "PostgreSQL major version"))
+
+
+@dataclass(frozen=True, slots=True)
+class SystemdCalendar:
+    """Validated systemd OnCalendar expression safe for unit rendering."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        """Reject expressions that could escape a unit-file directive."""
+        if not re.fullmatch(r"[A-Za-z0-9 *:,.^~/-]{1,100}", self.value):
+            message = f"invalid systemd calendar expression: {self.value!r}"
+            raise ValueError(message)
+
+    @classmethod
+    def from_boundary(cls, value: object) -> SystemdCalendar:
+        """Coerce a boundary value into a calendar expression."""
+        return cls(_required_string(value, "systemd calendar expression"))
 
 
 @dataclass(frozen=True, slots=True)

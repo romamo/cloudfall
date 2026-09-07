@@ -113,6 +113,15 @@ def test_inventory_serialization_excludes_secret_references() -> None:
     assert len(projects) == 1
     assert len(components) == 1
     assert domains == []
+    services = payload["services"]
+    assert isinstance(services, list)
+    assert len(services) == 1
+    assert services[0]["id"] == "postgresql-main"
+    assert services[0]["bind"] == {"address": "127.0.0.1", "port": 5432}
+    assert services[0]["postgresql"]["databases"] == [
+        {"name": "crm", "project": "crm", "owner": "crm"}
+    ]
+    assert "packageVersion" not in services[0]["postgresql"]
     assert len(ssh_public_keys) == 1
     assert ssh_public_keys[0]["id"] == "example-admin"
     assert ssh_public_keys[0]["algorithm"] == "ssh-rsa"

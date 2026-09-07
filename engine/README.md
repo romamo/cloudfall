@@ -90,6 +90,30 @@ application deployment. It:
 It deliberately does not install Debian, configure RAID, change SSH or firewall
 policy, fetch secrets, deploy artifacts, or start application services.
 
+## Infrastructure services
+
+`ansible/playbooks/services.yml` converges every declared `Service` resource
+on its server. The first catalog entry is PostgreSQL:
+
+```console
+task services:deploy:check
+task services:deploy
+```
+
+The PostgreSQL role installs the declared major version from the PGDG
+repository (optionally pinned), binds the cluster to loopback through a
+managed `conf.d` drop-in, and creates one login role and database per
+declared project using peer authentication over the local socket — no
+database passwords exist anywhere. Components connect as their project's
+Linux user. Backups run `pg_dump` in custom format on the declared systemd
+calendar with bounded retention, and
+`/usr/local/sbin/cloudfall-postgresql-restore-check` proves the newest dump
+of every database restores into a scratch database before dropping it:
+
+```console
+sudo -u postgres /usr/local/sbin/cloudfall-postgresql-restore-check
+```
+
 ## Read-only inspection role
 
 `ansible/roles/cloudfall_inspect` collects normalized evidence without changing the

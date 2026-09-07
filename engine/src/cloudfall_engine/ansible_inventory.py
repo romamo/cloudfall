@@ -122,6 +122,11 @@ def _host_variables(inventory: PlatformInventory) -> dict[str, object]:
                 for component in inventory.components
                 if server.resource_id in component.server_ids
             ],
+            "cloudfall_services": [
+                service.as_dict()
+                for service in inventory.services
+                if service.server_id == server.resource_id
+            ],
             "cloudfall_domains": [
                 domain.as_dict()
                 for domain in inventory.domains

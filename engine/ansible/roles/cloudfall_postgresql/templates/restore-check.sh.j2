@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Managed by Cloudfall. Local changes will be overwritten.
+# Restores the newest dump of every declared database into a scratch
+# database, counts catalog rows, and drops the scratch database again.
+set -euo pipefail
+
+backup_directory="{{ cloudfall_postgresql_service.backup.directory }}"
+port="{{ cloudfall_postgresql_service.bind.port }}"
+
+{% for database in cloudfall_postgresql_service.postgresql.databases %}
+latest="$(find "${backup_directory}" -name '{{ database.name }}-*.dump' \
+  -type f | sort | tail -n 1)"
+if [ -z "${latest}" ]; then
+  echo "no backup found for {{ database.name }}" >&2
+  exit 1
+fi
+scratch="{{ database.name }}_restore_check"
+dropdb --port "${port}" --if-exists "${scratch}"
+createdb --port "${port}" "${scratch}"
+pg_restore --port "${port}" --dbname "${scratch}" --no-owner \
+  --exit-on-error "${latest}"
+relations="$(psql --port "${port}" --tuples-only --no-align \
+  --command 'SELECT count(*) FROM pg_class' "${scratch}")"
+dropdb --port "${port}" "${scratch}"
+echo "restore check passed for {{ database.name }}:" \
+  "${latest} (${relations} catalog relations)"
+{% endfor %}

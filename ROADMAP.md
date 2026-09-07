@@ -39,10 +39,11 @@ disposable host.
 Installable, audited infrastructure services, starting with exactly two.
 
 - A `Service` schema: kind, version, servers, ports, bind policy, backup
-  policy
+  policy ✔
 - PostgreSQL role: pinned install, localhost-only bind by default,
-  per-project databases and users from state, scheduled dumps, and a
-  restore-proof command
+  per-project databases and users from state (peer authentication, no
+  database passwords), scheduled dumps, and a restore-proof command ✔
+  (`task services:deploy`)
 - Nginx site role: virtual hosts rendered from `Domain` resources, certbot
   with timer compliance, canonical client-address forwarding
 - Audit integration: packages, units, config hashes, listening-socket

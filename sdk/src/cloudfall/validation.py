@@ -35,6 +35,7 @@ _SCHEMA_FILES: Mapping[ResourceKind, str] = {
     ResourceKind.DOMAIN: "domain.schema.json",
     ResourceKind.SSH_PUBLIC_KEY: "ssh-public-key.schema.json",
     ResourceKind.LOGGING_STACK: "logging-stack.schema.json",
+    ResourceKind.SERVICE: "service.schema.json",
 }
 _YAML_SUFFIXES = frozenset({".yaml", ".yml"})
 
@@ -393,7 +394,10 @@ class StateValidator:
                 _validate_logging_references(document, spec, index)
             elif document.key.kind is ResourceKind.SSH_PUBLIC_KEY:
                 _validate_ssh_public_key(document, spec)
+            elif document.key.kind is ResourceKind.SERVICE:
+                _validate_service_references(document, spec, index)
         _validate_logging_uniqueness(documents)
+        _validate_service_uniqueness(documents)
 
 
 def _validate_ssh_public_key(
@@ -486,6 +490,126 @@ def _validate_domain_references(
             field_path=("spec", "healthCheck", "scheme"),
         )
         raise StateValidationError(issue)
+
+
+def _validate_service_references(
+    document: ResourceDocument,
+    spec: Mapping[str, object],
+    index: Mapping[ResourceKey, ResourceDocument],
+) -> None:
+    environment = _resource_id_value(spec, "environment", document.source)
+    server_id = _resource_id_value(spec, "server", document.source)
+    server = _require_resource(
+        index,
+        ResourceKind.SERVER,
+        server_id,
+        document.source,
+        ("spec", "server"),
+    )
+    server_spec = _required_mapping(server.content, "spec", server.source)
+    server_environment = _resource_id_value(
+        server_spec, "environment", server.source
+    )
+    if server_environment != environment:
+        issue = ValidationIssue(
+            code="service_environment_mismatch",
+            message=(
+                f"Server/{server_id} belongs to {server_environment}, "
+                f"not {environment}"
+            ),
+            source=document.source,
+            field_path=("spec", "environment"),
+        )
+        raise StateValidationError(issue)
+
+    postgresql = _required_mapping(spec, "postgresql", document.source)
+    raw_databases = postgresql.get("databases")
+    if not isinstance(raw_databases, list):
+        issue = ValidationIssue(
+            code="internal_state_shape_invalid",
+            message="validated service databases are not a list",
+            source=document.source,
+            field_path=("spec", "postgresql", "databases"),
+        )
+        raise StateValidationError(issue)
+    seen_names: set[object] = set()
+    for position, raw_database in enumerate(raw_databases):
+        if not isinstance(raw_database, dict) or not all(
+            isinstance(key, str) for key in raw_database
+        ):
+            issue = ValidationIssue(
+                code="internal_state_shape_invalid",
+                message="validated service database is not an object",
+                source=document.source,
+                field_path=("spec", "postgresql", "databases", position),
+            )
+            raise StateValidationError(issue)
+        database = cast("Mapping[str, object]", raw_database)
+        name = database.get("name")
+        if name in seen_names:
+            issue = ValidationIssue(
+                code="service_database_duplicate",
+                message=f"duplicate service database name: {name}",
+                source=document.source,
+                field_path=("spec", "postgresql", "databases", position, "name"),
+            )
+            raise StateValidationError(issue)
+        seen_names.add(name)
+        project_id = _resource_id_value(database, "project", document.source)
+        _require_resource(
+            index,
+            ResourceKind.PROJECT,
+            project_id,
+            document.source,
+            ("spec", "postgresql", "databases", position, "project"),
+        )
+
+
+def _validate_service_uniqueness(documents: Sequence[ResourceDocument]) -> None:
+    placements: dict[tuple[ResourceId, str], ResourceDocument] = {}
+    ports: dict[tuple[ResourceId, int], ResourceDocument] = {}
+    for document in documents:
+        if document.key.kind is not ResourceKind.SERVICE:
+            continue
+        spec = _required_mapping(document.content, "spec", document.source)
+        bind = _required_mapping(spec, "bind", document.source)
+        server_id = _resource_id_value(spec, "server", document.source)
+        raw_kind = spec.get("serviceKind")
+        raw_port = bind.get("port")
+        if not isinstance(raw_kind, str) or not isinstance(raw_port, int):
+            issue = ValidationIssue(
+                code="internal_state_shape_invalid",
+                message="validated service kind or port has an invalid shape",
+                source=document.source,
+                field_path=("spec",),
+            )
+            raise StateValidationError(issue)
+        placement = (server_id, raw_kind)
+        if placement in placements:
+            issue = ValidationIssue(
+                code="service_placement_conflict",
+                message=(
+                    f"Server/{server_id} already runs a {raw_kind} service "
+                    f"declared at {placements[placement].source.display()}"
+                ),
+                source=document.source,
+                field_path=("spec", "server"),
+            )
+            raise StateValidationError(issue)
+        placements[placement] = document
+        listener = (server_id, raw_port)
+        if listener in ports:
+            issue = ValidationIssue(
+                code="service_port_conflict",
+                message=(
+                    f"Server/{server_id} port {raw_port} already used by the "
+                    f"service declared at {ports[listener].source.display()}"
+                ),
+                source=document.source,
+                field_path=("spec", "bind", "port"),
+            )
+            raise StateValidationError(issue)
+        ports[listener] = document
 
 
 def _validate_logging_references(

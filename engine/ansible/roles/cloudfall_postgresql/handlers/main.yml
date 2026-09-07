@@ -1,0 +1,9 @@
+---
+- name: Restart PostgreSQL
+  ansible.builtin.systemd_service:
+    name: >-
+      postgresql@{{
+        cloudfall_postgresql_service.postgresql.majorVersion
+      }}-main.service
+    state: restarted
+    daemon_reload: true

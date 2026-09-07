@@ -1,0 +1,21 @@
+---
+- name: Deploy declared Cloudfall infrastructure services
+  hosts: cloudfall_servers
+  become: true
+  gather_facts: true
+  any_errors_fatal: true
+  serial: 1
+  tasks:
+    - name: Deploy declared PostgreSQL services
+      ansible.builtin.include_role:
+        name: cloudfall_postgresql
+      vars:
+        cloudfall_postgresql_service: "{{ item }}"
+      loop: >-
+        {{
+          cloudfall_services | default([])
+          | selectattr('serviceKind', 'equalto', 'postgresql')
+          | list
+        }}
+      loop_control:
+        label: "{{ item.id }}"

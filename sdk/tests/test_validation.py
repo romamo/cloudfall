@@ -18,13 +18,14 @@ SCHEMAS = ROOT / "state" / "schemas" / "v1"
 def test_example_state_validates_and_builds_typed_index() -> None:
     state = validate_state(ROOT / "state" / "examples", SCHEMAS)
 
-    assert state.resource_count == 7
+    assert state.resource_count == 8
     assert state.counts_by_kind() == {
         "Component": 1,
         "HostProfile": 1,
         "LoggingStack": 1,
         "Project": 1,
         "Server": 2,
+        "Service": 1,
         "SshPublicKey": 1,
     }
     component = state.get(ResourceKind.COMPONENT, ResourceId("crm-backend"))
@@ -125,6 +126,60 @@ def test_host_profile_rejects_duplicate_firewall_rules(
     assert error.value.issue.code == "firewall_rule_duplicate"
 
 
+def test_service_database_must_reference_a_declared_project(
+    tmp_path: Path,
+) -> None:
+    state_directory = tmp_path / "state"
+    shutil.copytree(ROOT / "state" / "examples", state_directory)
+    service_path = state_directory / "services" / "postgresql-main.yaml"
+    invalid = service_path.read_text(encoding="utf-8").replace(
+        "project: crm", "project: billing"
+    )
+    service_path.write_text(invalid, encoding="utf-8")
+
+    with pytest.raises(StateValidationError) as error:
+        validate_state(state_directory, SCHEMAS)
+
+    assert error.value.issue.code == "resource_reference_missing"
+    assert "Project/billing" in error.value.issue.message
+
+
+def test_service_rejects_duplicate_database_names(tmp_path: Path) -> None:
+    state_directory = tmp_path / "state"
+    shutil.copytree(ROOT / "state" / "examples", state_directory)
+    service_path = state_directory / "services" / "postgresql-main.yaml"
+    duplicated = service_path.read_text(encoding="utf-8").replace(
+        "      - name: crm\n        project: crm",
+        "      - name: crm\n        project: crm\n"
+        "      - name: crm\n        project: billing",
+    )
+    service_path.write_text(duplicated, encoding="utf-8")
+
+    with pytest.raises(StateValidationError) as error:
+        validate_state(state_directory, SCHEMAS)
+
+    assert error.value.issue.code == "service_database_duplicate"
+
+
+def test_second_service_of_one_kind_per_server_is_rejected(
+    tmp_path: Path,
+) -> None:
+    state_directory = tmp_path / "state"
+    shutil.copytree(ROOT / "state" / "examples", state_directory)
+    original = state_directory / "services" / "postgresql-main.yaml"
+    second = original.read_text(encoding="utf-8").replace(
+        "id: postgresql-main", "id: postgresql-second"
+    ).replace("port: 5432", "port: 5433")
+    (state_directory / "services" / "postgresql-second.yaml").write_text(
+        second, encoding="utf-8"
+    )
+
+    with pytest.raises(StateValidationError) as error:
+        validate_state(state_directory, SCHEMAS)
+
+    assert error.value.issue.code == "service_placement_conflict"
+
+
 def test_logging_stack_rejects_conflicting_listener_ports(
     tmp_path: Path,
 ) -> None:
@@ -211,13 +266,14 @@ def test_cli_emits_structured_success(
     assert exit_code == 0
     assert json.loads(captured.out) == {
         "status": "ok",
-        "resources": 7,
+        "resources": 8,
         "byKind": {
             "Component": 1,
             "HostProfile": 1,
             "LoggingStack": 1,
             "Project": 1,
             "Server": 2,
+            "Service": 1,
             "SshPublicKey": 1,
         },
     }
