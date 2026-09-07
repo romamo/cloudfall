@@ -1,0 +1,97 @@
+---
+argument_specs:
+  main:
+    short_description: Install Alloy without removing legacy log agents
+    options:
+      atlas_logging_collector_stack:
+        type: dict
+        required: true
+        options:
+          id:
+            type: str
+            required: true
+          environment:
+            type: str
+            required: true
+          migration:
+            type: dict
+            required: true
+            options:
+              mode:
+                type: str
+                choices:
+                  - parallel
+                required: true
+              preserveLegacyAgents:
+                type: bool
+                required: true
+          software:
+            type: dict
+            required: true
+            options:
+              lokiPackageVersion:
+                type: str
+                required: true
+              grafanaPackageVersion:
+                type: str
+                required: true
+              alloyPackageVersion:
+                type: str
+                required: true
+          backend:
+            type: dict
+            required: true
+          gateway:
+            type: dict
+            required: true
+            options:
+              serverName:
+                type: str
+                required: true
+              listenAddress:
+                type: str
+                required: true
+              port:
+                type: int
+                required: true
+              tls:
+                type: dict
+                required: true
+          grafana:
+            type: dict
+            required: true
+          collectors:
+            type: dict
+            required: true
+            options:
+              servers:
+                type: list
+                elements: str
+                required: true
+              clientTls:
+                type: dict
+                required: true
+                options:
+                  caPath:
+                    type: path
+                    required: true
+                  certificatePath:
+                    type: path
+                    required: true
+                  keyPath:
+                    type: path
+                    required: true
+              journal:
+                type: dict
+                required: true
+                options:
+                  enabled:
+                    type: bool
+                    required: true
+                  maxAgeHours:
+                    type: int
+                    required: true
+              files:
+                type: list
+                elements: dict
+                required: true

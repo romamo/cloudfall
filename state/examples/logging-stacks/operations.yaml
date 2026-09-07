@@ -1,0 +1,54 @@
+---
+apiVersion: atlas/v1
+kind: LoggingStack
+metadata:
+  id: operations
+  description: Example parallel operational logging stack
+spec:
+  environment: production
+  migration:
+    mode: parallel
+    preserveLegacyAgents: true
+  software:
+    lokiPackageVersion: "3.7.2"
+    grafanaPackageVersion: "13.1.0"
+    alloyPackageVersion: "1.17.1-1"
+  backend:
+    server: h1
+    listenAddress: 127.0.0.1
+    port: 3100
+    storage:
+      type: filesystem
+      path: /var/lib/loki-atlas
+    retentionHours: 720
+  gateway:
+    serverName: logs.example.internal
+    listenAddress: 0.0.0.0
+    port: 3101
+    tls:
+      certificatePath: /etc/atlas/logging/server.crt
+      keyPath: /etc/atlas/logging/server.key
+      clientCaPath: /etc/atlas/logging/client-ca.crt
+  grafana:
+    listenAddress: 127.0.0.1
+    port: 3000
+    adminPasswordPath: /etc/atlas/logging/grafana-admin-password
+  collectors:
+    servers:
+      - h1
+      - h2
+    clientTls:
+      caPath: /etc/atlas/logging/ca.crt
+      certificatePath: /etc/atlas/logging/client.crt
+      keyPath: /etc/atlas/logging/client.key
+    journal:
+      enabled: true
+      maxAgeHours: 24
+    files:
+      - id: crm-backend
+        path: /var/log/crm/backend/*.log
+        servers:
+          - h1
+          - h2
+        project: crm
+        component: crm-backend

@@ -1,0 +1,17 @@
+---
+argument_specs:
+  main:
+    short_description: Collect read-only Debian host evidence
+    options:
+      atlas_inspect_collector_version:
+        type: str
+        default: "0.2.0"
+      atlas_inspect_output_directory:
+        type: path
+        required: true
+      atlas_inspect_profile:
+        type: dict
+        required: true
+      atlas_inspect_server_id:
+        type: str
+        required: true

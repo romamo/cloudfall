@@ -1,0 +1,10 @@
+---
+apiVersion: atlas/v1
+kind: Project
+metadata:
+  id: crm
+spec:
+  linuxUser: crm
+  approval: manual
+  components:
+    - crm-backend

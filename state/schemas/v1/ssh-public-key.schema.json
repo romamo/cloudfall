@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atlas.internal/schemas/v1/ssh-public-key.schema.json",
+  "title": "Atlas SSH public key",
+  "x-atlas-kind": "SshPublicKey",
+  "type": "object",
+  "properties": {
+    "apiVersion": {
+      "$ref": "common.schema.json#/$defs/apiVersion"
+    },
+    "kind": {
+      "const": "SshPublicKey"
+    },
+    "metadata": {
+      "$ref": "common.schema.json#/$defs/metadata"
+    },
+    "spec": {
+      "type": "object",
+      "properties": {
+        "owner": {
+          "$ref": "common.schema.json#/$defs/resourceId"
+        },
+        "environment": {
+          "$ref": "common.schema.json#/$defs/resourceId"
+        },
+        "publicKey": {
+          "type": "string",
+          "minLength": 80,
+          "maxLength": 16384,
+          "pattern": "^ssh-(?:rsa|ed25519) [A-Za-z0-9+/]+={0,2}(?: [^\\r\\n]+)?$"
+        },
+        "lifecycle": {
+          "enum": [
+            "active",
+            "revoked"
+          ]
+        }
+      },
+      "required": [
+        "owner",
+        "environment",
+        "publicKey",
+        "lifecycle"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "apiVersion",
+    "kind",
+    "metadata",
+    "spec"
+  ],
+  "additionalProperties": false
+}

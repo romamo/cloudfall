@@ -1,0 +1,17 @@
+---
+- name: Restart Loki
+  ansible.builtin.systemd_service:
+    name: loki.service
+    state: restarted
+    daemon_reload: true
+
+- name: Restart Grafana
+  ansible.builtin.systemd_service:
+    name: grafana-server.service
+    state: restarted
+    daemon_reload: true
+
+- name: Reload Nginx
+  ansible.builtin.systemd_service:
+    name: nginx.service
+    state: reloaded

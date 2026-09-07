@@ -1,0 +1,166 @@
+---
+version: "3"
+
+vars:
+  STATE_DIR: '{{ .STATE_DIR | default "state/examples" }}'
+  SCHEMA_DIR: '{{ .SCHEMA_DIR | default "state/schemas/v1" }}'
+  INVENTORY_FILE: '{{ .INVENTORY_FILE | default "tmp/ansible-inventory.json" }}'
+  OBSERVATION_DIR: '{{ .OBSERVATION_DIR | default "tmp/observed" }}'
+  SERVICE_OBSERVATION_DIR: '{{ .SERVICE_OBSERVATION_DIR | default "tmp/observed-services" }}'
+  DEPLOYMENT_DIR: '{{ .DEPLOYMENT_DIR | default "tmp/deployments" }}'
+  TIME_LIMIT: '{{ .TIME_LIMIT | default "atlas_servers" }}'
+
+tasks:
+  validate:
+    desc: Validate declarative Atlas state
+    cmds:
+      - uv run atlas state validate {{ .STATE_DIR }} --schemas {{ .SCHEMA_DIR }}
+
+  inventory:
+    desc: Render validated state as Ansible JSON inventory
+    deps:
+      - validate
+    cmds:
+      - >-
+        uv run atlas-engine inventory render {{ .STATE_DIR }}
+        --schemas {{ .SCHEMA_DIR }} --output {{ .INVENTORY_FILE }}
+
+  ansible:inventory:
+    desc: Verify rendered inventory with Ansible
+    deps:
+      - inventory
+    cmds:
+      - uv run ansible-inventory --inventory {{ .INVENTORY_FILE }} --list
+
+  inspect:
+    desc: >-
+      Collect read-only server snapshots and rebuild the operations dashboard
+    deps:
+      - inventory
+    env:
+      ANSIBLE_CONFIG: engine/ansible/ansible.cfg
+    cmds:
+      - >-
+        uv run ansible-playbook --inventory {{ .INVENTORY_FILE }}
+        engine/ansible/playbooks/inspect.yml
+        --extra-vars
+        atlas_inspect_output_directory={{ .ROOT_DIR }}/{{ .OBSERVATION_DIR }}
+      - >-
+        uv run atlas dashboard build {{ .STATE_DIR }}
+        --schemas {{ .SCHEMA_DIR }} --observed {{ .OBSERVATION_DIR }}
+        --output {{ .ROOT_DIR }}/tmp/dashboard
+
+  audit:
+    desc: Compare desired state with previously collected observations
+    deps:
+      - validate
+    cmds:
+      - >-
+        uv run atlas audit {{ .STATE_DIR }} --schemas {{ .SCHEMA_DIR }}
+        --observed {{ .OBSERVATION_DIR }}
+
+  services:inspect:
+    desc: Collect DNS, TLS, origin, and public service evidence
+    deps:
+      - validate
+    cmds:
+      - >-
+        uv run atlas services inspect {{ .STATE_DIR }}
+        --schemas {{ .SCHEMA_DIR }} --output {{ .SERVICE_OBSERVATION_DIR }}
+
+  services:status:
+    desc: Show evidence-derived service lifecycle status
+    deps:
+      - validate
+    cmds:
+      - >-
+        uv run atlas services status {{ .STATE_DIR }}
+        --schemas {{ .SCHEMA_DIR }} --observed {{ .OBSERVATION_DIR }}
+        --service-observed {{ .SERVICE_OBSERVATION_DIR }}
+        --deployments {{ .DEPLOYMENT_DIR }}
+
+  logging:check:
+    desc: Check the guarded parallel logging deployment without applying it
+    deps:
+      - inventory
+    env:
+      ANSIBLE_CONFIG: engine/ansible/ansible.cfg
+    cmds:
+      - >-
+        uv run ansible-playbook --check --diff
+        --inventory {{ .INVENTORY_FILE }}
+        engine/ansible/playbooks/logging.yml
+
+  logging:deploy:
+    desc: Deploy Loki, Grafana, and Alloy without changing legacy log agents
+    deps:
+      - inventory
+    env:
+      ANSIBLE_CONFIG: engine/ansible/ansible.cfg
+    cmds:
+      - >-
+        uv run ansible-playbook --inventory {{ .INVENTORY_FILE }}
+        engine/ansible/playbooks/logging.yml
+
+  time:check:
+    desc: Check the UTC time baseline without changing servers
+    deps:
+      - inventory
+    env:
+      ANSIBLE_CONFIG: engine/ansible/ansible.cfg
+    cmds:
+      - >-
+        uv run ansible-playbook --check --diff
+        --limit {{ .TIME_LIMIT }}
+        --inventory {{ .INVENTORY_FILE }}
+        engine/ansible/playbooks/time.yml
+
+  time:deploy:
+    desc: Enforce UTC and synchronized time on selected servers
+    deps:
+      - inventory
+    env:
+      ANSIBLE_CONFIG: engine/ansible/ansible.cfg
+    cmds:
+      - >-
+        uv run ansible-playbook
+        --limit {{ .TIME_LIMIT }}
+        --inventory {{ .INVENTORY_FILE }}
+        engine/ansible/playbooks/time.yml
+
+  dashboard:
+    desc: Build the local read-only operations dashboard
+    deps:
+      - validate
+    cmds:
+      - >-
+        uv run atlas dashboard build {{ .STATE_DIR }}
+        --schemas {{ .SCHEMA_DIR }} --observed {{ .OBSERVATION_DIR }}
+        --service-observed {{ .SERVICE_OBSERVATION_DIR }}
+        --deployments {{ .DEPLOYMENT_DIR }}
+        --output {{ .ROOT_DIR }}/tmp/dashboard
+
+  ansible:syntax:
+    desc: Run Ansible syntax and lint checks
+    deps:
+      - inventory
+    env:
+      ANSIBLE_CONFIG: engine/ansible/ansible.cfg
+    cmds:
+      - >-
+        uv run ansible-playbook --syntax-check
+        --inventory {{ .INVENTORY_FILE }}
+        engine/ansible/playbooks/bootstrap.yml
+      - >-
+        uv run ansible-playbook --syntax-check
+        --inventory {{ .INVENTORY_FILE }}
+        engine/ansible/playbooks/inspect.yml
+      - >-
+        uv run ansible-playbook --syntax-check
+        --inventory {{ .INVENTORY_FILE }}
+        engine/ansible/playbooks/logging.yml
+      - >-
+        uv run ansible-playbook --syntax-check
+        --inventory {{ .INVENTORY_FILE }}
+        engine/ansible/playbooks/time.yml
+      - uv run ansible-lint engine/ansible

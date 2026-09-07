@@ -1,0 +1,18 @@
+---
+apiVersion: atlas/v1
+kind: Server
+metadata:
+  id: h2
+  description: Secondary application host
+spec:
+  hostname: h2.example.internal
+  address: h2.example.internal
+  environment: production
+  profile: debian-application
+  lifecycle: active
+  ssh:
+    user: atlas
+    port: 22
+  labels:
+    region: eu-central
+    workload: application

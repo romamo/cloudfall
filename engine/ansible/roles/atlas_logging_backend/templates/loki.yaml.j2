@@ -1,0 +1,49 @@
+---
+auth_enabled: false
+
+server:
+  http_listen_address: {{ atlas_logging_backend_stack.backend.listenAddress }}
+  http_listen_port: {{ atlas_logging_backend_stack.backend.port }}
+  grpc_listen_address: 127.0.0.1
+  grpc_listen_port: 9096
+
+common:
+  instance_addr: 127.0.0.1
+  path_prefix: {{ atlas_logging_backend_stack.backend.storage.path }}
+  storage:
+    filesystem:
+      chunks_directory: {{ atlas_logging_backend_stack.backend.storage.path }}/chunks
+      rules_directory: {{ atlas_logging_backend_stack.backend.storage.path }}/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+query_range:
+  results_cache:
+    cache:
+      embedded_cache:
+        enabled: true
+        max_size_mb: 100
+
+schema_config:
+  configs:
+    - from: "2024-04-01"
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+compactor:
+  working_directory: {{ atlas_logging_backend_stack.backend.storage.path }}/compactor
+  retention_enabled: true
+  delete_request_store: filesystem
+
+limits_config:
+  allow_structured_metadata: true
+  retention_period: {{ atlas_logging_backend_stack.backend.retentionHours }}h
+
+analytics:
+  reporting_enabled: false

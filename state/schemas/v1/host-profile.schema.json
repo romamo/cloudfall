@@ -1,0 +1,252 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atlas.internal/schemas/v1/host-profile.schema.json",
+  "title": "Atlas host profile",
+  "x-atlas-kind": "HostProfile",
+  "type": "object",
+  "properties": {
+    "apiVersion": {
+      "$ref": "common.schema.json#/$defs/apiVersion"
+    },
+    "kind": {
+      "const": "HostProfile"
+    },
+    "metadata": {
+      "$ref": "common.schema.json#/$defs/metadata"
+    },
+    "spec": {
+      "type": "object",
+      "properties": {
+        "os": {
+          "type": "object",
+          "properties": {
+            "distribution": {
+              "const": "Debian"
+            },
+            "versions": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[0-9]+$"
+              },
+              "minItems": 1,
+              "uniqueItems": true
+            },
+            "serviceManager": {
+              "const": "systemd"
+            }
+          },
+          "required": [
+            "distribution",
+            "versions",
+            "serviceManager"
+          ],
+          "additionalProperties": false
+        },
+        "storage": {
+          "type": "object",
+          "properties": {
+            "softwareRaid": {
+              "type": "object",
+              "properties": {
+                "level": {
+                  "enum": [
+                    "raid0",
+                    "raid1",
+                    "raid5",
+                    "raid6",
+                    "raid10"
+                  ]
+                },
+                "minimumActiveDevices": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "minimumUsableBytes": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "level",
+                "minimumActiveDevices",
+                "minimumUsableBytes"
+              ],
+              "additionalProperties": false
+            },
+            "mounts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "$ref": "common.schema.json#/$defs/absolutePath"
+                  },
+                  "filesystem": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 30
+                  },
+                  "minimumBytes": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                },
+                "required": [
+                  "path",
+                  "filesystem",
+                  "minimumBytes"
+                ],
+                "additionalProperties": false
+              },
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "mounts"
+          ],
+          "additionalProperties": false
+        },
+        "packages": {
+          "type": "object",
+          "properties": {
+            "required": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "$ref": "common.schema.json#/$defs/packageName"
+                  },
+                  "version": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "additionalProperties": false
+              },
+              "uniqueItems": true
+            },
+            "forbidden": {
+              "type": "array",
+              "items": {
+                "$ref": "common.schema.json#/$defs/packageName"
+              },
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "required",
+            "forbidden"
+          ],
+          "additionalProperties": false
+        },
+        "services": {
+          "type": "object",
+          "properties": {
+            "required": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "$ref": "common.schema.json#/$defs/serviceName"
+                  },
+                  "state": {
+                    "enum": [
+                      "running",
+                      "stopped"
+                    ]
+                  },
+                  "status": {
+                    "enum": [
+                      "enabled",
+                      "disabled",
+                      "static",
+                      "indirect"
+                    ]
+                  }
+                },
+                "required": [
+                  "name",
+                  "state",
+                  "status"
+                ],
+                "additionalProperties": false
+              },
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "required"
+          ],
+          "additionalProperties": false
+        },
+        "configuration": {
+          "type": "object",
+          "properties": {
+            "files": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "$ref": "common.schema.json#/$defs/absolutePath"
+                  },
+                  "capture": {
+                    "enum": [
+                      "metadata",
+                      "hash"
+                    ]
+                  },
+                  "owner": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "group": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "mode": {
+                    "$ref": "common.schema.json#/$defs/fileMode"
+                  },
+                  "sha256": {
+                    "$ref": "common.schema.json#/$defs/sha256"
+                  }
+                },
+                "required": [
+                  "path",
+                  "capture"
+                ],
+                "additionalProperties": false
+              },
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "files"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "os",
+        "storage",
+        "packages",
+        "services",
+        "configuration"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "apiVersion",
+    "kind",
+    "metadata",
+    "spec"
+  ],
+  "additionalProperties": false
+}

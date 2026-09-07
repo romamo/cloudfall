@@ -1,0 +1,11 @@
+---
+- name: Bootstrap Atlas application servers
+  hosts: atlas_servers
+  become: true
+  gather_facts: true
+  any_errors_fatal: true
+  serial: 1
+  roles:
+    - role: atlas_bootstrap
+      atlas_bootstrap_projects: "{{ atlas_projects }}"
+      atlas_bootstrap_components: "{{ atlas_components }}"

@@ -1,0 +1,11 @@
+---
+atlas_bootstrap_apps_root: /srv/apps
+atlas_bootstrap_packages:
+  - acl
+  - ca-certificates
+  - curl
+  - git
+  - rsync
+  - unzip
+atlas_bootstrap_projects: []
+atlas_bootstrap_components: []

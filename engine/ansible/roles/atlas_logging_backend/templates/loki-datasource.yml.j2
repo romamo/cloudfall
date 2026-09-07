@@ -1,0 +1,11 @@
+---
+apiVersion: 1
+prune: true
+datasources:
+  - name: Atlas Loki
+    uid: atlas-loki
+    type: loki
+    access: proxy
+    url: "http://{{ atlas_logging_backend_stack.backend.listenAddress }}:{{ atlas_logging_backend_stack.backend.port }}"
+    isDefault: true
+    editable: false

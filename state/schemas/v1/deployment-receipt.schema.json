@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atlas.internal/schemas/v1/deployment-receipt.schema.json",
+  "title": "Atlas domain deployment receipt",
+  "type": "object",
+  "properties": {
+    "apiVersion": {
+      "$ref": "common.schema.json#/$defs/apiVersion"
+    },
+    "kind": {
+      "const": "DeploymentReceipt"
+    },
+    "metadata": {
+      "$ref": "common.schema.json#/$defs/metadata"
+    },
+    "spec": {
+      "type": "object",
+      "properties": {
+        "domain": {
+          "$ref": "common.schema.json#/$defs/resourceId"
+        },
+        "server": {
+          "$ref": "common.schema.json#/$defs/resourceId"
+        },
+        "deployedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "configurationPath": {
+          "$ref": "common.schema.json#/$defs/absolutePath"
+        },
+        "configurationSha256": {
+          "$ref": "common.schema.json#/$defs/sha256"
+        }
+      },
+      "required": [
+        "domain",
+        "server",
+        "deployedAt",
+        "configurationPath",
+        "configurationSha256"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "apiVersion",
+    "kind",
+    "metadata",
+    "spec"
+  ],
+  "additionalProperties": false
+}

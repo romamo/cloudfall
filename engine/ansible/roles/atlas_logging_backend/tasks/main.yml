@@ -1,0 +1,289 @@
+---
+- name: Validate logging backend target and migration guard
+  ansible.builtin.assert:
+    that:
+      - ansible_facts["distribution"] == "Debian"
+      - ansible_facts["service_mgr"] == "systemd"
+      - atlas_logging_backend_stack.backend.server == atlas_server_id
+      - atlas_logging_backend_stack.migration.mode == "parallel"
+      - atlas_logging_backend_stack.migration.preserveLegacyAgents | bool
+      - atlas_logging_backend_stack.backend.listenAddress == "127.0.0.1"
+      - atlas_logging_backend_stack.grafana.listenAddress == "127.0.0.1"
+    fail_msg: >-
+      Logging deployment requires its declared Debian backend and the guarded
+      parallel migration mode
+
+- name: Inspect pre-provisioned backend secret files
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: true
+  loop:
+    - "{{ atlas_logging_backend_stack.gateway.tls.certificatePath }}"
+    - "{{ atlas_logging_backend_stack.gateway.tls.keyPath }}"
+    - "{{ atlas_logging_backend_stack.gateway.tls.clientCaPath }}"
+    - "{{ atlas_logging_backend_stack.grafana.adminPasswordPath }}"
+  register: atlas_logging_backend_secret_files
+
+- name: Require backend secret files before mutation
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+      - item.stat.isreg
+    fail_msg: "Required logging secret file is missing: {{ item.item }}"
+  loop: "{{ atlas_logging_backend_secret_files.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Inspect backend private files
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: true
+  loop:
+    - "{{ atlas_logging_backend_stack.gateway.tls.keyPath }}"
+    - "{{ atlas_logging_backend_stack.grafana.adminPasswordPath }}"
+  register: atlas_logging_backend_private_files
+
+- name: Reject world-readable backend private files
+  ansible.builtin.assert:
+    that:
+      - item.stat.mode is match('^0?[46][04]0$')
+    fail_msg: "Logging private file permissions are too broad: {{ item.item }}"
+  loop: "{{ atlas_logging_backend_private_files.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Install Grafana repository prerequisites
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - gnupg
+      - python3-debian
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Create APT keyring directory
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install Grafana repository signing key
+  ansible.builtin.get_url:
+    url: "{{ atlas_logging_backend_grafana_repository_key_url }}"
+    dest: "{{ atlas_logging_backend_grafana_repository_key_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Configure stable Grafana package repository
+  ansible.builtin.deb822_repository:
+    name: grafana
+    types:
+      - deb
+    uris:
+      - "{{ atlas_logging_backend_grafana_repository_url }}"
+    suites:
+      - stable
+    components:
+      - main
+    signed_by: "{{ atlas_logging_backend_grafana_repository_key_path }}"
+    state: present
+
+- name: Create Loki service group before package configuration
+  ansible.builtin.group:
+    name: loki
+    system: true
+    state: present
+
+- name: Create Loki service account before package configuration
+  ansible.builtin.user:
+    name: loki
+    group: loki
+    shell: /usr/sbin/nologin
+    create_home: false
+    system: true
+    state: present
+
+- name: Create Loki configuration directory before package configuration
+  ansible.builtin.file:
+    path: /etc/loki
+    state: directory
+    owner: root
+    group: loki
+    mode: "0750"
+
+- name: Create Loki storage directories before package configuration
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: loki
+    group: loki
+    mode: "0750"
+  loop:
+    - "{{ atlas_logging_backend_stack.backend.storage.path }}"
+    - "{{ atlas_logging_backend_stack.backend.storage.path }}/chunks"
+    - "{{ atlas_logging_backend_stack.backend.storage.path }}/rules"
+    - "{{ atlas_logging_backend_stack.backend.storage.path }}/compactor"
+
+- name: Create Loki systemd override directory before package configuration
+  ansible.builtin.file:
+    path: /etc/systemd/system/loki.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install safe Loki configuration before package configuration
+  ansible.builtin.template:
+    src: loki.yaml.j2
+    dest: "/etc/loki/atlas-{{ atlas_logging_backend_stack.id }}.yaml"
+    owner: root
+    group: loki
+    mode: "0640"
+  notify: Restart Loki
+
+- name: Install Loki systemd guard before package configuration
+  ansible.builtin.template:
+    src: loki-systemd-override.conf.j2
+    dest: /etc/systemd/system/loki.service.d/atlas.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart Loki
+
+- name: Install pinned logging backend packages
+  ansible.builtin.apt:
+    name:
+      - "loki={{ atlas_logging_backend_stack.software.lokiPackageVersion }}"
+      - "grafana={{ atlas_logging_backend_stack.software.grafanaPackageVersion }}"
+      - nginx
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+    policy_rc_d: 101
+
+- name: Create logging secret directory
+  ansible.builtin.file:
+    path: /etc/atlas/logging
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Secure gateway certificate material
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: file
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - "{{ atlas_logging_backend_stack.gateway.tls.certificatePath }}"
+    - "{{ atlas_logging_backend_stack.gateway.tls.clientCaPath }}"
+
+- name: Secure gateway private key
+  ansible.builtin.file:
+    path: "{{ atlas_logging_backend_stack.gateway.tls.keyPath }}"
+    state: file
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Grant Grafana access to its bootstrap password
+  ansible.builtin.file:
+    path: "{{ atlas_logging_backend_stack.grafana.adminPasswordPath }}"
+    state: file
+    owner: root
+    group: grafana
+    mode: "0640"
+
+- name: Install managed Grafana configuration
+  ansible.builtin.template:
+    src: grafana.ini.j2
+    dest: /etc/grafana/grafana.ini
+    owner: root
+    group: grafana
+    mode: "0640"
+    backup: true
+  notify: Restart Grafana
+
+- name: Provision the local Loki Grafana data source
+  ansible.builtin.template:
+    src: loki-datasource.yml.j2
+    dest: /etc/grafana/provisioning/datasources/atlas-loki.yml
+    owner: root
+    group: grafana
+    mode: "0640"
+  notify: Restart Grafana
+
+- name: Install mTLS-only Loki ingestion gateway
+  ansible.builtin.template:
+    src: nginx-loki-gateway.conf.j2
+    dest: "/etc/nginx/sites-available/atlas-loki-{{ atlas_logging_backend_stack.id }}.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload Nginx
+
+- name: Enable mTLS-only Loki ingestion gateway
+  ansible.builtin.file:
+    src: "/etc/nginx/sites-available/atlas-loki-{{ atlas_logging_backend_stack.id }}.conf"
+    dest: "/etc/nginx/sites-enabled/atlas-loki-{{ atlas_logging_backend_stack.id }}.conf"
+    state: link
+  notify: Reload Nginx
+
+- name: Validate Loki configuration
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/loki
+      - "-config.file=/etc/loki/atlas-{{ atlas_logging_backend_stack.id }}.yaml"
+      - -verify-config
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Validate Nginx configuration
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/nginx
+      - -t
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Apply validated logging backend configuration
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable logging backend services
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+    daemon_reload: true
+  loop:
+    - loki.service
+    - nginx.service
+    - grafana-server.service
+
+- name: Wait for Loki readiness
+  ansible.builtin.uri:
+    url: "http://{{ atlas_logging_backend_stack.backend.listenAddress }}:{{ atlas_logging_backend_stack.backend.port }}/ready"
+    status_code: 200
+    return_content: false
+  register: atlas_logging_backend_loki_readiness
+  retries: 12
+  delay: 5
+  until: atlas_logging_backend_loki_readiness.status == 200
+  when: not ansible_check_mode
+
+- name: Wait for Grafana readiness
+  ansible.builtin.uri:
+    url: "http://{{ atlas_logging_backend_stack.grafana.listenAddress }}:{{ atlas_logging_backend_stack.grafana.port }}/api/health"
+    status_code: 200
+    return_content: false
+  register: atlas_logging_backend_grafana_readiness
+  retries: 12
+  delay: 5
+  until: atlas_logging_backend_grafana_readiness.status == 200
+  when: not ansible_check_mode

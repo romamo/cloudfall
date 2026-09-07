@@ -1,0 +1,99 @@
+---
+- name: Validate bootstrap target
+  ansible.builtin.assert:
+    that:
+      - ansible_facts["distribution"] == "Debian"
+      - ansible_facts["service_mgr"] == "systemd"
+    fail_msg: Atlas bootstrap supports Debian hosts running systemd only
+
+- name: Install baseline operating-system packages
+  ansible.builtin.apt:
+    name: "{{ atlas_bootstrap_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Create application root
+  ansible.builtin.file:
+    path: "{{ atlas_bootstrap_apps_root }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Create project groups
+  ansible.builtin.group:
+    name: "{{ item.user }}"
+    state: present
+    system: true
+  loop: "{{ atlas_bootstrap_projects }}"
+  loop_control:
+    label: "{{ item.id }}"
+
+- name: Create project service accounts
+  ansible.builtin.user:
+    name: "{{ item.user }}"
+    group: "{{ item.user }}"
+    home: "{{ atlas_bootstrap_apps_root }}/{{ item.id }}"
+    shell: /usr/sbin/nologin
+    create_home: false
+    system: true
+    state: present
+  loop: "{{ atlas_bootstrap_projects }}"
+  loop_control:
+    label: "{{ item.id }}"
+
+- name: Create project roots
+  ansible.builtin.file:
+    path: "{{ atlas_bootstrap_apps_root }}/{{ item.id }}"
+    state: directory
+    owner: "{{ item.user }}"
+    group: "{{ item.user }}"
+    mode: "0750"
+  loop: "{{ atlas_bootstrap_projects }}"
+  loop_control:
+    label: "{{ item.id }}"
+
+- name: Create project shared directories
+  ansible.builtin.file:
+    path: "{{ atlas_bootstrap_apps_root }}/{{ item.id }}/shared"
+    state: directory
+    owner: "{{ item.user }}"
+    group: "{{ item.user }}"
+    mode: "0750"
+  loop: "{{ atlas_bootstrap_projects }}"
+  loop_control:
+    label: "{{ item.id }}"
+
+- name: Create component roots
+  ansible.builtin.file:
+    path: "{{ item.install_root }}"
+    state: directory
+    owner: "{{ item.project_user }}"
+    group: "{{ item.project_user }}"
+    mode: "0750"
+  loop: "{{ atlas_bootstrap_components }}"
+  loop_control:
+    label: "{{ item.id }}"
+
+- name: Create component release directories
+  ansible.builtin.file:
+    path: "{{ item.install_root }}/releases"
+    state: directory
+    owner: "{{ item.project_user }}"
+    group: "{{ item.project_user }}"
+    mode: "0750"
+  loop: "{{ atlas_bootstrap_components }}"
+  loop_control:
+    label: "{{ item.id }}"
+
+- name: Create component shared directories
+  ansible.builtin.file:
+    path: "{{ item.install_root }}/shared"
+    state: directory
+    owner: "{{ item.project_user }}"
+    group: "{{ item.project_user }}"
+    mode: "0750"
+  loop: "{{ atlas_bootstrap_components }}"
+  loop_control:
+    label: "{{ item.id }}"

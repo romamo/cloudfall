@@ -1,0 +1,216 @@
+---
+- name: Validate logging collector target and migration guard
+  ansible.builtin.assert:
+    that:
+      - ansible_facts["distribution"] == "Debian"
+      - ansible_facts["service_mgr"] == "systemd"
+      - atlas_server_id in atlas_logging_collector_stack.collectors.servers
+      - atlas_logging_collector_stack.migration.mode == "parallel"
+      - atlas_logging_collector_stack.migration.preserveLegacyAgents | bool
+      - atlas_logging_collector_stack.collectors.journal.enabled | bool
+    fail_msg: >-
+      Logging collection requires a declared Debian collector and the guarded
+      parallel migration mode
+
+- name: Inspect pre-provisioned collector TLS files
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: true
+  loop:
+    - "{{ atlas_logging_collector_stack.collectors.clientTls.caPath }}"
+    - "{{ atlas_logging_collector_stack.collectors.clientTls.certificatePath }}"
+    - "{{ atlas_logging_collector_stack.collectors.clientTls.keyPath }}"
+  register: atlas_logging_collector_tls_files
+
+- name: Require collector TLS files before mutation
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+      - item.stat.isreg
+    fail_msg: "Required collector TLS file is missing: {{ item.item }}"
+  loop: "{{ atlas_logging_collector_tls_files.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Reject world-readable collector private key
+  ansible.builtin.assert:
+    that:
+      - item.stat.mode is match('^0?[46][04]0$')
+    fail_msg: >-
+      Collector private key permissions are too broad:
+      {{ atlas_logging_collector_stack.collectors.clientTls.keyPath }}
+  loop: "{{ atlas_logging_collector_tls_files.results }}"
+  when: item.item == atlas_logging_collector_stack.collectors.clientTls.keyPath
+
+- name: Install Grafana repository prerequisites
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - gnupg
+      - python3-debian
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Create APT keyring directory
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install Grafana repository signing key
+  ansible.builtin.get_url:
+    url: "{{ atlas_logging_collector_grafana_repository_key_url }}"
+    dest: "{{ atlas_logging_collector_grafana_repository_key_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Configure stable Grafana package repository
+  ansible.builtin.deb822_repository:
+    name: grafana
+    types:
+      - deb
+    uris:
+      - "{{ atlas_logging_collector_grafana_repository_url }}"
+    suites:
+      - stable
+    components:
+      - main
+    signed_by: "{{ atlas_logging_collector_grafana_repository_key_path }}"
+    state: present
+
+- name: Create Alloy service group before package configuration
+  ansible.builtin.group:
+    name: alloy
+    system: true
+    state: present
+
+- name: Create Alloy service account before package configuration
+  ansible.builtin.user:
+    name: alloy
+    group: alloy
+    groups:
+      - adm
+      - systemd-journal
+    append: true
+    shell: /usr/sbin/nologin
+    create_home: false
+    system: true
+    state: present
+
+- name: Create Alloy configuration directory before package configuration
+  ansible.builtin.file:
+    path: /etc/alloy
+    state: directory
+    owner: root
+    group: alloy
+    mode: "0750"
+
+- name: Create Alloy state directory before package configuration
+  ansible.builtin.file:
+    path: /var/lib/alloy
+    state: directory
+    owner: alloy
+    group: alloy
+    mode: "0750"
+
+- name: Create Alloy systemd override directory before package configuration
+  ansible.builtin.file:
+    path: /etc/systemd/system/alloy.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install safe Alloy configuration before package configuration
+  ansible.builtin.template:
+    src: config.alloy.j2
+    dest: /etc/alloy/atlas.alloy
+    owner: root
+    group: alloy
+    mode: "0640"
+  notify: Restart Alloy
+
+- name: Install Alloy systemd guard before package configuration
+  ansible.builtin.template:
+    src: alloy-systemd-override.conf.j2
+    dest: /etc/systemd/system/alloy.service.d/atlas.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart Alloy
+
+- name: Install pinned Alloy package
+  ansible.builtin.apt:
+    name: "alloy={{ atlas_logging_collector_stack.software.alloyPackageVersion }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+    policy_rc_d: 101
+
+- name: Create logging secret directory
+  ansible.builtin.file:
+    path: /etc/atlas/logging
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Grant Alloy access to collector TLS material
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: file
+    owner: root
+    group: alloy
+    mode: "0640"
+  loop:
+    - "{{ atlas_logging_collector_stack.collectors.clientTls.caPath }}"
+    - "{{ atlas_logging_collector_stack.collectors.clientTls.certificatePath }}"
+    - "{{ atlas_logging_collector_stack.collectors.clientTls.keyPath }}"
+
+- name: Grant Alloy journal access
+  ansible.builtin.user:
+    name: alloy
+    groups:
+      - adm
+      - systemd-journal
+    append: true
+
+- name: Validate Alloy configuration
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/alloy
+      - validate
+      - /etc/alloy/atlas.alloy
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Apply validated Alloy configuration
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable Alloy without changing legacy agents
+  ansible.builtin.systemd_service:
+    name: alloy.service
+    enabled: true
+    state: started
+
+- name: Wait for Alloy readiness
+  ansible.builtin.uri:
+    url: http://127.0.0.1:12345/-/ready
+    status_code: 200
+    return_content: false
+  register: atlas_logging_collector_alloy_readiness
+  retries: 12
+  delay: 5
+  until: atlas_logging_collector_alloy_readiness.status == 200
+  when: not ansible_check_mode
+
+- name: Verify Alloy component health
+  ansible.builtin.uri:
+    url: http://127.0.0.1:12345/-/healthy
+    status_code: 200
+    return_content: false
+  when: not ansible_check_mode

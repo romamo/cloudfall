@@ -1,0 +1,119 @@
+---
+- name: Validate UTC time target
+  ansible.builtin.assert:
+    that:
+      - ansible_facts["distribution"] == "Debian"
+      - ansible_facts["service_mgr"] == "systemd"
+      - atlas_time_timezone == "Etc/UTC"
+    fail_msg: Atlas time management requires Debian, systemd, and Etc/UTC
+
+- name: Read current time configuration
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/timedatectl
+      - show
+      - --property=Timezone
+      - --property=LocalRTC
+      - --property=NTP
+      - --property=NTPSynchronized
+  changed_when: false
+  check_mode: false
+  register: atlas_time_before
+
+- name: Report timezone drift in check mode
+  ansible.builtin.debug:
+    msg: >-
+      Would change timezone from
+      {{ atlas_time_before.stdout_lines
+         | select('match', '^Timezone=')
+         | first
+         | default('Timezone=unknown') }}
+      to Timezone={{ atlas_time_timezone }}
+  changed_when: true
+  when:
+    - ansible_check_mode
+    - "'Timezone=' ~ atlas_time_timezone not in atlas_time_before.stdout_lines"
+
+- name: Set UTC timezone
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/timedatectl
+      - set-timezone
+      - "{{ atlas_time_timezone }}"
+  changed_when: true
+  when:
+    - not ansible_check_mode
+    - "'Timezone=' ~ atlas_time_timezone not in atlas_time_before.stdout_lines"
+
+- name: Report local hardware clock drift in check mode
+  ansible.builtin.debug:
+    msg: Would configure the hardware clock to use UTC
+  changed_when: true
+  when:
+    - ansible_check_mode
+    - "'LocalRTC=no' not in atlas_time_before.stdout_lines"
+
+- name: Configure hardware clock for UTC
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/timedatectl
+      - set-local-rtc
+      - "0"
+  changed_when: true
+  when:
+    - not ansible_check_mode
+    - "'LocalRTC=no' not in atlas_time_before.stdout_lines"
+
+- name: Report NTP drift in check mode
+  ansible.builtin.debug:
+    msg: Would enable network time synchronization
+  changed_when: true
+  when:
+    - ansible_check_mode
+    - "'NTP=yes' not in atlas_time_before.stdout_lines"
+
+- name: Enable network time synchronization
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/timedatectl
+      - set-ntp
+      - "true"
+  changed_when: true
+  when:
+    - not ansible_check_mode
+    - "'NTP=yes' not in atlas_time_before.stdout_lines"
+
+- name: Read applied time configuration
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/timedatectl
+      - show
+      - --property=Timezone
+      - --property=LocalRTC
+      - --property=NTP
+  changed_when: false
+  check_mode: false
+  register: atlas_time_after
+
+- name: Require applied UTC time configuration
+  ansible.builtin.assert:
+    that:
+      - ansible_check_mode or 'Timezone=' ~ atlas_time_timezone in atlas_time_after.stdout_lines
+      - ansible_check_mode or 'LocalRTC=no' in atlas_time_after.stdout_lines
+      - ansible_check_mode or 'NTP=yes' in atlas_time_after.stdout_lines
+    fail_msg: The host did not converge to the Atlas UTC time baseline
+
+- name: Wait for synchronized network time
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/timedatectl
+      - show
+      - --property=NTPSynchronized
+      - --value
+  changed_when: false
+  check_mode: false
+  register: atlas_time_synchronized
+  until: atlas_time_synchronized.stdout == "yes"
+  retries: 12
+  delay: 5
+  when: not ansible_check_mode

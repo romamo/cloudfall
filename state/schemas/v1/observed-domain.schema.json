@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atlas.internal/schemas/v1/observed-domain.schema.json",
+  "title": "Atlas observed public domain route",
+  "$defs": {
+    "nullableError": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "endpoint": {
+      "type": "object",
+      "properties": {
+        "reachable": {
+          "type": "boolean"
+        },
+        "status": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 100,
+          "maximum": 599
+        },
+        "error": {
+          "$ref": "#/$defs/nullableError"
+        }
+      },
+      "required": [
+        "reachable",
+        "status",
+        "error"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "type": "object",
+  "properties": {
+    "apiVersion": {
+      "$ref": "common.schema.json#/$defs/apiVersion"
+    },
+    "kind": {
+      "const": "ObservedDomain"
+    },
+    "metadata": {
+      "$ref": "common.schema.json#/$defs/metadata"
+    },
+    "spec": {
+      "type": "object",
+      "properties": {
+        "domain": {
+          "$ref": "common.schema.json#/$defs/resourceId"
+        },
+        "observedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "dns": {
+          "type": "object",
+          "properties": {
+            "addresses": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "anyOf": [
+                  {
+                    "format": "ipv4"
+                  },
+                  {
+                    "format": "ipv6"
+                  }
+                ]
+              },
+              "uniqueItems": true
+            },
+            "proxyAddressObserved": {
+              "type": "boolean"
+            },
+            "edgeDetected": {
+              "type": "boolean"
+            },
+            "error": {
+              "$ref": "#/$defs/nullableError"
+            }
+          },
+          "required": [
+            "addresses",
+            "proxyAddressObserved",
+            "edgeDetected",
+            "error"
+          ],
+          "additionalProperties": false
+        },
+        "tls": {
+          "type": "object",
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "valid": {
+              "type": "boolean"
+            },
+            "expiresAt": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date-time"
+            },
+            "error": {
+              "$ref": "#/$defs/nullableError"
+            }
+          },
+          "required": [
+            "available",
+            "valid",
+            "expiresAt",
+            "error"
+          ],
+          "additionalProperties": false
+        },
+        "origin": {
+          "$ref": "#/$defs/endpoint"
+        },
+        "public": {
+          "$ref": "#/$defs/endpoint"
+        }
+      },
+      "required": [
+        "domain",
+        "observedAt",
+        "dns",
+        "tls",
+        "origin",
+        "public"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "apiVersion",
+    "kind",
+    "metadata",
+    "spec"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,52 @@
+---
+argument_specs:
+  main:
+    short_description: Prepare a Debian host for Atlas application deployments
+    options:
+      atlas_bootstrap_apps_root:
+        type: path
+        default: /srv/apps
+      atlas_bootstrap_packages:
+        type: list
+        elements: str
+        default:
+          - acl
+          - ca-certificates
+          - curl
+          - git
+          - rsync
+          - unzip
+      atlas_bootstrap_projects:
+        type: list
+        elements: dict
+        required: true
+        options:
+          id:
+            type: str
+            required: true
+          user:
+            type: str
+            required: true
+          approval:
+            type: str
+            choices:
+              - automatic
+              - manual
+            required: true
+      atlas_bootstrap_components:
+        type: list
+        elements: dict
+        required: true
+        options:
+          id:
+            type: str
+            required: true
+          project:
+            type: str
+            required: true
+          project_user:
+            type: str
+            required: true
+          install_root:
+            type: path
+            required: true

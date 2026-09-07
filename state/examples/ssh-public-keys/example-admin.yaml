@@ -1,0 +1,13 @@
+---
+apiVersion: atlas/v1
+kind: SshPublicKey
+metadata:
+  id: example-admin
+  description: Example administrative SSH public key
+spec:
+  owner: example-admin
+  environment: production
+  # yamllint disable rule:line-length
+  publicKey: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCqmOqPPapyG6hL5FlR/KOK2ENEvi/2qlhoRtrgK7JfafHXb1i4WJwf5FMGrPE4DBRfDQDwokABdvUPITZOymFMgiGMmFKGnp0xq+/B0wTTOtdnr8GC3sCmSRwuFDrroVWwfjIqyC/wlpoPXpSvyc1VKBuXOe/gLv1tTzDH3Jc+3fUYaUCj+uIVO65n0N2ajNg9ibBsCjiUp9CrWEoprqxR4lz3TaiPuRtMxWQlQ2NKPSTdUZWqg9KVXm3TS8xgf4Ox2dFwedVMcucC8UBBAwetgylXNZMv1yAMYD3QDokLi0AC+XnNR+UhtFXr9Y3VveQfH4YKnv0Fhr2opCyN99Lr example
+  # yamllint enable rule:line-length
+  lifecycle: active

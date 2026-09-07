@@ -1,0 +1,721 @@
+"""Strict domain values used by the Atlas state reader."""
+
+from __future__ import annotations
+
+import base64
+import binascii
+import re
+from dataclasses import dataclass
+from enum import StrEnum
+from ipaddress import IPv4Address as StandardIPv4Address
+from ipaddress import IPv6Network as StandardIPv6Network
+from ipaddress import ip_address
+from pathlib import PurePosixPath
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+    from pathlib import Path
+
+_RESOURCE_ID_PATTERN = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
+_RESOURCE_ID_MAX_LENGTH = 63
+_HOST_LABEL_PATTERN = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$")
+_LINUX_USER_PATTERN = re.compile(r"^[a-z_][a-z0-9_-]{0,31}$")
+_PACKAGE_NAME_PATTERN = re.compile(r"^[a-z0-9][a-z0-9+.-]{0,199}$")
+_SERVICE_NAME_PATTERN = re.compile(r"^[A-Za-z0-9@_.:-]+\.service$")
+_FILE_MODE_PATTERN = re.compile(r"^0[0-7]{3}$")
+_SHA256_PATTERN = re.compile(r"^[a-f0-9]{64}$")
+_MAX_HOSTNAME_LENGTH = 253
+_MAX_TCP_PORT = 65535
+_MIN_HTTP_STATUS = 100
+_MAX_HTTP_STATUS = 599
+_SSH_PUBLIC_KEY_ALGORITHMS = frozenset({"ssh-ed25519", "ssh-rsa"})
+_SSH_PUBLIC_KEY_MIN_PARTS = 2
+_SSH_WIRE_PREFIX_BYTES = 4
+
+
+@dataclass(frozen=True, slots=True)
+class ResourceId:
+    """Stable identifier for a platform resource."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        """Enforce the identifier invariant at construction time."""
+        if not _RESOURCE_ID_PATTERN.fullmatch(self.value):
+            message = f"invalid resource id: {self.value!r}"
+            raise ValueError(message)
+        if len(self.value) > _RESOURCE_ID_MAX_LENGTH:
+            message = f"resource id exceeds 63 characters: {self.value!r}"
+            raise ValueError(message)
+
+    @classmethod
+    def from_boundary(cls, value: object) -> ResourceId:
+        """Coerce a boundary value while keeping internal APIs strictly typed."""
+        if not isinstance(value, str):
+            message = f"resource id must be a string, got {type(value).__name__}"
+            raise TypeError(message)
+        return cls(value)
+
+    def __str__(self) -> str:
+        """Return the serialized identifier."""
+        return self.value
+
+
+class ResourceKind(StrEnum):
+    """Resource kinds supported by the v1 state contract."""
+
+    SERVER = "Server"
+    HOST_PROFILE = "HostProfile"
+    PROJECT = "Project"
+    COMPONENT = "Component"
+    DOMAIN = "Domain"
+    SSH_PUBLIC_KEY = "SshPublicKey"
+    LOGGING_STACK = "LoggingStack"
+
+    @classmethod
+    def from_boundary(cls, value: object) -> ResourceKind:
+        """Coerce a boundary value into a supported resource kind."""
+        if not isinstance(value, str):
+            message = f"resource kind must be a string, got {type(value).__name__}"
+            raise TypeError(message)
+        return cls(value)
+
+
+class SshPublicKeyLifecycle(StrEnum):
+    """Lifecycle of a declarative SSH public key."""
+
+    ACTIVE = "active"
+    REVOKED = "revoked"
+
+    @classmethod
+    def from_boundary(cls, value: object) -> SshPublicKeyLifecycle:
+        """Coerce a boundary value into an SSH-key lifecycle."""
+        return cls(_required_string(value, "SSH public-key lifecycle"))
+
+
+@dataclass(frozen=True, slots=True)
+class OpenSshPublicKey:
+    """Validated, single-line OpenSSH public key."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        """Validate syntax, base64 encoding, and embedded algorithm."""
+        if "\n" in self.value or "\r" in self.value:
+            message = "OpenSSH public key must be a single line"
+            raise ValueError(message)
+        parts = self.value.split(maxsplit=2)
+        if len(parts) < _SSH_PUBLIC_KEY_MIN_PARTS:
+            message = "OpenSSH public key must include algorithm and key data"
+            raise ValueError(message)
+        algorithm, encoded = parts[0], parts[1]
+        if algorithm not in _SSH_PUBLIC_KEY_ALGORITHMS:
+            message = f"unsupported OpenSSH public-key algorithm: {algorithm!r}"
+            raise ValueError(message)
+        padded = encoded + "=" * (-len(encoded) % 4)
+        try:
+            decoded = base64.b64decode(padded, validate=True)
+        except binascii.Error as error:
+            message = "OpenSSH public-key data is not valid base64"
+            raise ValueError(message) from error
+        if len(decoded) < _SSH_WIRE_PREFIX_BYTES:
+            message = "OpenSSH public-key payload is truncated"
+            raise ValueError(message)
+        algorithm_length = int.from_bytes(
+            decoded[:_SSH_WIRE_PREFIX_BYTES], byteorder="big"
+        )
+        algorithm_end = _SSH_WIRE_PREFIX_BYTES + algorithm_length
+        try:
+            embedded_algorithm = decoded[_SSH_WIRE_PREFIX_BYTES:algorithm_end].decode(
+                "ascii"
+            )
+        except UnicodeDecodeError as error:
+            message = "OpenSSH public-key payload has an invalid algorithm"
+            raise ValueError(message) from error
+        if algorithm_end > len(decoded) or embedded_algorithm != algorithm:
+            message = "OpenSSH public-key algorithm does not match its payload"
+            raise ValueError(message)
+
+    @classmethod
+    def from_boundary(cls, value: object) -> OpenSshPublicKey:
+        """Coerce a boundary value into an OpenSSH public key."""
+        return cls(_required_string(value, "OpenSSH public key"))
+
+    @property
+    def algorithm(self) -> str:
+        """Return the validated OpenSSH algorithm name."""
+        return self.value.split(maxsplit=1)[0]
+
+
+@dataclass(frozen=True, slots=True)
+class Hostname:
+    """Validated DNS hostname."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        """Enforce DNS hostname syntax."""
+        candidate = self.value.removesuffix(".")
+        labels = candidate.split(".")
+        if (
+            not candidate
+            or len(candidate) > _MAX_HOSTNAME_LENGTH
+            or any(not _HOST_LABEL_PATTERN.fullmatch(label) for label in labels)
+        ):
+            message = f"invalid hostname: {self.value!r}"
+            raise ValueError(message)
+
+    @classmethod
+    def from_boundary(cls, value: object) -> Hostname:
+        """Coerce a boundary value into a hostname."""
+        return cls(_required_string(value, "hostname"))
+
+
+@dataclass(frozen=True, slots=True)
+class ConnectionAddress:
+    """Validated hostname or IP address used to connect to a server."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        """Enforce hostname-or-IP syntax."""
+        try:
+            ip_address(self.value)
+        except ValueError:
+            Hostname(self.value)
+
+    @classmethod
+    def from_boundary(cls, value: object) -> ConnectionAddress:
+        """Coerce a boundary value into a connection address."""
+        return cls(_required_string(value, "connection address"))
+
+
+@dataclass(frozen=True, slots=True)
+class Ipv4Address:
+    """Validated IPv4 address assigned to a server."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        """Enforce canonical IPv4 syntax."""
+        parsed = StandardIPv4Address(self.value)
+        if str(parsed) != self.value:
+            message = f"IPv4 address is not canonical: {self.value!r}"
+            raise ValueError(message)
+
+    @classmethod
+    def from_boundary(cls, value: object) -> Ipv4Address:
+        """Coerce a boundary value into an IPv4 address."""
+        return cls(_required_string(value, "IPv4 address"))
+
+
+@dataclass(frozen=True, slots=True)
+class IpAddress:
+    """Validated canonical IPv4 or IPv6 address."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        """Enforce canonical IP address notation."""
+        parsed = ip_address(self.value)
+        if str(parsed) != self.value:
+            message = f"IP address is not canonical: {self.value!r}"
+            raise ValueError(message)
+
+    @classmethod
+    def from_boundary(cls, value: object) -> IpAddress:
+        """Coerce a boundary value into an IP address."""
+        return cls(_required_string(value, "IP address"))
+
+
+@dataclass(frozen=True, slots=True)
+class Ipv6NetworkCidr:
+    """Validated canonical IPv6 network allocation."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        """Enforce a canonical IPv6 network and prefix."""
+        parsed = StandardIPv6Network(self.value, strict=True)
+        if str(parsed) != self.value:
+            message = f"IPv6 network is not canonical: {self.value!r}"
+            raise ValueError(message)
+
+    @classmethod
+    def from_boundary(cls, value: object) -> Ipv6NetworkCidr:
+        """Coerce a boundary value into an IPv6 network allocation."""
+        return cls(_required_string(value, "IPv6 network"))
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderServerId:
+    """Opaque server identifier assigned by an infrastructure provider."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        """Reject empty and unsafe provider identifiers."""
+        if not re.fullmatch(r"[A-Za-z0-9._:-]{1,128}", self.value):
+            message = f"invalid provider server id: {self.value!r}"
+            raise ValueError(message)
+
+    @classmethod
+    def from_boundary(cls, value: object) -> ProviderServerId:
+        """Coerce a boundary value into a provider server identifier."""
+        return cls(_required_string(value, "provider server id"))
+
+
+@dataclass(frozen=True, slots=True)
+class DatacenterCode:
+    """Validated provider datacenter code."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        """Enforce a short provider location-code syntax."""
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", self.value):
+            message = f"invalid datacenter code: {self.value!r}"
+            raise ValueError(message)
+
+    @classmethod
+    def from_boundary(cls, value: object) -> DatacenterCode:
+        """Coerce a boundary value into a datacenter code."""
+        return cls(_required_string(value, "datacenter code"))
+
+
+@dataclass(frozen=True, slots=True)
+class LinuxUser:
+    """Validated Linux account name."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        """Enforce Linux account naming rules used by Atlas."""
+        if not _LINUX_USER_PATTERN.fullmatch(self.value):
+            message = f"invalid Linux user: {self.value!r}"
+            raise ValueError(message)
+
+    @classmethod
+    def from_boundary(cls, value: object) -> LinuxUser:
+        """Coerce a boundary value into a Linux account name."""
+        return cls(_required_string(value, "Linux user"))
+
+
+@dataclass(frozen=True, slots=True)
+class TcpPort:
+    """Validated TCP port."""
+
+    value: int
+
+    def __post_init__(self) -> None:
+        """Enforce the usable TCP port range."""
+        if isinstance(self.value, bool) or not 1 <= self.value <= _MAX_TCP_PORT:
+            message = f"invalid TCP port: {self.value!r}"
+            raise ValueError(message)
+
+    @classmethod
+    def from_boundary(cls, value: object) -> TcpPort:
+        """Coerce a boundary value into a TCP port."""
+        if isinstance(value, bool) or not isinstance(value, int):
+            message = f"TCP port must be an integer, got {type(value).__name__}"
+            raise TypeError(message)
+        return cls(value)
+
+
+@dataclass(frozen=True, slots=True)
+class AbsolutePath:
+    """Validated absolute POSIX path."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        """Reject relative, parent-traversing, and NUL-containing paths."""
+        path = PurePosixPath(self.value)
+        if (
+            not self.value.startswith("/")
+            or "\x00" in self.value
+            or "//" in self.value
+            or ".." in path.parts
+        ):
+            message = f"invalid absolute path: {self.value!r}"
+            raise ValueError(message)
+
+    @classmethod
+    def from_boundary(cls, value: object) -> AbsolutePath:
+        """Coerce a boundary value into an absolute path."""
+        return cls(_required_string(value, "absolute path"))
+
+
+class ServerLifecycle(StrEnum):
+    """Operational lifecycle of a managed server."""
+
+    ACTIVE = "active"
+    MAINTENANCE = "maintenance"
+    RETIRED = "retired"
+
+    @classmethod
+    def from_boundary(cls, value: object) -> ServerLifecycle:
+        """Coerce a boundary value into a server lifecycle."""
+        return cls(_required_string(value, "server lifecycle"))
+
+
+class DeploymentApproval(StrEnum):
+    """Deployment approval policy owned by a project."""
+
+    AUTOMATIC = "automatic"
+    MANUAL = "manual"
+
+    @classmethod
+    def from_boundary(cls, value: object) -> DeploymentApproval:
+        """Coerce a boundary value into an approval policy."""
+        return cls(_required_string(value, "deployment approval"))
+
+
+class HttpScheme(StrEnum):
+    """Supported HTTP transport schemes."""
+
+    HTTP = "http"
+    HTTPS = "https"
+
+    @classmethod
+    def from_boundary(cls, value: object) -> HttpScheme:
+        """Coerce a boundary value into an HTTP scheme."""
+        return cls(_required_string(value, "HTTP scheme"))
+
+
+class DnsMode(StrEnum):
+    """How public DNS exposes an Atlas domain."""
+
+    DNS_ONLY = "dns-only"
+    PROXIED = "proxied"
+
+    @classmethod
+    def from_boundary(cls, value: object) -> DnsMode:
+        """Coerce a boundary value into a DNS exposure mode."""
+        return cls(_required_string(value, "DNS mode"))
+
+
+class TlsMode(StrEnum):
+    """Desired TLS behavior for a public domain."""
+
+    DISABLED = "disabled"
+    REQUIRED = "required"
+
+    @classmethod
+    def from_boundary(cls, value: object) -> TlsMode:
+        """Coerce a boundary value into a TLS mode."""
+        return cls(_required_string(value, "TLS mode"))
+
+
+class LoggingMigrationMode(StrEnum):
+    """Supported transition mode for the replacement logging path."""
+
+    PARALLEL = "parallel"
+
+    @classmethod
+    def from_boundary(cls, value: object) -> LoggingMigrationMode:
+        """Coerce a boundary value into a logging migration mode."""
+        return cls(_required_string(value, "logging migration mode"))
+
+
+class LoggingStorageType(StrEnum):
+    """Storage backend supported by the first logging implementation slice."""
+
+    FILESYSTEM = "filesystem"
+
+    @classmethod
+    def from_boundary(cls, value: object) -> LoggingStorageType:
+        """Coerce a boundary value into a logging storage type."""
+        return cls(_required_string(value, "logging storage type"))
+
+
+@dataclass(frozen=True, slots=True)
+class HttpStatusCode:
+    """Validated HTTP response status code."""
+
+    value: int
+
+    def __post_init__(self) -> None:
+        """Require the standard three-digit HTTP status range."""
+        if (
+            isinstance(self.value, bool)
+            or not _MIN_HTTP_STATUS <= self.value <= _MAX_HTTP_STATUS
+        ):
+            message = f"invalid HTTP status code: {self.value!r}"
+            raise ValueError(message)
+
+    @classmethod
+    def from_boundary(cls, value: object) -> HttpStatusCode:
+        """Coerce a boundary value into an HTTP status code."""
+        if isinstance(value, bool) or not isinstance(value, int):
+            message = f"HTTP status must be an integer, got {type(value).__name__}"
+            raise TypeError(message)
+        return cls(value)
+
+
+@dataclass(frozen=True, slots=True)
+class PackageName:
+    """Validated Debian package name."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        """Enforce Debian package naming syntax used by Atlas."""
+        if not _PACKAGE_NAME_PATTERN.fullmatch(self.value):
+            message = f"invalid package name: {self.value!r}"
+            raise ValueError(message)
+
+    @classmethod
+    def from_boundary(cls, value: object) -> PackageName:
+        """Coerce a boundary value into a package name."""
+        return cls(_required_string(value, "package name"))
+
+
+@dataclass(frozen=True, slots=True)
+class ServiceName:
+    """Validated systemd service-unit name."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        """Enforce the service-unit naming syntax accepted by state."""
+        if not _SERVICE_NAME_PATTERN.fullmatch(self.value):
+            message = f"invalid service name: {self.value!r}"
+            raise ValueError(message)
+
+    @classmethod
+    def from_boundary(cls, value: object) -> ServiceName:
+        """Coerce a boundary value into a service name."""
+        return cls(_required_string(value, "service name"))
+
+
+@dataclass(frozen=True, slots=True)
+class FileMode:
+    """Validated four-digit POSIX file mode."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        """Enforce an explicit octal file mode."""
+        if not _FILE_MODE_PATTERN.fullmatch(self.value):
+            message = f"invalid file mode: {self.value!r}"
+            raise ValueError(message)
+
+    @classmethod
+    def from_boundary(cls, value: object) -> FileMode:
+        """Coerce a boundary value into a file mode."""
+        return cls(_required_string(value, "file mode"))
+
+
+@dataclass(frozen=True, slots=True)
+class Sha256Digest:
+    """Validated lowercase SHA-256 digest."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        """Enforce SHA-256 hexadecimal length and alphabet."""
+        if not _SHA256_PATTERN.fullmatch(self.value):
+            message = f"invalid SHA-256 digest: {self.value!r}"
+            raise ValueError(message)
+
+    @classmethod
+    def from_boundary(cls, value: object) -> Sha256Digest:
+        """Coerce a boundary value into a SHA-256 digest."""
+        return cls(_required_string(value, "SHA-256 digest"))
+
+
+@dataclass(frozen=True, slots=True)
+class ByteSize:
+    """Strictly positive byte-size requirement."""
+
+    value: int
+
+    def __post_init__(self) -> None:
+        """Reject booleans, zero, and negative sizes."""
+        if isinstance(self.value, bool) or self.value < 1:
+            message = f"invalid positive byte size: {self.value!r}"
+            raise ValueError(message)
+
+    @classmethod
+    def from_boundary(cls, value: object) -> ByteSize:
+        """Coerce a boundary value into a positive byte size."""
+        if isinstance(value, bool) or not isinstance(value, int):
+            message = f"byte size must be an integer, got {type(value).__name__}"
+            raise TypeError(message)
+        return cls(value)
+
+
+@dataclass(frozen=True, slots=True)
+class PositiveCount:
+    """Strictly positive count value."""
+
+    value: int
+
+    def __post_init__(self) -> None:
+        """Reject booleans, zero, and negative counts."""
+        if isinstance(self.value, bool) or self.value < 1:
+            message = f"invalid positive count: {self.value!r}"
+            raise ValueError(message)
+
+    @classmethod
+    def from_boundary(cls, value: object) -> PositiveCount:
+        """Coerce a boundary value into a positive count."""
+        if isinstance(value, bool) or not isinstance(value, int):
+            message = f"count must be an integer, got {type(value).__name__}"
+            raise TypeError(message)
+        return cls(value)
+
+
+class RaidLevel(StrEnum):
+    """Supported Linux software RAID levels."""
+
+    RAID0 = "raid0"
+    RAID1 = "raid1"
+    RAID5 = "raid5"
+    RAID6 = "raid6"
+    RAID10 = "raid10"
+
+    @classmethod
+    def from_boundary(cls, value: object) -> RaidLevel:
+        """Coerce a boundary value into a RAID level."""
+        return cls(_required_string(value, "RAID level"))
+
+
+class ConfigCapture(StrEnum):
+    """Permitted non-secret configuration evidence levels."""
+
+    METADATA = "metadata"
+    HASH = "hash"
+
+    @classmethod
+    def from_boundary(cls, value: object) -> ConfigCapture:
+        """Coerce a boundary value into a capture level."""
+        return cls(_required_string(value, "configuration capture"))
+
+
+class RequiredServiceState(StrEnum):
+    """Desired runtime state for a systemd service."""
+
+    RUNNING = "running"
+    STOPPED = "stopped"
+
+    @classmethod
+    def from_boundary(cls, value: object) -> RequiredServiceState:
+        """Coerce a boundary value into a service state."""
+        return cls(_required_string(value, "service state"))
+
+
+class RequiredServiceStatus(StrEnum):
+    """Desired enablement status for a systemd service."""
+
+    ENABLED = "enabled"
+    DISABLED = "disabled"
+    STATIC = "static"
+    INDIRECT = "indirect"
+
+    @classmethod
+    def from_boundary(cls, value: object) -> RequiredServiceStatus:
+        """Coerce a boundary value into a service status."""
+        return cls(_required_string(value, "service status"))
+
+
+class OperatingSystemDistribution(StrEnum):
+    """Operating-system distributions supported by Atlas v1."""
+
+    DEBIAN = "Debian"
+
+    @classmethod
+    def from_boundary(cls, value: object) -> OperatingSystemDistribution:
+        """Coerce a boundary value into a supported distribution."""
+        return cls(_required_string(value, "operating-system distribution"))
+
+
+class ServiceManager(StrEnum):
+    """Service managers supported by Atlas v1."""
+
+    SYSTEMD = "systemd"
+
+    @classmethod
+    def from_boundary(cls, value: object) -> ServiceManager:
+        """Coerce a boundary value into a supported service manager."""
+        return cls(_required_string(value, "service manager"))
+
+
+@dataclass(frozen=True, slots=True)
+class OperatingSystemMajorVersion:
+    """Validated numeric operating-system major version."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        """Reject non-numeric major versions."""
+        if not self.value.isdigit():
+            message = f"invalid operating-system major version: {self.value!r}"
+            raise ValueError(message)
+
+    @classmethod
+    def from_boundary(cls, value: object) -> OperatingSystemMajorVersion:
+        """Coerce a boundary value into an OS major version."""
+        return cls(_required_string(value, "operating-system major version"))
+
+
+@dataclass(frozen=True, slots=True)
+class FilesystemName:
+    """Validated filesystem type name."""
+
+    value: str
+
+    @classmethod
+    def from_boundary(cls, value: object) -> FilesystemName:
+        """Coerce a boundary value into a filesystem name."""
+        return cls(_required_string(value, "filesystem name"))
+
+
+@dataclass(frozen=True, slots=True)
+class PackageVersion:
+    """Opaque package-manager version string."""
+
+    value: str
+
+    @classmethod
+    def from_boundary(cls, value: object) -> PackageVersion:
+        """Coerce a boundary value into a package version."""
+        return cls(_required_string(value, "package version"))
+
+
+@dataclass(frozen=True, slots=True)
+class ResourceKey:
+    """Typed lookup key for the state index."""
+
+    kind: ResourceKind
+    resource_id: ResourceId
+
+
+@dataclass(frozen=True, slots=True)
+class SourceLocation:
+    """Location of a YAML document on disk."""
+
+    path: Path
+    document_number: int
+
+    def display(self) -> str:
+        """Return a stable human-readable source reference."""
+        return f"{self.path}#{self.document_number}"
+
+
+@dataclass(frozen=True, slots=True)
+class ResourceDocument:
+    """A schema-validated resource document."""
+
+    key: ResourceKey
+    content: Mapping[str, object]
+    source: SourceLocation
+
+
+def _required_string(value: object, concept: str) -> str:
+    if not isinstance(value, str) or not value:
+        message = f"{concept} must be a non-empty string"
+        raise TypeError(message)
+    return value

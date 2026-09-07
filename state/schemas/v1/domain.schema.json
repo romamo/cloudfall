@@ -1,0 +1,208 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atlas.internal/schemas/v1/domain.schema.json",
+  "title": "Atlas public domain route",
+  "x-atlas-kind": "Domain",
+  "type": "object",
+  "properties": {
+    "apiVersion": {
+      "$ref": "common.schema.json#/$defs/apiVersion"
+    },
+    "kind": {
+      "const": "Domain"
+    },
+    "metadata": {
+      "$ref": "common.schema.json#/$defs/metadata"
+    },
+    "spec": {
+      "type": "object",
+      "properties": {
+        "primaryName": {
+          "type": "string",
+          "format": "hostname"
+        },
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "hostname"
+          },
+          "uniqueItems": true
+        },
+        "proxy": {
+          "type": "object",
+          "properties": {
+            "server": {
+              "$ref": "common.schema.json#/$defs/resourceId"
+            },
+            "configurationPath": {
+              "$ref": "common.schema.json#/$defs/absolutePath"
+            },
+            "service": {
+              "$ref": "common.schema.json#/$defs/serviceName"
+            },
+            "upstream": {
+              "type": "object",
+              "properties": {
+                "address": {
+                  "type": "string",
+                  "anyOf": [
+                    {
+                      "format": "ipv4"
+                    },
+                    {
+                      "format": "ipv6"
+                    }
+                  ]
+                },
+                "port": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535
+                }
+              },
+              "required": [
+                "address",
+                "port"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "server",
+            "configurationPath",
+            "service"
+          ],
+          "additionalProperties": false
+        },
+        "origin": {
+          "type": "object",
+          "properties": {
+            "server": {
+              "$ref": "common.schema.json#/$defs/resourceId"
+            },
+            "configurationPath": {
+              "$ref": "common.schema.json#/$defs/absolutePath"
+            },
+            "service": {
+              "$ref": "common.schema.json#/$defs/serviceName"
+            },
+            "scheme": {
+              "enum": [
+                "http",
+                "https"
+              ]
+            },
+            "port": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535
+            },
+            "serverName": {
+              "type": "string",
+              "format": "hostname"
+            }
+          },
+          "required": [
+            "server",
+            "configurationPath",
+            "service",
+            "scheme",
+            "port",
+            "serverName"
+          ],
+          "additionalProperties": false
+        },
+        "edge": {
+          "type": "object",
+          "properties": {
+            "provider": {
+              "$ref": "common.schema.json#/$defs/resourceId"
+            },
+            "mode": {
+              "enum": [
+                "dns-only",
+                "proxied"
+              ]
+            }
+          },
+          "required": [
+            "provider",
+            "mode"
+          ],
+          "additionalProperties": false
+        },
+        "tls": {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "enum": [
+                "disabled",
+                "required"
+              ]
+            }
+          },
+          "required": [
+            "mode"
+          ],
+          "additionalProperties": false
+        },
+        "healthCheck": {
+          "type": "object",
+          "properties": {
+            "scheme": {
+              "enum": [
+                "http",
+                "https"
+              ]
+            },
+            "path": {
+              "type": "string",
+              "pattern": "^/",
+              "maxLength": 2000
+            },
+            "expectedStatuses": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 100,
+                "maximum": 599
+              },
+              "minItems": 1,
+              "uniqueItems": true
+            },
+            "timeoutSeconds": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 300
+            }
+          },
+          "required": [
+            "scheme",
+            "path",
+            "expectedStatuses",
+            "timeoutSeconds"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "primaryName",
+        "aliases",
+        "proxy",
+        "origin",
+        "edge",
+        "tls",
+        "healthCheck"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "apiVersion",
+    "kind",
+    "metadata",
+    "spec"
+  ],
+  "additionalProperties": false
+}

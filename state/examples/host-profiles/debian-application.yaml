@@ -1,0 +1,44 @@
+---
+apiVersion: atlas/v1
+kind: HostProfile
+metadata:
+  id: debian-application
+  description: Baseline for dedicated Debian application servers
+spec:
+  os:
+    distribution: Debian
+    versions:
+      - "12"
+      - "13"
+    serviceManager: systemd
+  storage:
+    softwareRaid:
+      level: raid1
+      minimumActiveDevices: 2
+      minimumUsableBytes: 900000000000
+    mounts:
+      - path: /
+        filesystem: ext4
+        minimumBytes: 850000000000
+  packages:
+    required:
+      - name: acl
+      - name: ca-certificates
+      - name: curl
+      - name: git
+      - name: rsync
+      - name: unzip
+    forbidden:
+      - telnetd
+  services:
+    required:
+      - name: ssh.service
+        state: running
+        status: enabled
+  configuration:
+    files:
+      - path: /etc/ssh/sshd_config
+        capture: hash
+        owner: root
+        group: root
+        mode: "0644"

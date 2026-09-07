@@ -1,0 +1,6 @@
+---
+atlas_logging_backend_stack: {}
+atlas_logging_backend_grafana_repository_key_url: >-
+  https://apt.grafana.com/gpg-full.key
+atlas_logging_backend_grafana_repository_key_path: /etc/apt/keyrings/grafana.asc
+atlas_logging_backend_grafana_repository_url: https://apt.grafana.com
