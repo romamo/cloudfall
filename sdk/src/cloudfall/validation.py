@@ -10,7 +10,7 @@ from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Mapping, Sequence
+    from collections.abc import Callable, Iterable, Mapping, Sequence
     from pathlib import Path
 
 import yaml
@@ -364,40 +364,57 @@ class StateValidator:
     ) -> None:
         for document in documents:
             spec = _required_mapping(document.content, "spec", document.source)
-            if document.key.kind is ResourceKind.SERVER:
-                profile_id = _resource_id_value(spec, "profile", document.source)
-                _require_resource(
-                    index,
-                    ResourceKind.HOST_PROFILE,
-                    profile_id,
-                    document.source,
-                    ("spec", "profile"),
-                )
-                _validate_server_network(spec, document.source)
-            elif document.key.kind is ResourceKind.HOST_PROFILE:
-                _validate_host_profile(spec, document.source)
-            elif document.key.kind is ResourceKind.PROJECT:
-                component_ids = _resource_id_list(spec, "components", document.source)
-                for component_id in component_ids:
-                    _require_resource(
-                        index,
-                        ResourceKind.COMPONENT,
-                        component_id,
-                        document.source,
-                        ("spec", "components"),
-                    )
-            elif document.key.kind is ResourceKind.COMPONENT:
-                _validate_component_references(document, spec, index)
-            elif document.key.kind is ResourceKind.DOMAIN:
-                _validate_domain_references(document, spec, index)
-            elif document.key.kind is ResourceKind.LOGGING_STACK:
-                _validate_logging_references(document, spec, index)
-            elif document.key.kind is ResourceKind.SSH_PUBLIC_KEY:
-                _validate_ssh_public_key(document, spec)
-            elif document.key.kind is ResourceKind.SERVICE:
-                _validate_service_references(document, spec, index)
+            _REFERENCE_VALIDATORS[document.key.kind](document, spec, index)
         _validate_logging_uniqueness(documents)
         _validate_service_uniqueness(documents)
+
+
+def _validate_server_references(
+    document: ResourceDocument,
+    spec: Mapping[str, object],
+    index: Mapping[ResourceKey, ResourceDocument],
+) -> None:
+    profile_id = _resource_id_value(spec, "profile", document.source)
+    _require_resource(
+        index,
+        ResourceKind.HOST_PROFILE,
+        profile_id,
+        document.source,
+        ("spec", "profile"),
+    )
+    _validate_server_network(spec, document.source)
+
+
+def _validate_host_profile_references(
+    document: ResourceDocument,
+    spec: Mapping[str, object],
+    _index: Mapping[ResourceKey, ResourceDocument],
+) -> None:
+    _validate_host_profile(spec, document.source)
+
+
+def _validate_project_references(
+    document: ResourceDocument,
+    spec: Mapping[str, object],
+    index: Mapping[ResourceKey, ResourceDocument],
+) -> None:
+    component_ids = _resource_id_list(spec, "components", document.source)
+    for component_id in component_ids:
+        _require_resource(
+            index,
+            ResourceKind.COMPONENT,
+            component_id,
+            document.source,
+            ("spec", "components"),
+        )
+
+
+def _validate_ssh_public_key_references(
+    document: ResourceDocument,
+    spec: Mapping[str, object],
+    _index: Mapping[ResourceKey, ResourceDocument],
+) -> None:
+    _validate_ssh_public_key(document, spec)
 
 
 def _validate_ssh_public_key(
@@ -1186,3 +1203,24 @@ def validate_state(state_directory: Path, schema_directory: Path) -> ValidatedSt
     """Load and validate a directory of Cloudfall YAML resources."""
     catalog = SchemaCatalog(schema_directory)
     return StateValidator(catalog).validate_directory(state_directory)
+
+_REFERENCE_VALIDATORS: Mapping[
+    ResourceKind,
+    Callable[
+        [
+            ResourceDocument,
+            Mapping[str, object],
+            Mapping[ResourceKey, ResourceDocument],
+        ],
+        None,
+    ],
+] = {
+    ResourceKind.SERVER: _validate_server_references,
+    ResourceKind.HOST_PROFILE: _validate_host_profile_references,
+    ResourceKind.PROJECT: _validate_project_references,
+    ResourceKind.COMPONENT: _validate_component_references,
+    ResourceKind.DOMAIN: _validate_domain_references,
+    ResourceKind.LOGGING_STACK: _validate_logging_references,
+    ResourceKind.SSH_PUBLIC_KEY: _validate_ssh_public_key_references,
+    ResourceKind.SERVICE: _validate_service_references,
+}
