@@ -112,7 +112,14 @@ def test_inventory_serialization_excludes_secret_references() -> None:
     assert len(profiles) == 1
     assert len(projects) == 1
     assert len(components) == 1
-    assert domains == []
+    assert len(domains) == 1
+    assert domains[0]["id"] == "crm-site"
+    assert domains[0]["proxy"]["server"] == "h2"
+    assert domains[0]["proxy"]["upstream"] == {
+        "address": "127.0.0.1",
+        "port": 8100,
+    }
+    assert domains[0]["tls"] == {"mode": "required"}
     services = payload["services"]
     assert isinstance(services, list)
     assert len(services) == 1

@@ -114,6 +114,29 @@ of every database restores into a scratch database before dropping it:
 sudo -u postgres /usr/local/sbin/cloudfall-postgresql-restore-check
 ```
 
+## Public domain routes
+
+`ansible/playbooks/domains.yml` renders every declared `Domain` as a managed
+Nginx virtual host on its proxy server:
+
+```console
+task domains:deploy:check
+task domains:deploy
+task domains:deploy ISSUE_CERTIFICATES=true
+```
+
+The site role installs Nginx and Certbot, serves the ACME challenge webroot,
+and converges in two phases: until a certificate exists the route serves
+plain HTTP so the site stays reachable during cutover; once TLS material is
+present (or issuance is explicitly requested via `ISSUE_CERTIFICATES=true`)
+HTTP redirects to HTTPS with TLS 1.2+. The proxy discards any
+client-supplied forwarding chain and sends only the canonical
+`$remote_addr` as `X-Forwarded-For` and `X-Real-IP`, so upstream
+applications cannot be spoofed by forged headers. When TLS is required the
+`certbot.timer` renewal unit is enabled, and every successful run writes a
+schema-valid deployment receipt on the controller; a failed run never emits
+a receipt.
+
 ## Read-only inspection role
 
 `ansible/roles/cloudfall_inspect` collects normalized evidence without changing the

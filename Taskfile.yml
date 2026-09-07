@@ -125,6 +125,33 @@ tasks:
         uv run ansible-playbook --inventory {{ .INVENTORY_FILE }}
         engine/ansible/playbooks/services.yml
 
+  domains:deploy:check:
+    desc: Check declared domain routes without changing hosts
+    deps:
+      - inventory
+    env:
+      ANSIBLE_CONFIG: engine/ansible/ansible.cfg
+    cmds:
+      - >-
+        uv run ansible-playbook --check --diff
+        --inventory {{ .INVENTORY_FILE }}
+        engine/ansible/playbooks/domains.yml
+
+  domains:deploy:
+    desc: Converge declared domain routes and write deployment receipts
+    deps:
+      - inventory
+    env:
+      ANSIBLE_CONFIG: engine/ansible/ansible.cfg
+    cmds:
+      - >-
+        uv run ansible-playbook --inventory {{ .INVENTORY_FILE }}
+        --extra-vars
+        cloudfall_domains_receipt_directory={{ .ROOT_DIR }}/{{ .DEPLOYMENT_DIR }}
+        --extra-vars
+        cloudfall_domains_issue_certificates={{ .ISSUE_CERTIFICATES | default "false" }}
+        engine/ansible/playbooks/domains.yml
+
   logging:check:
     desc: Check the guarded parallel logging deployment without applying it
     deps:
@@ -209,6 +236,10 @@ tasks:
         uv run ansible-playbook --syntax-check
         --inventory {{ .INVENTORY_FILE }}
         engine/ansible/playbooks/services.yml
+      - >-
+        uv run ansible-playbook --syntax-check
+        --inventory {{ .INVENTORY_FILE }}
+        engine/ansible/playbooks/domains.yml
       - >-
         uv run ansible-playbook --syntax-check
         --inventory {{ .INVENTORY_FILE }}

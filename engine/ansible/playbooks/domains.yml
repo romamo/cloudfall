@@ -1,0 +1,20 @@
+---
+- name: Deploy declared Cloudfall public domain routes
+  hosts: cloudfall_servers
+  become: true
+  gather_facts: true
+  any_errors_fatal: true
+  serial: 1
+  tasks:
+    - name: Render declared domains as managed virtual hosts
+      ansible.builtin.include_role:
+        name: cloudfall_nginx_site
+      vars:
+        cloudfall_nginx_site_domain: "{{ item }}"
+        cloudfall_nginx_site_issue_certificate: >-
+          {{ cloudfall_domains_issue_certificates | default(false) }}
+        cloudfall_nginx_site_receipt_directory: >-
+          {{ cloudfall_domains_receipt_directory | default("") }}
+      loop: "{{ cloudfall_domains | default([]) }}"
+      loop_control:
+        label: "{{ item.id }}"

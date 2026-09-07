@@ -45,9 +45,10 @@ Installable, audited infrastructure services, starting with exactly two.
   database passwords), scheduled dumps, and a restore-proof command ✔
   (`task services:deploy`)
 - Nginx site role: virtual hosts rendered from `Domain` resources, certbot
-  with timer compliance, canonical client-address forwarding
-- Audit integration: packages, units, config hashes, listening-socket
-  evidence
+  with timer compliance, canonical client-address forwarding, and
+  deployment receipts ✔ (`task domains:deploy`)
+- Audit integration: packages, units, config hashes ✔ (existing host-profile
+  checks); listening-socket evidence pending
 
 Catalog breadth (Redis, RabbitMQ, Elasticsearch, MySQL, Node runtimes)
 follows the same pattern afterward.

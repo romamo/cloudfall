@@ -28,8 +28,12 @@ COMPLIANT = ROOT / "state" / "tests" / "observed" / "compliant"
 GENERATED_AT = UtcTimestamp(datetime(2026, 7, 15, 11, tzinfo=UTC))
 
 
-def _view(observation_directory: Path) -> FleetOperations:
-    inventory = PlatformInventory.from_state(validate_state(EXAMPLES, SCHEMAS))
+def _view(
+    observation_directory: Path, state_directory: Path = EXAMPLES
+) -> FleetOperations:
+    inventory = PlatformInventory.from_state(
+        validate_state(state_directory, SCHEMAS)
+    )
     observations = load_observations(observation_directory, SCHEMAS)
     return build_operations_view(
         inventory,
@@ -40,12 +44,30 @@ def _view(observation_directory: Path) -> FleetOperations:
     )
 
 
-def test_compliant_evidence_produces_healthy_operations_view() -> None:
-    view = _view(COMPLIANT)
+def _domainless_examples(tmp_path: Path) -> Path:
+    state_directory = tmp_path / "state"
+    shutil.copytree(EXAMPLES, state_directory)
+    shutil.rmtree(state_directory / "domains")
+    return state_directory
+
+
+def test_compliant_evidence_produces_healthy_operations_view(
+    tmp_path: Path,
+) -> None:
+    view = _view(COMPLIANT, _domainless_examples(tmp_path))
 
     assert view.health is OperationsHealth.HEALTHY
     assert view.tasks == ()
     assert all(server.health is OperationsHealth.HEALTHY for server in view.servers)
+
+
+def test_declared_domain_without_evidence_degrades_to_warning() -> None:
+    view = _view(COMPLIANT)
+
+    assert view.health is OperationsHealth.WARNING
+    assert all(server.health is OperationsHealth.HEALTHY for server in view.servers)
+    domain = next(item for item in view.domains if item.domain_id.value == "crm-site")
+    assert "no public observation" in domain.public_route.detail
 
 
 def test_virtual_disks_do_not_require_nvme_smartctl(
@@ -62,7 +84,7 @@ def test_virtual_disks_do_not_require_nvme_smartctl(
         }
         path.write_text(json.dumps(snapshot), encoding="utf-8")
 
-    view = _view(observations)
+    view = _view(observations, _domainless_examples(tmp_path))
 
     assert view.health is OperationsHealth.HEALTHY
     assert all(task.kind is not TaskKind.SMART for task in view.tasks)
@@ -129,7 +151,7 @@ def test_operations_view_prioritizes_disk_service_and_stale_evidence(
 def test_dashboard_build_writes_html_and_machine_readable_json(
     tmp_path: Path,
 ) -> None:
-    view = _view(COMPLIANT)
+    view = _view(COMPLIANT, _domainless_examples(tmp_path))
 
     artifacts = build_dashboard(view, tmp_path / "dashboard")
 

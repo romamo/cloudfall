@@ -1,0 +1,171 @@
+---
+- name: Validate domain target and declaration
+  ansible.builtin.assert:
+    that:
+      - ansible_facts["distribution"] == "Debian"
+      - ansible_facts["service_mgr"] == "systemd"
+      - cloudfall_nginx_site_domain.proxy.server == cloudfall_server_id
+      - cloudfall_nginx_site_domain.proxy.upstream is defined
+      - cloudfall_nginx_site_domain.tls.mode in ["disabled", "required"]
+    fail_msg: >-
+      Domain deployment requires its declared Debian proxy server and a
+      declared upstream endpoint
+
+- name: Install Nginx and Certbot
+  ansible.builtin.apt:
+    name:
+      - nginx
+      - certbot
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Create the ACME challenge webroot
+  ansible.builtin.file:
+    path: "{{ cloudfall_nginx_site_acme_webroot }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Inspect existing certificate material
+  ansible.builtin.stat:
+    path: >-
+      /etc/letsencrypt/live/{{
+        cloudfall_nginx_site_domain.primaryName
+      }}/fullchain.pem
+    follow: true
+    get_checksum: false
+  register: cloudfall_nginx_site_certificate
+
+- name: Issue the declared certificate
+  ansible.builtin.command:
+    argv: >-
+      {{
+        [
+          '/usr/bin/certbot', 'certonly', '--webroot',
+          '--webroot-path', cloudfall_nginx_site_acme_webroot,
+          '--non-interactive', '--agree-tos',
+          '--register-unsafely-without-email',
+          '--cert-name', cloudfall_nginx_site_domain.primaryName,
+        ]
+        + (
+          [cloudfall_nginx_site_domain.primaryName]
+          + cloudfall_nginx_site_domain.aliases
+        )
+        | map('regex_replace', '^', '--domain=')
+        | list
+      }}
+  changed_when: true
+  when:
+    - not ansible_check_mode
+    - cloudfall_nginx_site_domain.tls.mode == "required"
+    - cloudfall_nginx_site_issue_certificate
+    - not cloudfall_nginx_site_certificate.stat.exists
+
+- name: Re-inspect certificate material after issuance
+  ansible.builtin.stat:
+    path: >-
+      /etc/letsencrypt/live/{{
+        cloudfall_nginx_site_domain.primaryName
+      }}/fullchain.pem
+    follow: true
+    get_checksum: false
+  register: cloudfall_nginx_site_certificate
+
+- name: Determine whether TLS can be enabled
+  ansible.builtin.set_fact:
+    cloudfall_nginx_site_tls_active: >-
+      {{
+        cloudfall_nginx_site_domain.tls.mode == "required"
+        and cloudfall_nginx_site_certificate.stat.exists
+      }}
+
+- name: Render the managed virtual host
+  ansible.builtin.template:
+    src: domain-site.conf.j2
+    dest: "{{ cloudfall_nginx_site_domain.proxy.configurationPath }}"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload Nginx
+
+- name: Enable the managed virtual host
+  ansible.builtin.file:
+    src: "{{ cloudfall_nginx_site_domain.proxy.configurationPath }}"
+    dest: >-
+      /etc/nginx/sites-enabled/{{
+        cloudfall_nginx_site_domain.proxy.configurationPath | basename
+      }}
+    state: link
+  notify: Reload Nginx
+  when: >-
+    cloudfall_nginx_site_domain.proxy.configurationPath.startswith(
+      '/etc/nginx/sites-available/'
+    )
+
+- name: Enable Nginx
+  ansible.builtin.systemd_service:
+    name: nginx.service
+    enabled: true
+    state: started
+
+- name: Enable the certificate renewal timer
+  ansible.builtin.systemd_service:
+    name: certbot.timer
+    enabled: true
+    state: started
+  when: cloudfall_nginx_site_domain.tls.mode == "required"
+
+- name: Validate the complete Nginx configuration
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/nginx
+      - -t
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Apply the validated virtual host
+  ansible.builtin.meta: flush_handlers
+
+- name: Hash the applied configuration for the receipt
+  ansible.builtin.stat:
+    path: "{{ cloudfall_nginx_site_domain.proxy.configurationPath }}"
+    checksum_algorithm: sha256
+  register: cloudfall_nginx_site_applied
+  when:
+    - not ansible_check_mode
+    - cloudfall_nginx_site_receipt_directory | length > 0
+
+- name: Write the deployment receipt on the controller
+  ansible.builtin.copy:
+    content: >-
+      {{
+        {
+          'apiVersion': 'cloudfall/v1',
+          'kind': 'DeploymentReceipt',
+          'metadata': {
+            'id': cloudfall_nginx_site_domain.id,
+            'description': 'Deployment receipt written by cloudfall_nginx_site',
+          },
+          'spec': {
+            'domain': cloudfall_nginx_site_domain.id,
+            'server': cloudfall_server_id,
+            'deployedAt': ansible_facts['date_time']['iso8601'],
+            'configurationPath':
+              cloudfall_nginx_site_domain.proxy.configurationPath,
+            'configurationSha256':
+              cloudfall_nginx_site_applied.stat.checksum,
+          },
+        } | to_nice_json
+      }}
+    dest: >-
+      {{ cloudfall_nginx_site_receipt_directory }}/{{
+        cloudfall_nginx_site_domain.id
+      }}.json
+    mode: "0644"
+  delegate_to: localhost
+  become: false
+  when:
+    - not ansible_check_mode
+    - cloudfall_nginx_site_receipt_directory | length > 0

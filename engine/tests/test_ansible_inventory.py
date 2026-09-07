@@ -43,9 +43,17 @@ def test_inventory_renders_ansible_host_variables() -> None:
     logging_backend = _mapping_entry(h1, "cloudfall_logging_backend")
     logging_collector = _mapping_entry(h1, "cloudfall_logging_collector")
     ssh_public_keys = h1["cloudfall_ssh_public_keys"]
+    origin_domains = h1["cloudfall_origin_domains"]
     del h1["cloudfall_logging_backend"]
     del h1["cloudfall_logging_collector"]
     del h1["cloudfall_ssh_public_keys"]
+    del h1["cloudfall_origin_domains"]
+
+    assert isinstance(origin_domains, list)
+    assert len(origin_domains) == 1
+    assert isinstance(origin_domains[0], dict)
+    assert origin_domains[0]["id"] == "crm-site"
+    assert origin_domains[0]["origin"]["server"] == "h1"
 
     assert isinstance(ssh_public_keys, list)
     assert len(ssh_public_keys) == 1
@@ -87,7 +95,6 @@ def test_inventory_renders_ansible_host_variables() -> None:
             }
         ],
         "cloudfall_domains": [],
-        "cloudfall_origin_domains": [],
         "cloudfall_environment": "production",
         "cloudfall_firewall": {
             "policy": "default-deny",
@@ -206,7 +213,7 @@ def test_inventory_renders_environment_project_and_component_groups() -> None:
     }
     assert logging_backends == {"hosts": {"h1": {}}}
     assert logging_collectors == {"hosts": {"h1": {}, "h2": {}}}
-    assert domain_origins == {"hosts": {}}
+    assert domain_origins == {"hosts": {"h1": {}}}
     assert children["ungrouped"] == {"hosts": {}}
 
 

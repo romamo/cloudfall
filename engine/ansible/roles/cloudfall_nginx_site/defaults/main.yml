@@ -1,0 +1,4 @@
+---
+cloudfall_nginx_site_issue_certificate: false
+cloudfall_nginx_site_acme_webroot: /var/lib/letsencrypt
+cloudfall_nginx_site_receipt_directory: ""

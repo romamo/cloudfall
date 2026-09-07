@@ -1,0 +1,69 @@
+---
+argument_specs:
+  main:
+    short_description: Converge one declared public domain route
+    options:
+      cloudfall_nginx_site_domain:
+        type: dict
+        required: true
+        options:
+          id:
+            type: str
+            required: true
+          primaryName:
+            type: str
+            required: true
+          aliases:
+            type: list
+            elements: str
+            required: true
+          proxy:
+            type: dict
+            required: true
+            options:
+              server:
+                type: str
+                required: true
+              configurationPath:
+                type: path
+                required: true
+              service:
+                type: str
+                required: true
+              upstream:
+                type: dict
+                options:
+                  address:
+                    type: str
+                    required: true
+                  port:
+                    type: int
+                    required: true
+          origin:
+            type: dict
+            required: true
+          edge:
+            type: dict
+            required: true
+          tls:
+            type: dict
+            required: true
+            options:
+              mode:
+                type: str
+                choices:
+                  - disabled
+                  - required
+                required: true
+          healthCheck:
+            type: dict
+            required: true
+      cloudfall_nginx_site_issue_certificate:
+        type: bool
+        default: false
+      cloudfall_nginx_site_acme_webroot:
+        type: path
+        default: /var/lib/letsencrypt
+      cloudfall_nginx_site_receipt_directory:
+        type: str
+        default: ""
