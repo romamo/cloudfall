@@ -1,5 +1,5 @@
 ---
-- name: Gate the component on its declared health check
+- name: Gate the component on its declared HTTP health check
   ansible.builtin.uri:
     url: >-
       {{ cloudfall_deploy_component.healthCheck.scheme }}://127.0.0.1:{{
@@ -16,4 +16,22 @@
   until: >-
     cloudfall_deploy_gate.status
     in cloudfall_deploy_component.healthCheck.expectedStatuses
-  when: not ansible_check_mode
+  when:
+    - not ansible_check_mode
+    - cloudfall_deploy_component.healthCheck.type == "http"
+
+- name: Gate the component on an active service unit
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/systemctl
+      - is-active
+      - --quiet
+      - "{{ cloudfall_deploy_component.service.name }}.service"
+  register: cloudfall_deploy_unit_gate
+  changed_when: false
+  retries: 4
+  delay: 3
+  until: cloudfall_deploy_unit_gate.rc == 0
+  when:
+    - not ansible_check_mode
+    - cloudfall_deploy_component.healthCheck.type == "none"

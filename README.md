@@ -70,6 +70,28 @@ uv run cloudfall inventory show state/examples
 uv run cloudfall-engine inventory render state/examples
 ```
 
+## Migrate from Render
+
+Map a `render.yaml` blueprint onto declarative Cloudfall state:
+
+```console
+uv run cloudfall import render render.yaml --project acme --server h1
+```
+
+Web, private, and worker services become `Component` resources (workers use
+a service-active health gate instead of a fabricated HTTP check), managed
+PostgreSQL becomes a `Service` with project-owned peer-authentication
+databases, and custom domains become TLS-required `Domain` routes. Each web
+component receives an explicit listen port written as `PORT` into an
+environment file outside the state directory — state never contains secret
+values.
+
+The importer never guesses silently. `IMPORT-REPORT.md` records everything
+that was not imported (cron, static, and container services today), every
+assumption it made, and every action required before cutover, including data
+migration and DNS steps. Merge the emitted fragment with your servers and
+host profiles, validate, then build and deploy releases as usual.
+
 ## Inspect servers and audit drift
 
 Each `Server` references a reusable `HostProfile` describing its required

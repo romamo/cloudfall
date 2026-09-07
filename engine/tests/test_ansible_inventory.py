@@ -93,6 +93,7 @@ def test_inventory_renders_ansible_host_variables() -> None:
                     ],
                 },
                 "healthCheck": {
+                    "type": "http",
                     "scheme": "http",
                     "port": 8100,
                     "path": "/health",

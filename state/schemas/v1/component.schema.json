@@ -125,57 +125,73 @@
           "additionalProperties": false
         },
         "healthCheck": {
-          "type": "object",
-          "properties": {
-            "type": {
-              "const": "http"
-            },
-            "scheme": {
-              "enum": [
-                "http",
-                "https"
-              ]
-            },
-            "port": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 65535
-            },
-            "path": {
-              "type": "string",
-              "pattern": "^/"
-            },
-            "expectedStatuses": {
-              "type": "array",
-              "items": {
-                "type": "integer",
-                "minimum": 100,
-                "maximum": 599
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "const": "http"
+                },
+                "scheme": {
+                  "enum": [
+                    "http",
+                    "https"
+                  ]
+                },
+                "port": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535
+                },
+                "path": {
+                  "type": "string",
+                  "pattern": "^/"
+                },
+                "expectedStatuses": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": 100,
+                    "maximum": 599
+                  },
+                  "minItems": 1,
+                  "uniqueItems": true
+                },
+                "timeoutSeconds": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 300
+                },
+                "attempts": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 20
+                }
               },
-              "minItems": 1,
-              "uniqueItems": true
+              "required": [
+                "type",
+                "scheme",
+                "port",
+                "path",
+                "expectedStatuses",
+                "timeoutSeconds",
+                "attempts"
+              ],
+              "additionalProperties": false
             },
-            "timeoutSeconds": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 300
-            },
-            "attempts": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 20
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "const": "none"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false
             }
-          },
-          "required": [
-            "type",
-            "scheme",
-            "port",
-            "path",
-            "expectedStatuses",
-            "timeoutSeconds",
-            "attempts"
-          ],
-          "additionalProperties": false
+          ]
         },
         "secretRefs": {
           "type": "array",

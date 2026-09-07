@@ -55,28 +55,28 @@ argument_specs:
             type: dict
             required: true
             options:
+              type:
+                type: str
+                choices:
+                  - http
+                  - none
+                required: true
               scheme:
                 type: str
                 choices:
                   - http
                   - https
-                required: true
               port:
                 type: int
-                required: true
               path:
                 type: str
-                required: true
               expectedStatuses:
                 type: list
                 elements: int
-                required: true
               timeoutSeconds:
                 type: int
-                required: true
               attempts:
                 type: int
-                required: true
           retainUntilCleanup:
             type: bool
             required: true

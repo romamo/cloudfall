@@ -78,14 +78,18 @@ bad release rolls back automatically.
 
 ## M4 — Migration importer
 
-- `cloudfall import render`: map `render.yaml` / Render API resources to Cloudfall
-  projects, components, cron jobs, and services, with a gap report for
-  anything unmappable
+- `cloudfall import render`: map `render.yaml` resources to Cloudfall
+  projects, components, services, and domains, with environment files kept
+  outside state and a structured gap report for anything unmappable ✔
+  (blueprint files; the Render API and cron jobs are pending)
 - Data migration: managed-Postgres dump and restore with verification
+  (currently a required-action item in the import report; a guided playbook
+  is pending)
 - Cutover generator: DNS TTL lowering, parallel-run verification, switch, and
-  a rollback window
+  a rollback window (DNS steps surface in the import report today)
 - v1 limitation: native Python and Node builds; container runtimes are a
-  tracked decision
+  tracked decision ✔ (documented and enforced — container services land in
+  the gap report)
 
 Exit: a real PaaS application migrated onto one host with its data, TLS,
 monitoring, and rollback path.

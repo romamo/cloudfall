@@ -26,6 +26,11 @@ fails digest verification, and refuses to report success if the engine wrote
 no release receipt. `health` exits `0` when every declared server passes the
 component's declared health check and `1` otherwise.
 
+`cloudfall import render` maps a Render blueprint onto schema-validated state
+fragments plus environment files outside state, and returns a structured gap
+report of unsupported services, assumptions, and required actions instead of
+guessing silently.
+
 The SDK validates v1 Server, HostProfile, Project, and Component resources and
 builds a read-only typed index. The `cloudfall state validate` command is its first
 system boundary.

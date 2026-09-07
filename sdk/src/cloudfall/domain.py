@@ -549,6 +549,18 @@ class ServiceKind(StrEnum):
         return cls(_required_string(value, "service kind"))
 
 
+class HealthCheckType(StrEnum):
+    """Component health-check kinds supported by the v1 contract."""
+
+    HTTP = "http"
+    NONE = "none"
+
+    @classmethod
+    def from_boundary(cls, value: object) -> HealthCheckType:
+        """Coerce a boundary value into a health-check kind."""
+        return cls(_required_string(value, "health check type"))
+
+
 class RuntimeType(StrEnum):
     """Component runtimes supported by the v1 contract."""
 

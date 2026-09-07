@@ -16,6 +16,7 @@ from cloudfall.domain import (
     FileMode,
     FilesystemName,
     FirewallPolicy,
+    HealthCheckType,
     Hostname,
     HttpScheme,
     HttpStatusCode,
@@ -408,8 +409,8 @@ class ComponentService:
 
 
 @dataclass(frozen=True, slots=True)
-class ComponentHealthCheck:
-    """HTTP health gate for a deployed component."""
+class ComponentHttpHealthCheck:
+    """HTTP endpoint contract for a component health gate."""
 
     scheme: HttpScheme
     port: TcpPort
@@ -418,18 +419,37 @@ class ComponentHealthCheck:
     timeout_seconds: PositiveCount
     attempts: PositiveCount
 
+
+@dataclass(frozen=True, slots=True)
+class ComponentHealthCheck:
+    """Health gate for a deployed component."""
+
+    check_type: HealthCheckType
+    http: ComponentHttpHealthCheck | None
+
+    def __post_init__(self) -> None:
+        """Require the HTTP contract exactly for HTTP health checks."""
+        if (self.check_type is HealthCheckType.HTTP) != (self.http is not None):
+            message = "HTTP health checks require an HTTP contract"
+            raise ValueError(message)
+
     def as_dict(self) -> dict[str, object]:
         """Serialize the health contract."""
-        return {
-            "scheme": self.scheme.value,
-            "port": self.port.value,
-            "path": self.path,
-            "expectedStatuses": [
-                status.value for status in self.expected_statuses
-            ],
-            "timeoutSeconds": self.timeout_seconds.value,
-            "attempts": self.attempts.value,
-        }
+        result: dict[str, object] = {"type": self.check_type.value}
+        if self.http is not None:
+            result.update(
+                {
+                    "scheme": self.http.scheme.value,
+                    "port": self.http.port.value,
+                    "path": self.http.path,
+                    "expectedStatuses": [
+                        status.value for status in self.http.expected_statuses
+                    ],
+                    "timeoutSeconds": self.http.timeout_seconds.value,
+                    "attempts": self.http.attempts.value,
+                }
+            )
+        return result
 
 
 @dataclass(frozen=True, slots=True)
@@ -1166,7 +1186,19 @@ def _component_inventory(document: ResourceDocument) -> ComponentInventory:
             name=ResourceId.from_boundary(service.get("name")),
             command=ServiceCommand.from_boundary(service.get("command")),
         ),
-        health_check=ComponentHealthCheck(
+        health_check=_component_health_check(health),
+    )
+
+
+def _component_health_check(
+    health: Mapping[str, object],
+) -> ComponentHealthCheck:
+    check_type = HealthCheckType.from_boundary(health.get("type"))
+    if check_type is HealthCheckType.NONE:
+        return ComponentHealthCheck(check_type=check_type, http=None)
+    return ComponentHealthCheck(
+        check_type=check_type,
+        http=ComponentHttpHealthCheck(
             scheme=HttpScheme.from_boundary(health.get("scheme")),
             port=TcpPort.from_boundary(health.get("port")),
             path=_string(health, "path"),

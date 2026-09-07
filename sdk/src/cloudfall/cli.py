@@ -18,6 +18,11 @@ if TYPE_CHECKING:
 from cloudfall.audit import AuditStatus, audit_inventory
 from cloudfall.dashboard import build_dashboard
 from cloudfall.domain import ReleaseId, ResourceId
+from cloudfall.importer import (
+    ImportTargets,
+    RenderImportError,
+    import_render_blueprint,
+)
 from cloudfall.inventory import PlatformInventory
 from cloudfall.lifecycle import (
     DeployOptions,
@@ -184,6 +189,14 @@ def _parser() -> argparse.ArgumentParser:
         help="versioned schema directory (default: state/schemas/v1)",
     )
 
+    _add_lifecycle_parsers(commands)
+    _add_import_parsers(commands)
+    return parser
+
+
+def _add_lifecycle_parsers(
+    commands: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
     deploy_parser = commands.add_parser(
         "deploy", help="deploy one built component release"
     )
@@ -230,7 +243,49 @@ def _parser() -> argparse.ArgumentParser:
         "health", help="probe one component's declared health check"
     )
     _add_lifecycle_arguments(health_parser)
-    return parser
+
+
+def _add_import_parsers(
+    commands: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    import_parser = commands.add_parser(
+        "import", help="import external platform definitions"
+    )
+    import_commands = import_parser.add_subparsers(
+        dest="import_command", required=True
+    )
+    render_parser = import_commands.add_parser(
+        "render", help="map a render.yaml blueprint onto Cloudfall state"
+    )
+    render_parser.add_argument("blueprint", type=Path)
+    render_parser.add_argument(
+        "--project",
+        required=True,
+        help="Cloudfall project id (also the project's Linux user)",
+    )
+    render_parser.add_argument(
+        "--server",
+        required=True,
+        help="declared server id that receives every imported resource",
+    )
+    render_parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path("tmp/import/state"),
+        help="state fragment output directory (default: tmp/import/state)",
+    )
+    render_parser.add_argument(
+        "--env-dir",
+        type=Path,
+        default=Path("tmp/import/env"),
+        help="environment file output directory (default: tmp/import/env)",
+    )
+    render_parser.add_argument(
+        "--schemas",
+        type=Path,
+        default=Path("state/schemas/v1"),
+        help="versioned schema directory (default: state/schemas/v1)",
+    )
 
 
 def _add_lifecycle_arguments(parser: argparse.ArgumentParser) -> None:
@@ -259,6 +314,8 @@ def _add_lifecycle_arguments(parser: argparse.ArgumentParser) -> None:
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the CLI and return a process exit code."""
     arguments = _parser().parse_args(argv)
+    if arguments.command == "import":
+        return _run_import_render(arguments)
     state_directory = Path(arguments.state_directory)
     schema_directory = Path(arguments.schemas)
     try:
@@ -267,6 +324,24 @@ def main(argv: Sequence[str] | None = None) -> int:
     except StateValidationError as error:
         sys.stderr.write(f"{json.dumps(error.as_dict(), sort_keys=True)}\n")
         return 2
+
+
+def _run_import_render(arguments: Namespace) -> int:
+    try:
+        targets = ImportTargets(
+            project_id=ResourceId.from_boundary(arguments.project),
+            server_id=ResourceId.from_boundary(arguments.server),
+            state_directory=Path(arguments.output),
+            environment_directory=Path(arguments.env_dir),
+        )
+        result = import_render_blueprint(
+            Path(arguments.blueprint), targets, Path(arguments.schemas)
+        )
+    except (RenderImportError, StateValidationError) as error:
+        sys.stderr.write(f"{json.dumps(error.as_dict(), sort_keys=True)}\n")
+        return 2
+    _write_json(result.as_dict())
+    return 0
 
 
 def _dispatch(
