@@ -11,9 +11,15 @@ dependencies = [
     "pyyaml>=6,<7",
 ]
 
+[project.optional-dependencies]
+mcp = [
+    "mcp>=2,<3",
+]
+
 [project.scripts]
 cloudfall = "cloudfall.cli:run"
 cloudfall-engine = "cloudfall_engine.cli:run"
+cloudfall-mcp = "cloudfall.mcp_server:run"
 
 [build-system]
 requires = ["hatchling>=1.27"]
@@ -26,6 +32,7 @@ packages = ["sdk/src/cloudfall", "engine/src/cloudfall_engine"]
 dev = [
     "ansible-core>=2.21,<2.22",
     "ansible-lint>=26,<27",
+    "mcp>=2,<3",
     "mypy>=1.13",
     "pytest>=8",
     "ruff>=0.8",

@@ -305,26 +305,86 @@ def plan_health(
 
 def execute_plan(plan: ExecutionPlan) -> None:
     """Run every step of a plan, failing fast on the first error."""
-    for step in plan.steps:
-        environment = {**os.environ, **step.environment}
-        try:
-            subprocess.run(  # noqa: S603 - argv composed from typed values.
-                list(step.argv),
-                check=True,
-                capture_output=True,
-                text=True,
-                timeout=_STEP_TIMEOUT_SECONDS,
-                env=environment,
-            )
-        except subprocess.CalledProcessError as error:
-            tail = f"{error.stdout}\n{error.stderr}"[-_OUTPUT_TAIL_CHARACTERS:]
-            detail = f"{step.description} failed: {tail.strip()}"
-            raise LifecycleError(_ERROR_EXECUTION_FAILED, detail) from error
-        except subprocess.TimeoutExpired as error:
-            detail = (
-                f"{step.description} exceeded {_STEP_TIMEOUT_SECONDS} seconds"
-            )
-            raise LifecycleError(_ERROR_EXECUTION_FAILED, detail) from error
+    _execute_steps(plan.steps)
+
+
+def run_engine_playbook(
+    context: EngineContext,
+    playbook_name: str,
+    extra_vars: Mapping[str, object],
+) -> None:
+    """Render inventory and run one engine playbook contract."""
+    _execute_steps(
+        (
+            _render_inventory_step(context),
+            _playbook_step(context, playbook_name, extra_vars),
+        )
+    )
+
+
+def build_release_artifact(
+    context: EngineContext,
+    component_id: ResourceId,
+    git_ref: str,
+    artifact_directory: Path,
+) -> dict[str, object]:
+    """Build one release artifact through the engine's CLI contract."""
+    argv = (
+        sys.executable,
+        "-m",
+        "cloudfall_engine",
+        "artifact",
+        "build",
+        str(context.state_directory),
+        component_id.value,
+        "--ref",
+        git_ref,
+        "--schemas",
+        str(context.schema_directory),
+        "--output-dir",
+        str(artifact_directory),
+    )
+    step = ExecutionStep(
+        description="build release artifact",
+        argv=argv,
+        environment={},
+    )
+    output = _execute_step_with_output(step)
+    parsed = cast("object", json.loads(output))
+    if not isinstance(parsed, dict) or not all(
+        isinstance(key, str) for key in parsed
+    ):
+        detail = "artifact builder returned a non-object payload"
+        raise LifecycleError(_ERROR_EXECUTION_FAILED, detail)
+    return cast("dict[str, object]", parsed)
+
+
+def _execute_steps(steps: tuple[ExecutionStep, ...]) -> None:
+    for step in steps:
+        _execute_step_with_output(step)
+
+
+def _execute_step_with_output(step: ExecutionStep) -> str:
+    environment = {**os.environ, **step.environment}
+    try:
+        completed = subprocess.run(  # noqa: S603 - argv from typed values.
+            list(step.argv),
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=_STEP_TIMEOUT_SECONDS,
+            env=environment,
+        )
+    except subprocess.CalledProcessError as error:
+        tail = f"{error.stdout}\n{error.stderr}"[-_OUTPUT_TAIL_CHARACTERS:]
+        detail = f"{step.description} failed: {tail.strip()}"
+        raise LifecycleError(_ERROR_EXECUTION_FAILED, detail) from error
+    except subprocess.TimeoutExpired as error:
+        detail = (
+            f"{step.description} exceeded {_STEP_TIMEOUT_SECONDS} seconds"
+        )
+        raise LifecycleError(_ERROR_EXECUTION_FAILED, detail) from error
+    return completed.stdout
 
 
 def deploy(

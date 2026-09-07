@@ -21,8 +21,9 @@ server.
   derived from validated observations. Cloudfall never reports success it cannot
   prove
 - **AI-agent native.** Agents operate through a stable SDK and structured
-  JSON results instead of inventing shell commands over SSH. An MCP server is
-  on the roadmap
+  JSON results instead of inventing shell commands over SSH. The
+  `cloudfall-mcp` server exposes read-only evidence tools freely and gates
+  every server-changing tool behind an explicit confirmation handshake
 - **systemd, not containers.** Applications run as native systemd services
   with artifact releases and symlink rollback on long-lived Debian servers
 

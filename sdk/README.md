@@ -31,6 +31,28 @@ fragments plus environment files outside state, and returns a structured gap
 report of unsupported services, assumptions, and required actions instead of
 guessing silently.
 
+## MCP server
+
+`cloudfall-mcp` (requires the `cloudfall[mcp]` extra) exposes the agent
+toolset over stdio. Read-only evidence tools — validate, inventory, audit,
+service status, health probes, and both inspection collectors — are exposed
+freely with read-only annotations. Everything that changes servers
+(deploy, rollback, restart, and the baseline, services, and domains
+convergers) is annotated destructive and demands a two-step handshake: the
+first call returns a `confirmation-required` preview describing exactly what
+would run; only a second call with `confirm=true` executes. Deployments
+through MCP always write release receipts.
+
+```console
+uv run cloudfall-mcp --state state/examples --engine engine
+```
+
+Every tool returns a structured JSON envelope, including errors, so agents
+never need to parse free-form failures. An agent connected to this server
+can drive the full migration path — import a blueprint, build artifacts,
+converge the baseline, services, and domains, deploy with automatic
+rollback, and audit the result — without shell access to any server.
+
 The SDK validates v1 Server, HostProfile, Project, and Component resources and
 builds a read-only typed index. The `cloudfall state validate` command is its first
 system boundary.

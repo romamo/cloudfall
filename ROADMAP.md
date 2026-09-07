@@ -97,8 +97,12 @@ monitoring, and rollback path.
 ## M5 — Agent layer
 
 - MCP server over the SDK: read-only tools exposed freely; mutating tools
-  gated by explicit confirmation and always writing receipts
+  gated by explicit confirmation and always writing receipts ✔
+  (`cloudfall-mcp` with fifteen annotated tools covering import, artifact
+  build, baseline/services/domains convergence, deploy/rollback/restart,
+  and the full evidence pipeline)
 - A `migrate` orchestrator chaining M1–M4 as a resumable plan
 
 Exit: an AI agent completes the M4 migration through MCP without shell access
-to the servers.
+to the servers. The tool surface for that exit exists; the live run joins
+the proving batch.
