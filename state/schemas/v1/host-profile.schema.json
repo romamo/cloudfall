@@ -144,6 +144,43 @@
           ],
           "additionalProperties": false
         },
+        "firewall": {
+          "type": "object",
+          "properties": {
+            "policy": {
+              "const": "default-deny"
+            },
+            "allowedInbound": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "port": {
+                    "$ref": "common.schema.json#/$defs/networkPort"
+                  },
+                  "protocol": {
+                    "$ref": "common.schema.json#/$defs/networkProtocol"
+                  },
+                  "description": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9 ._-]{0,199}$"
+                  }
+                },
+                "required": [
+                  "port",
+                  "protocol"
+                ],
+                "additionalProperties": false
+              },
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "policy",
+            "allowedInbound"
+          ],
+          "additionalProperties": false
+        },
         "services": {
           "type": "object",
           "properties": {
@@ -153,7 +190,7 @@
                 "type": "object",
                 "properties": {
                   "name": {
-                    "$ref": "common.schema.json#/$defs/serviceName"
+                    "$ref": "common.schema.json#/$defs/systemdUnitName"
                   },
                   "state": {
                     "enum": [

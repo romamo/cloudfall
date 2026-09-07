@@ -1,0 +1,33 @@
+---
+argument_specs:
+  main:
+    short_description: Enforce the declared Cloudfall inbound firewall
+    options:
+      cloudfall_firewall_ruleset:
+        type: dict
+        required: true
+        options:
+          policy:
+            type: str
+            choices:
+              - default-deny
+            required: true
+          allowedInbound:
+            type: list
+            elements: dict
+            required: true
+            options:
+              port:
+                type: int
+                required: true
+              protocol:
+                type: str
+                choices:
+                  - tcp
+                  - udp
+                required: true
+              description:
+                type: str
+      cloudfall_firewall_configuration_path:
+        type: path
+        default: /etc/nftables.conf

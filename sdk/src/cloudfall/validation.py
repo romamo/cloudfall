@@ -787,6 +787,50 @@ def _validate_host_profile(spec: Mapping[str, object], source: SourceLocation) -
                 field_path=("spec", "configuration", "files", index),
             )
             raise StateValidationError(issue)
+    _validate_host_profile_firewall(spec, source)
+
+
+def _validate_host_profile_firewall(
+    spec: Mapping[str, object], source: SourceLocation
+) -> None:
+    if spec.get("firewall") is None:
+        return
+    firewall = _required_mapping(spec, "firewall", source)
+    raw_rules = firewall.get("allowedInbound")
+    if not isinstance(raw_rules, list):
+        issue = ValidationIssue(
+            code="internal_state_shape_invalid",
+            message="validated firewall allowedInbound is not a list",
+            source=source,
+            field_path=("spec", "firewall", "allowedInbound"),
+        )
+        raise StateValidationError(issue)
+    seen: set[tuple[object, object]] = set()
+    for index, raw_rule in enumerate(raw_rules):
+        if not isinstance(raw_rule, dict) or not all(
+            isinstance(key, str) for key in raw_rule
+        ):
+            issue = ValidationIssue(
+                code="internal_state_shape_invalid",
+                message="validated firewall rule is not an object",
+                source=source,
+                field_path=("spec", "firewall", "allowedInbound", index),
+            )
+            raise StateValidationError(issue)
+        rule = cast("Mapping[str, object]", raw_rule)
+        identity = (rule.get("port"), rule.get("protocol"))
+        if identity in seen:
+            issue = ValidationIssue(
+                code="firewall_rule_duplicate",
+                message=(
+                    "duplicate firewall rule: "
+                    f"{rule.get('port')}/{rule.get('protocol')}"
+                ),
+                source=source,
+                field_path=("spec", "firewall", "allowedInbound", index),
+            )
+            raise StateValidationError(issue)
+        seen.add(identity)
 
 
 def _validate_server_network(

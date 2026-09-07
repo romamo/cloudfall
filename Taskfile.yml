@@ -79,6 +79,29 @@ tasks:
         --service-observed {{ .SERVICE_OBSERVATION_DIR }}
         --deployments {{ .DEPLOYMENT_DIR }}
 
+  server:baseline:check:
+    desc: Check the server baseline convergence without changing hosts
+    deps:
+      - inventory
+    env:
+      ANSIBLE_CONFIG: engine/ansible/ansible.cfg
+    cmds:
+      - >-
+        uv run ansible-playbook --check --diff
+        --inventory {{ .INVENTORY_FILE }}
+        engine/ansible/playbooks/baseline.yml
+
+  server:baseline:
+    desc: Converge servers to the managed baseline
+    deps:
+      - inventory
+    env:
+      ANSIBLE_CONFIG: engine/ansible/ansible.cfg
+    cmds:
+      - >-
+        uv run ansible-playbook --inventory {{ .INVENTORY_FILE }}
+        engine/ansible/playbooks/baseline.yml
+
   logging:check:
     desc: Check the guarded parallel logging deployment without applying it
     deps:
@@ -155,6 +178,10 @@ tasks:
         uv run ansible-playbook --syntax-check
         --inventory {{ .INVENTORY_FILE }}
         engine/ansible/playbooks/inspect.yml
+      - >-
+        uv run ansible-playbook --syntax-check
+        --inventory {{ .INVENTORY_FILE }}
+        engine/ansible/playbooks/baseline.yml
       - >-
         uv run ansible-playbook --syntax-check
         --inventory {{ .INVENTORY_FILE }}

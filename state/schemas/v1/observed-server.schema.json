@@ -9,6 +9,12 @@
         "null"
       ]
     },
+    "timerName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "pattern": "^[A-Za-z0-9@_.:-]+\\.timer$"
+    },
     "nullableInteger": {
       "type": [
         "integer",
@@ -424,6 +430,52 @@
             "additionalProperties": false
           }
         },
+        "timers": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/timerName"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "$ref": "#/$defs/timerName"
+              },
+              "state": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "source": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "state",
+              "status",
+              "source"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "firewall": {
+          "type": "object",
+          "properties": {
+            "nftAvailable": {
+              "type": "boolean"
+            },
+            "managedTableJson": {
+              "$ref": "#/$defs/nullableString"
+            }
+          },
+          "required": [
+            "nftAvailable",
+            "managedTableJson"
+          ],
+          "additionalProperties": false
+        },
         "configuration": {
           "type": "array",
           "items": {
@@ -485,6 +537,8 @@
         "storage",
         "packages",
         "services",
+        "timers",
+        "firewall",
         "configuration"
       ],
       "additionalProperties": false

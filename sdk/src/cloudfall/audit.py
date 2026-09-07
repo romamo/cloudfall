@@ -2,17 +2,21 @@
 
 from __future__ import annotations
 
+import json
 import re
 from collections import Counter
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, cast
 
+from cloudfall.inventory import firewall_rules_for_server
+
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
 
     from cloudfall.inventory import (
         ConfigurationFileRequirement,
+        FirewallRequirement,
         HostProfileInventory,
         PlatformInventory,
         RaidRequirement,
@@ -21,6 +25,9 @@ if TYPE_CHECKING:
     from cloudfall.observation import ObservationSet, ObservedServerSnapshot
 
 _RAID_HEALTH_PATTERN = re.compile(r"\[(\d+)/(\d+)\]\s+\[([U_]+)\]")
+_MANAGED_FIREWALL_TABLE = "cloudfall"
+_MANAGED_FIREWALL_INPUT_CHAIN = "input"
+_MANAGED_FIREWALL_INPUT_POLICY = "drop"
 
 
 class AuditStatus(StrEnum):
@@ -172,6 +179,8 @@ def _audit_server(
     checks.extend(_audit_mounts(profile, snapshot))
     checks.extend(_audit_packages(profile, snapshot))
     checks.extend(_audit_services(profile, snapshot))
+    if profile.firewall is not None:
+        checks.extend(_audit_firewall(server, profile.firewall, snapshot))
     checks.extend(_audit_configuration(profile, snapshot))
     return ServerAudit(
         server_id=server.resource_id.value,
@@ -349,9 +358,11 @@ def _audit_services(
     profile: HostProfileInventory, snapshot: ObservedServerSnapshot
 ) -> tuple[AuditCheck, ...]:
     services = _mapping(snapshot.spec, "services")
+    timers = _mapping(snapshot.spec, "timers")
     checks: list[AuditCheck] = []
     for requirement in profile.required_services:
-        raw_actual = services.get(requirement.name.value)
+        evidence = timers if requirement.name.is_timer else services
+        raw_actual = evidence.get(requirement.name.value)
         actual = _optional_mapping(raw_actual)
         desired = {
             "state": requirement.state.value,
@@ -374,6 +385,131 @@ def _audit_services(
             )
         )
     return tuple(checks)
+
+
+@dataclass(frozen=True, slots=True)
+class _ObservedFirewallTable:
+    """Managed nftables table facts parsed from observation evidence."""
+
+    input_policy: str | None
+    allowed_inbound: tuple[tuple[str, int], ...]
+
+
+def _audit_firewall(
+    server: ServerInventory,
+    firewall: FirewallRequirement,
+    snapshot: ObservedServerSnapshot,
+) -> tuple[AuditCheck, ...]:
+    evidence = _mapping(snapshot.spec, "firewall")
+    nft_available = evidence.get("nftAvailable") is True
+    raw_table = evidence.get("managedTableJson")
+    table = (
+        _parse_managed_firewall_table(raw_table)
+        if nft_available and isinstance(raw_table, str)
+        else None
+    )
+    expected_rules = sorted(
+        (rule.protocol.value, rule.port.value)
+        for rule in firewall_rules_for_server(firewall, server.ssh_port)
+    )
+    observed_rules = None if table is None else sorted(table.allowed_inbound)
+    return (
+        _comparison(
+            "firewall.managedTable",
+            {"table": f"inet {_MANAGED_FIREWALL_TABLE}", "present": True},
+            {"nftAvailable": nft_available, "present": table is not None},
+            matches=table is not None,
+        ),
+        _comparison(
+            "firewall.inputPolicy",
+            _MANAGED_FIREWALL_INPUT_POLICY,
+            None if table is None else table.input_policy,
+            matches=(
+                table is not None
+                and table.input_policy == _MANAGED_FIREWALL_INPUT_POLICY
+            ),
+        ),
+        _comparison(
+            "firewall.allowedInbound",
+            [f"{protocol}/{port}" for protocol, port in expected_rules],
+            (
+                None
+                if observed_rules is None
+                else [f"{protocol}/{port}" for protocol, port in observed_rules]
+            ),
+            matches=observed_rules == expected_rules,
+        ),
+    )
+
+
+def _parse_managed_firewall_table(raw: str) -> _ObservedFirewallTable | None:
+    try:
+        parsed: object = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    document = _optional_mapping(parsed)
+    if document is None:
+        return None
+    entries = _mapping_values_sequence(document.get("nftables"))
+    input_policy: str | None = None
+    allowed: list[tuple[str, int]] = []
+    table_present = False
+    for entry in entries:
+        table = _optional_mapping(entry.get("table"))
+        if table is not None and table.get("name") == _MANAGED_FIREWALL_TABLE:
+            table_present = True
+        chain = _optional_mapping(entry.get("chain"))
+        if (
+            chain is not None
+            and chain.get("table") == _MANAGED_FIREWALL_TABLE
+            and chain.get("name") == _MANAGED_FIREWALL_INPUT_CHAIN
+            and isinstance(chain.get("policy"), str)
+        ):
+            input_policy = cast("str", chain.get("policy"))
+        rule = _optional_mapping(entry.get("rule"))
+        if (
+            rule is not None
+            and rule.get("table") == _MANAGED_FIREWALL_TABLE
+            and rule.get("chain") == _MANAGED_FIREWALL_INPUT_CHAIN
+        ):
+            endpoint = _accepted_inbound_endpoint(rule)
+            if endpoint is not None:
+                allowed.append(endpoint)
+    if not table_present:
+        return None
+    return _ObservedFirewallTable(
+        input_policy=input_policy,
+        allowed_inbound=tuple(allowed),
+    )
+
+
+def _accepted_inbound_endpoint(
+    rule: Mapping[str, object],
+) -> tuple[str, int] | None:
+    expressions = _mapping_values_sequence(rule.get("expr"))
+    endpoint: tuple[str, int] | None = None
+    accepts = False
+    for expression in expressions:
+        if "accept" in expression:
+            accepts = True
+            continue
+        match = _optional_mapping(expression.get("match"))
+        if match is None:
+            continue
+        left = _optional_mapping(match.get("left"))
+        payload = None if left is None else _optional_mapping(left.get("payload"))
+        port = match.get("right")
+        if (
+            payload is not None
+            and payload.get("field") == "dport"
+            and payload.get("protocol") in ("tcp", "udp")
+            and isinstance(port, int)
+            and not isinstance(port, bool)
+        ):
+            endpoint = (cast("str", payload.get("protocol")), port)
+    if not accepts:
+        return None
+    return endpoint
 
 
 def _audit_configuration(

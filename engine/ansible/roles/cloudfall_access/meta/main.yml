@@ -1,11 +1,13 @@
 ---
 galaxy_info:
+  role_name: cloudfall_access
   author: Cloudfall
-  description: Install the Cloudfall Grafana Alloy log collector
+  description: Install declared SSH keys and enforce key-only root access
   license: AGPL-3.0-or-later
   min_ansible_version: "2.21"
   platforms:
     - name: Debian
       versions:
         - bookworm
+        - trixie
 dependencies: []

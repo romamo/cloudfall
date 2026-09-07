@@ -22,13 +22,15 @@ and origin servers, public names, edge mode, TLS policy, configuration evidence
 path, and end-to-end health contract. Public keys are non-secret and are
 scoped to an environment; private keys never belong in state. A server profile
 captures the required Debian/systemd baseline, software RAID level and
-capacity, mounts, packages, services, and an explicit allowlist of
+capacity, mounts, packages, required service and timer units, an optional
+default-deny inbound firewall contract, and an explicit allowlist of
 configuration files whose metadata or hash may be inspected.
 
 `observed-server.schema.json` defines the normalized, read-only evidence emitted
 by the engine. Observations are runtime evidence, not desired state, and belong
 under ignored controller storage such as `tmp/observed/`. They include
-structured NVMe SMART health when available; configuration contents and
+structured NVMe SMART health when available, systemd timer states, and the
+managed nftables table as raw JSON evidence; configuration contents and
 credentials must never be written there.
 
 `observed-domain.schema.json` validates controller-side DNS, edge, TLS, origin,

@@ -1,0 +1,37 @@
+---
+- name: Validate unattended-upgrades target
+  ansible.builtin.assert:
+    that:
+      - ansible_facts["distribution"] == "Debian"
+      - ansible_facts["service_mgr"] == "systemd"
+    fail_msg: Cloudfall unattended upgrades require a Debian systemd host
+
+- name: Install unattended-upgrades
+  ansible.builtin.apt:
+    name: unattended-upgrades
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Enable periodic unattended security upgrades
+  ansible.builtin.copy:
+    dest: "{{ cloudfall_unattended_upgrades_configuration_path }}"
+    content: |
+      // Managed by Cloudfall. Local changes will be overwritten.
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Enable the apt update timer
+  ansible.builtin.systemd_service:
+    name: apt-daily.timer
+    enabled: true
+    state: started
+
+- name: Enable the apt upgrade timer
+  ansible.builtin.systemd_service:
+    name: apt-daily-upgrade.timer
+    enabled: true
+    state: started

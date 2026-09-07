@@ -1,0 +1,51 @@
+---
+- name: Validate firewall target and declared ruleset
+  ansible.builtin.assert:
+    that:
+      - ansible_facts["distribution"] == "Debian"
+      - ansible_facts["service_mgr"] == "systemd"
+      - cloudfall_firewall_ruleset.policy == "default-deny"
+      - cloudfall_firewall_ruleset.allowedInbound | length > 0
+    fail_msg: >-
+      Cloudfall firewall management requires Debian, systemd, and a declared
+      default-deny ruleset with at least one allowed inbound rule
+
+- name: Refuse a ruleset that would block the control connection
+  ansible.builtin.assert:
+    that:
+      - >-
+        ansible_port | default(22) | int in (
+          cloudfall_firewall_ruleset.allowedInbound
+          | selectattr('protocol', 'equalto', 'tcp')
+          | map(attribute='port')
+          | map('int')
+          | list
+        )
+    fail_msg: >-
+      Refusing to apply a firewall that does not allow the SSH control port
+
+- name: Install nftables
+  ansible.builtin.apt:
+    name: nftables
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Render the managed nftables configuration
+  ansible.builtin.template:
+    src: nftables.conf.j2
+    dest: "{{ cloudfall_firewall_configuration_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+    validate: /usr/sbin/nft --check --file %s
+  notify: Reload nftables
+
+- name: Enable and start nftables
+  ansible.builtin.systemd_service:
+    name: nftables.service
+    enabled: true
+    state: started
+
+- name: Apply the validated nftables configuration
+  ansible.builtin.meta: flush_handlers

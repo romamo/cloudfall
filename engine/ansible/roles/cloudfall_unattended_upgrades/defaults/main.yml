@@ -1,0 +1,3 @@
+---
+cloudfall_unattended_upgrades_configuration_path: >-
+  /etc/apt/apt.conf.d/20auto-upgrades

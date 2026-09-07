@@ -1,0 +1,2 @@
+---
+cloudfall_access_sshd_drop_in: /etc/ssh/sshd_config.d/00-cloudfall-key-only.conf

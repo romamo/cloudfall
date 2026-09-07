@@ -23,6 +23,7 @@ _HOST_LABEL_PATTERN = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])
 _LINUX_USER_PATTERN = re.compile(r"^[a-z_][a-z0-9_-]{0,31}$")
 _PACKAGE_NAME_PATTERN = re.compile(r"^[a-z0-9][a-z0-9+.-]{0,199}$")
 _SERVICE_NAME_PATTERN = re.compile(r"^[A-Za-z0-9@_.:-]+\.service$")
+_SYSTEMD_UNIT_NAME_PATTERN = re.compile(r"^[A-Za-z0-9@_.:-]+\.(?:service|timer)$")
 _FILE_MODE_PATTERN = re.compile(r"^0[0-7]{3}$")
 _SHA256_PATTERN = re.compile(r"^[a-f0-9]{64}$")
 _MAX_HOSTNAME_LENGTH = 253
@@ -488,6 +489,52 @@ class ServiceName:
     def from_boundary(cls, value: object) -> ServiceName:
         """Coerce a boundary value into a service name."""
         return cls(_required_string(value, "service name"))
+
+
+@dataclass(frozen=True, slots=True)
+class SystemdUnitName:
+    """Validated systemd service- or timer-unit name."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        """Enforce the unit naming syntax accepted by state."""
+        if not _SYSTEMD_UNIT_NAME_PATTERN.fullmatch(self.value):
+            message = f"invalid systemd unit name: {self.value!r}"
+            raise ValueError(message)
+
+    @classmethod
+    def from_boundary(cls, value: object) -> SystemdUnitName:
+        """Coerce a boundary value into a systemd unit name."""
+        return cls(_required_string(value, "systemd unit name"))
+
+    @property
+    def is_timer(self) -> bool:
+        """Return whether the unit is a timer."""
+        return self.value.endswith(".timer")
+
+
+class NetworkProtocol(StrEnum):
+    """Transport protocols supported by firewall rules."""
+
+    TCP = "tcp"
+    UDP = "udp"
+
+    @classmethod
+    def from_boundary(cls, value: object) -> NetworkProtocol:
+        """Coerce a boundary value into a network protocol."""
+        return cls(_required_string(value, "network protocol"))
+
+
+class FirewallPolicy(StrEnum):
+    """Inbound firewall policies supported by Cloudfall v1."""
+
+    DEFAULT_DENY = "default-deny"
+
+    @classmethod
+    def from_boundary(cls, value: object) -> FirewallPolicy:
+        """Coerce a boundary value into a firewall policy."""
+        return cls(_required_string(value, "firewall policy"))
 
 
 @dataclass(frozen=True, slots=True)

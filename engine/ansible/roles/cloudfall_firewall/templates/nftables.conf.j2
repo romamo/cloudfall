@@ -1,0 +1,29 @@
+#!/usr/sbin/nft -f
+# Managed by Cloudfall. Local changes will be overwritten.
+
+flush ruleset
+
+table inet cloudfall {
+    chain input {
+        type filter hook input priority 0; policy drop;
+
+        iif "lo" accept
+        ct state established,related accept
+        ct state invalid drop
+        ip protocol icmp accept
+        meta l4proto ipv6-icmp accept
+{% for rule in cloudfall_firewall_ruleset.allowedInbound %}
+        {{ rule.protocol }} dport {{ rule.port }} accept
+        {%- if rule.description is defined %} comment "{{ rule.description }}"
+        {%- endif %}
+{% endfor %}
+    }
+
+    chain forward {
+        type filter hook forward priority 0; policy drop;
+    }
+
+    chain output {
+        type filter hook output priority 0; policy accept;
+    }
+}

@@ -69,6 +69,14 @@ def test_inventory_renders_ansible_host_variables() -> None:
         "cloudfall_domains": [],
         "cloudfall_origin_domains": [],
         "cloudfall_environment": "production",
+        "cloudfall_firewall": {
+            "policy": "default-deny",
+            "allowedInbound": [
+                {"port": 22, "protocol": "tcp", "description": "ssh"},
+                {"port": 80, "protocol": "tcp", "description": "http"},
+                {"port": 443, "protocol": "tcp", "description": "https"},
+            ],
+        },
         "cloudfall_host_profile": {
             "configuration": {
                 "files": [
@@ -104,8 +112,20 @@ def test_inventory_renders_ansible_host_variables() -> None:
                         "name": "ssh.service",
                         "state": "running",
                         "status": "enabled",
-                    }
+                    },
+                    {
+                        "name": "apt-daily.timer",
+                        "state": "running",
+                        "status": "enabled",
+                    },
                 ]
+            },
+            "firewall": {
+                "policy": "default-deny",
+                "allowedInbound": [
+                    {"port": 80, "protocol": "tcp", "description": "http"},
+                    {"port": 443, "protocol": "tcp", "description": "https"},
+                ],
             },
             "storage": {
                 "mounts": [

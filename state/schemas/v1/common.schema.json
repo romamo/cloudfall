@@ -47,6 +47,23 @@
       "maxLength": 255,
       "pattern": "^[A-Za-z0-9@_.:-]+\\.service$"
     },
+    "systemdUnitName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "pattern": "^[A-Za-z0-9@_.:-]+\\.(?:service|timer)$"
+    },
+    "networkPort": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535
+    },
+    "networkProtocol": {
+      "enum": [
+        "tcp",
+        "udp"
+      ]
+    },
     "fileMode": {
       "type": "string",
       "pattern": "^0[0-7]{3}$"

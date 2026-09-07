@@ -107,6 +107,24 @@ def test_ssh_public_key_algorithm_must_match_wire_payload(
     assert error.value.issue.code == "ssh_public_key_invalid"
 
 
+def test_host_profile_rejects_duplicate_firewall_rules(
+    tmp_path: Path,
+) -> None:
+    state_directory = tmp_path / "state"
+    shutil.copytree(ROOT / "state" / "examples", state_directory)
+    profile_path = state_directory / "host-profiles" / "debian-application.yaml"
+    duplicated = profile_path.read_text(encoding="utf-8").replace(
+        "      - port: 443\n        protocol: tcp\n        description: https",
+        "      - port: 80\n        protocol: tcp\n        description: duplicate",
+    )
+    profile_path.write_text(duplicated, encoding="utf-8")
+
+    with pytest.raises(StateValidationError) as error:
+        validate_state(state_directory, SCHEMAS)
+
+    assert error.value.issue.code == "firewall_rule_duplicate"
+
+
 def test_logging_collector_must_reference_an_existing_server(
     tmp_path: Path,
 ) -> None:

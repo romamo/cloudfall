@@ -81,6 +81,75 @@ def test_audit_reports_raid_package_service_and_config_drift(
     assert captured.err == ""
 
 
+def test_audit_reports_firewall_and_timer_drift(tmp_path: Path) -> None:
+    observations = tmp_path / "observed"
+    shutil.copytree(COMPLIANT, observations)
+    h1 = observations / "h1.json"
+    content = json.loads(h1.read_text(encoding="utf-8"))
+    spec = content["spec"]
+    table = json.loads(spec["firewall"]["managedTableJson"])
+    table["nftables"] = [
+        entry
+        for entry in table["nftables"]
+        if entry.get("rule", {}).get("handle") != 9
+    ]
+    for entry in table["nftables"]:
+        chain = entry.get("chain")
+        if chain is not None and chain["name"] == "input":
+            chain["policy"] = "accept"
+    spec["firewall"]["managedTableJson"] = json.dumps(table)
+    spec["timers"]["apt-daily.timer"]["status"] = "disabled"
+    h1.write_text(json.dumps(content), encoding="utf-8")
+
+    report = _audit(observations)
+    h1_report = next(server for server in report.servers if server.server_id == "h1")
+    drift_checks = {
+        check.check
+        for check in h1_report.checks
+        if check.status is AuditStatus.DRIFT
+    }
+
+    assert report.status is AuditStatus.DRIFT
+    assert {
+        "firewall.inputPolicy",
+        "firewall.allowedInbound",
+        "services.required[apt-daily.timer]",
+    } <= drift_checks
+    allowed = next(
+        check
+        for check in h1_report.checks
+        if check.check == "firewall.allowedInbound"
+    )
+    assert allowed.desired == ["tcp/22", "tcp/80", "tcp/443"]
+    assert allowed.observed == ["tcp/22", "tcp/80"]
+
+
+def test_audit_reports_missing_firewall_table_as_drift(tmp_path: Path) -> None:
+    observations = tmp_path / "observed"
+    shutil.copytree(COMPLIANT, observations)
+    h1 = observations / "h1.json"
+    content = json.loads(h1.read_text(encoding="utf-8"))
+    content["spec"]["firewall"] = {
+        "nftAvailable": False,
+        "managedTableJson": None,
+    }
+    h1.write_text(json.dumps(content), encoding="utf-8")
+
+    report = _audit(observations)
+    h1_report = next(server for server in report.servers if server.server_id == "h1")
+    drift_checks = {
+        check.check
+        for check in h1_report.checks
+        if check.status is AuditStatus.DRIFT
+    }
+
+    assert {
+        "firewall.managedTable",
+        "firewall.inputPolicy",
+        "firewall.allowedInbound",
+    } <= drift_checks
+
+
 def test_missing_observation_is_unknown(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],

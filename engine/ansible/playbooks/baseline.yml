@@ -1,0 +1,22 @@
+---
+- name: Converge Cloudfall servers to the managed baseline
+  hosts: cloudfall_servers
+  become: true
+  gather_facts: true
+  any_errors_fatal: true
+  serial: 1
+  roles:
+    - role: cloudfall_bootstrap
+      cloudfall_bootstrap_projects: "{{ cloudfall_projects }}"
+      cloudfall_bootstrap_components: "{{ cloudfall_components }}"
+    - role: cloudfall_time
+    - role: cloudfall_access
+      cloudfall_access_ssh_public_keys: "{{ cloudfall_ssh_public_keys }}"
+    - role: cloudfall_unattended_upgrades
+  tasks:
+    - name: Enforce the declared firewall
+      ansible.builtin.include_role:
+        name: cloudfall_firewall
+      vars:
+        cloudfall_firewall_ruleset: "{{ cloudfall_firewall }}"
+      when: cloudfall_firewall is defined

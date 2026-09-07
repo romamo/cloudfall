@@ -49,6 +49,30 @@ task time:check STATE_DIR=state/examples TIME_LIMIT=h1
 task time:deploy STATE_DIR=state/examples TIME_LIMIT=h1
 ```
 
+## Server baseline
+
+`ansible/playbooks/baseline.yml` converges a host to the managed baseline in
+one run: bootstrap, the UTC time contract, declared key-only SSH access,
+unattended Debian security upgrades, and the declared default-deny firewall.
+It targets all servers serially and is idempotent; a second run reports no
+changes:
+
+```console
+task server:baseline:check
+task server:baseline
+```
+
+The firewall role renders `/etc/nftables.conf` from the rendered
+`cloudfall_firewall` host variable (declared profile rules plus the server's
+SSH port), validates it with `nft --check` before installation, and refuses
+any ruleset that does not allow the control connection's SSH port. The
+managed table replaces the complete ruleset; hosts whose profile declares no
+firewall are left unmanaged.
+
+The access role installs active environment-scoped `SshPublicKey` resources
+for root, validates the complete OpenSSH configuration, and only then
+disables password and keyboard-interactive authentication.
+
 ## Bootstrap role
 
 `ansible/roles/cloudfall_bootstrap` prepares an already-installed Debian host for
@@ -67,7 +91,8 @@ policy, fetch secrets, deploy artifacts, or start application services.
 
 `ansible/roles/cloudfall_inspect` collects normalized evidence without changing the
 remote host. It reads Ansible facts, the Debian package database through
-`dpkg-query`, service facts, `lsblk`, `findmnt`, `/proc/mdstat`,
+`dpkg-query`, service facts, systemd timer units and unit files, the managed
+`inet cloudfall` nftables table as JSON, `lsblk`, `findmnt`, `/proc/mdstat`,
 `mdadm --detail --scan`, read-only NVMe reports from `smartctl`, and `stat` data for the
 configuration paths allowlisted by the server's `HostProfile`.
 

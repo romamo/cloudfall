@@ -7,8 +7,18 @@ from pathlib import Path
 
 import pytest
 from cloudfall.cli import main
-from cloudfall.domain import ResourceId
-from cloudfall.inventory import PlatformInventory
+from cloudfall.domain import (
+    FirewallPolicy,
+    NetworkProtocol,
+    ResourceId,
+    TcpPort,
+)
+from cloudfall.inventory import (
+    FirewallRequirement,
+    FirewallRule,
+    PlatformInventory,
+    firewall_rules_for_server,
+)
 from cloudfall.validation import validate_state
 
 ROOT = Path(__file__).parents[2]
@@ -18,6 +28,48 @@ EXAMPLES = ROOT / "state" / "examples"
 
 def _inventory() -> PlatformInventory:
     return PlatformInventory.from_state(validate_state(EXAMPLES, SCHEMAS))
+
+
+def test_effective_firewall_rules_guarantee_the_ssh_port_once() -> None:
+    firewall = FirewallRequirement(
+        policy=FirewallPolicy.DEFAULT_DENY,
+        allowed_inbound=(
+            FirewallRule(
+                port=TcpPort(22),
+                protocol=NetworkProtocol.TCP,
+                description=None,
+            ),
+            FirewallRule(
+                port=TcpPort(443),
+                protocol=NetworkProtocol.TCP,
+                description="https",
+            ),
+        ),
+    )
+
+    declared = firewall_rules_for_server(firewall, TcpPort(22))
+    assert [(rule.port.value, rule.protocol.value) for rule in declared] == [
+        (22, "tcp"),
+        (443, "tcp"),
+    ]
+
+    custom = firewall_rules_for_server(firewall, TcpPort(8022))
+    assert custom[0].port.value == 8022
+    assert custom[0].protocol is NetworkProtocol.TCP
+    assert custom[0].description == "ssh"
+
+
+def test_firewall_requirement_rejects_duplicate_rules() -> None:
+    rule = FirewallRule(
+        port=TcpPort(80),
+        protocol=NetworkProtocol.TCP,
+        description=None,
+    )
+    with pytest.raises(ValueError, match="duplicate firewall rule"):
+        FirewallRequirement(
+            policy=FirewallPolicy.DEFAULT_DENY,
+            allowed_inbound=(rule, rule),
+        )
 
 
 def test_inventory_exposes_typed_placement_queries() -> None:

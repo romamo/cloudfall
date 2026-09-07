@@ -1,0 +1,59 @@
+---
+- name: Select active declared SSH keys
+  ansible.builtin.set_fact:
+    cloudfall_access_active_keys: >-
+      {{
+        cloudfall_access_ssh_public_keys
+        | selectattr('lifecycle', 'equalto', 'active')
+        | list
+      }}
+
+- name: Require at least one active declared SSH key
+  ansible.builtin.assert:
+    that:
+      - cloudfall_access_active_keys | length > 0
+    fail_msg: Refusing to disable password access without an active SSH key
+
+- name: Create root SSH configuration directory
+  ansible.builtin.file:
+    path: /root/.ssh
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Install active root SSH keys
+  ansible.builtin.lineinfile:
+    path: /root/.ssh/authorized_keys
+    line: "{{ item.publicKey }}"
+    create: true
+    owner: root
+    group: root
+    mode: "0600"
+  loop: "{{ cloudfall_access_active_keys }}"
+  loop_control:
+    label: "{{ item.id }}"
+
+- name: Install key-only OpenSSH policy
+  ansible.builtin.copy:
+    dest: "{{ cloudfall_access_sshd_drop_in }}"
+    content: |-
+      # Managed by Cloudfall. Local changes will be overwritten.
+      PubkeyAuthentication yes
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      PermitRootLogin prohibit-password
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload OpenSSH
+
+- name: Validate complete OpenSSH configuration
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/sshd
+      - -t
+  changed_when: false
+
+- name: Apply validated OpenSSH policy
+  ansible.builtin.meta: flush_handlers

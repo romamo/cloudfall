@@ -1,0 +1,8 @@
+---
+argument_specs:
+  main:
+    short_description: Enable automatic Debian security upgrades
+    options:
+      cloudfall_unattended_upgrades_configuration_path:
+        type: path
+        default: /etc/apt/apt.conf.d/20auto-upgrades

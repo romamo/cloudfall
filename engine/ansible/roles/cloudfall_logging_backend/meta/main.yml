@@ -2,7 +2,7 @@
 galaxy_info:
   author: Cloudfall
   description: Install the Cloudfall Loki and Grafana logging backend
-  license: MIT
+  license: AGPL-3.0-or-later
   min_ansible_version: "2.21"
   platforms:
     - name: Debian

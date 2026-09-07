@@ -4,12 +4,15 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from cloudfall.inventory import firewall_rules_for_server
+
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from cloudfall.domain import ResourceId
     from cloudfall.inventory import (
         ComponentInventory,
+        HostProfileInventory,
         LoggingStackInventory,
         PlatformInventory,
         ProjectInventory,
@@ -106,6 +109,7 @@ def _host_variables(inventory: PlatformInventory) -> dict[str, object]:
                 if key.environment == server.environment and key.is_active
             ],
             **_host_infrastructure(server),
+            **_host_firewall(server, profiles_by_id[server.profile_id]),
             **_host_logging(server, inventory.logging_stacks),
             "cloudfall_host_profile": profiles_by_id[server.profile_id].as_dict(),
             "cloudfall_projects": [
@@ -140,6 +144,20 @@ def _host_infrastructure(server: ServerInventory) -> dict[str, object]:
     if server.network is not None:
         variables["cloudfall_network"] = server.network.as_dict()
     return variables
+
+
+def _host_firewall(
+    server: ServerInventory, profile: HostProfileInventory
+) -> dict[str, object]:
+    if profile.firewall is None:
+        return {}
+    rules = firewall_rules_for_server(profile.firewall, server.ssh_port)
+    return {
+        "cloudfall_firewall": {
+            "policy": profile.firewall.policy.value,
+            "allowedInbound": [rule.as_dict() for rule in rules],
+        }
+    }
 
 
 def _host_logging(

@@ -15,6 +15,7 @@ from cloudfall.domain import (
     DnsMode,
     FileMode,
     FilesystemName,
+    FirewallPolicy,
     Hostname,
     HttpScheme,
     HttpStatusCode,
@@ -24,6 +25,7 @@ from cloudfall.domain import (
     LinuxUser,
     LoggingMigrationMode,
     LoggingStorageType,
+    NetworkProtocol,
     OpenSshPublicKey,
     OperatingSystemDistribution,
     OperatingSystemMajorVersion,
@@ -42,6 +44,7 @@ from cloudfall.domain import (
     ServiceName,
     Sha256Digest,
     SshPublicKeyLifecycle,
+    SystemdUnitName,
     TcpPort,
     TlsMode,
 )
@@ -176,11 +179,58 @@ class PackageRequirement:
 
 @dataclass(frozen=True, slots=True)
 class ServiceRequirement:
-    """Desired systemd service state."""
+    """Desired systemd service- or timer-unit state."""
 
-    name: ServiceName
+    name: SystemdUnitName
     state: RequiredServiceState
     status: RequiredServiceStatus
+
+
+@dataclass(frozen=True, slots=True)
+class FirewallRule:
+    """One allowed inbound transport-layer endpoint."""
+
+    port: TcpPort
+    protocol: NetworkProtocol
+    description: str | None
+
+    def as_dict(self) -> dict[str, object]:
+        """Serialize the rule for engine and audit consumers."""
+        result: dict[str, object] = {
+            "port": self.port.value,
+            "protocol": self.protocol.value,
+        }
+        if self.description is not None:
+            result["description"] = self.description
+        return result
+
+
+@dataclass(frozen=True, slots=True)
+class FirewallRequirement:
+    """Desired default-deny inbound firewall contract."""
+
+    policy: FirewallPolicy
+    allowed_inbound: tuple[FirewallRule, ...]
+
+    def __post_init__(self) -> None:
+        """Reject duplicate port/protocol rules."""
+        seen: set[tuple[int, NetworkProtocol]] = set()
+        for rule in self.allowed_inbound:
+            identity = (rule.port.value, rule.protocol)
+            if identity in seen:
+                message = (
+                    "duplicate firewall rule: "
+                    f"{rule.port.value}/{rule.protocol.value}"
+                )
+                raise ValueError(message)
+            seen.add(identity)
+
+    def as_dict(self) -> dict[str, object]:
+        """Serialize the desired firewall contract."""
+        return {
+            "policy": self.policy.value,
+            "allowedInbound": [rule.as_dict() for rule in self.allowed_inbound],
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -222,6 +272,7 @@ class HostProfileInventory:
     required_packages: tuple[PackageRequirement, ...]
     forbidden_packages: tuple[PackageName, ...]
     required_services: tuple[ServiceRequirement, ...]
+    firewall: FirewallRequirement | None
     configuration_files: tuple[ConfigurationFileRequirement, ...]
 
     def as_dict(self) -> dict[str, object]:
@@ -248,7 +299,7 @@ class HostProfileInventory:
                 "minimumActiveDevices": self.raid.minimum_active_devices.value,
                 "minimumUsableBytes": self.raid.minimum_usable_bytes.value,
             }
-        return {
+        result: dict[str, object] = {
             "id": self.resource_id.value,
             "os": {
                 "distribution": self.os.distribution.value,
@@ -274,6 +325,9 @@ class HostProfileInventory:
                 "files": [item.as_dict() for item in self.configuration_files]
             },
         }
+        if self.firewall is not None:
+            result["firewall"] = self.firewall.as_dict()
+        return result
 
 
 @dataclass(frozen=True, slots=True)
@@ -830,6 +884,7 @@ def _host_profile_inventory(document: ResourceDocument) -> HostProfileInventory:
             _service_requirement(item)
             for item in _mapping_list(services.get("required"), "required services")
         ),
+        firewall=_firewall_requirement(spec.get("firewall")),
         configuration_files=tuple(
             _configuration_requirement(item)
             for item in _mapping_list(configuration.get("files"), "configuration files")
@@ -1056,10 +1111,54 @@ def _package_requirement(content: Mapping[str, object]) -> PackageRequirement:
 
 def _service_requirement(content: Mapping[str, object]) -> ServiceRequirement:
     return ServiceRequirement(
-        name=ServiceName.from_boundary(content.get("name")),
+        name=SystemdUnitName.from_boundary(content.get("name")),
         state=RequiredServiceState.from_boundary(content.get("state")),
         status=RequiredServiceStatus.from_boundary(content.get("status")),
     )
+
+
+def _firewall_requirement(value: object) -> FirewallRequirement | None:
+    if value is None:
+        return None
+    firewall = _boundary_mapping(value, "host profile firewall")
+    return FirewallRequirement(
+        policy=FirewallPolicy.from_boundary(firewall.get("policy")),
+        allowed_inbound=tuple(
+            _firewall_rule(item)
+            for item in _mapping_list(
+                firewall.get("allowedInbound"), "firewall rules"
+            )
+        ),
+    )
+
+
+def _firewall_rule(content: Mapping[str, object]) -> FirewallRule:
+    raw_description = content.get("description")
+    if raw_description is not None and not isinstance(raw_description, str):
+        message = "validated firewall rule description is not a string"
+        raise TypeError(message)
+    return FirewallRule(
+        port=TcpPort.from_boundary(content.get("port")),
+        protocol=NetworkProtocol.from_boundary(content.get("protocol")),
+        description=raw_description,
+    )
+
+
+def firewall_rules_for_server(
+    firewall: FirewallRequirement, ssh_port: TcpPort
+) -> tuple[FirewallRule, ...]:
+    """Return effective inbound rules with the server's SSH port guaranteed."""
+    declared = {
+        (rule.port.value, rule.protocol) for rule in firewall.allowed_inbound
+    }
+    if (ssh_port.value, NetworkProtocol.TCP) in declared:
+        return firewall.allowed_inbound
+    ssh_rule = FirewallRule(
+        port=ssh_port,
+        protocol=NetworkProtocol.TCP,
+        description="ssh",
+    )
+    return (ssh_rule, *firewall.allowed_inbound)
 
 
 def _configuration_requirement(

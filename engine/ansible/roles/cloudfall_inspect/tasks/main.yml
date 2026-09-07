@@ -379,6 +379,82 @@
         | items2dict
       }}
 
+- name: Collect systemd timer unit states
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/systemctl
+      - list-units
+      - --type=timer
+      - --all
+      - --output=json
+      - --no-pager
+  register: cloudfall_inspect_timer_units
+  changed_when: false
+
+- name: Collect systemd timer unit files
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/systemctl
+      - list-unit-files
+      - --type=timer
+      - --output=json
+      - --no-pager
+  register: cloudfall_inspect_timer_files
+  changed_when: false
+
+- name: Normalize systemd timer enablement evidence
+  ansible.builtin.set_fact:
+    cloudfall_inspect_timer_statuses: >-
+      {{
+        cloudfall_inspect_timer_files.stdout
+        | from_json
+        | items2dict(key_name='unit_file', value_name='state')
+      }}
+
+- name: Initialize systemd timer evidence
+  ansible.builtin.set_fact:
+    cloudfall_inspect_timers: {}
+
+- name: Normalize systemd timer evidence
+  ansible.builtin.set_fact:
+    cloudfall_inspect_timers: >-
+      {{
+        cloudfall_inspect_timers
+        | combine({
+            item.unit: {
+              'name': item.unit,
+              'state': 'running' if item.active == 'active' else 'stopped',
+              'status': cloudfall_inspect_timer_statuses.get(
+                item.unit, 'unknown'
+              ),
+              'source': 'systemd'
+            }
+          })
+      }}
+  loop: "{{ cloudfall_inspect_timer_units.stdout | from_json }}"
+  loop_control:
+    label: "{{ item.unit }}"
+
+- name: Check whether nft is installed
+  ansible.builtin.stat:
+    path: /usr/sbin/nft
+    get_checksum: false
+  register: cloudfall_inspect_nft_binary
+
+- name: Read the managed nftables table
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/nft
+      - --json
+      - list
+      - table
+      - inet
+      - cloudfall
+  register: cloudfall_inspect_nft_table
+  changed_when: false
+  failed_when: false
+  when: cloudfall_inspect_nft_binary.stat.exists
+
 - name: Build normalized observation snapshot
   ansible.builtin.set_fact:
     cloudfall_inspect_snapshot:
@@ -429,6 +505,18 @@
             devices: "{{ cloudfall_inspect_smart_devices }}"
         packages: "{{ cloudfall_inspect_packages }}"
         services: "{{ cloudfall_inspect_services }}"
+        timers: "{{ cloudfall_inspect_timers }}"
+        firewall:
+          nftAvailable: "{{ cloudfall_inspect_nft_binary.stat.exists }}"
+          managedTableJson: >-
+            {{
+              cloudfall_inspect_nft_table.stdout
+              if (
+                cloudfall_inspect_nft_binary.stat.exists
+                and cloudfall_inspect_nft_table.rc == 0
+              )
+              else none
+            }}
         configuration: "{{ cloudfall_inspect_configuration }}"
 
 - name: Create controller observation directory
