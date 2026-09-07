@@ -53,6 +53,14 @@ can drive the full migration path — import a blueprint, build artifacts,
 converge the baseline, services, and domains, deploy with automatic
 rollback, and audit the result — without shell access to any server.
 
+The `migrate` tool (also `cloudfall migrate` on the CLI) chains all of that
+as one resumable plan with persisted step progress: baseline, services,
+builds, deployments, HTTP routes, a DNS-verification pause at the cutover
+moment, TLS issuance, and a final evidence pass that requires a compliant
+audit and healthy routes before declaring success. Without confirmation it
+returns the plan preview; interrupted or paused runs resume at the first
+incomplete step.
+
 The SDK validates v1 Server, HostProfile, Project, and Component resources and
 builds a read-only typed index. The `cloudfall state validate` command is its first
 system boundary.

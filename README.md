@@ -91,7 +91,20 @@ The importer never guesses silently. `IMPORT-REPORT.md` records everything
 that was not imported (cron, static, and container services today), every
 assumption it made, and every action required before cutover, including data
 migration and DNS steps. Merge the emitted fragment with your servers and
-host profiles, validate, then build and deploy releases as usual.
+host profiles, validate, then drive the whole migration with one resumable
+plan:
+
+```console
+uv run cloudfall migrate state/production --build acme-api=main
+uv run cloudfall migrate state/production --build acme-api=main --yes
+```
+
+Without `--yes` the command shows the plan; with it, the plan executes step
+by step — baseline, services, artifact builds, health-gated deployments,
+HTTP routes, a DNS-verification pause at the cutover moment, TLS issuance,
+and a final evidence pass that requires a compliant audit and healthy
+routes. Progress persists after every step, so a failed step or the DNS
+pause resumes exactly where it stopped.
 
 ## Inspect servers and audit drift
 

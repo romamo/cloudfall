@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from cloudfall.operations import FleetOperations
     from cloudfall.validation import ValidatedState
 
+from cloudfall.agent_tools import AgentConfig
 from cloudfall.audit import AuditStatus, audit_inventory
 from cloudfall.dashboard import build_dashboard
 from cloudfall.domain import ReleaseId, ResourceId
@@ -33,6 +34,7 @@ from cloudfall.lifecycle import (
     restart,
     rollback,
 )
+from cloudfall.migrate import MigrateError, MigrateOptions, execute_migration
 from cloudfall.observation import load_observations
 from cloudfall.operations import UtcTimestamp, build_operations_view
 from cloudfall.service_evidence import (
@@ -191,7 +193,103 @@ def _parser() -> argparse.ArgumentParser:
 
     _add_lifecycle_parsers(commands)
     _add_import_parsers(commands)
+    _add_migrate_parser(commands)
     return parser
+
+
+def _add_migrate_parser(
+    commands: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    migrate_parser = commands.add_parser(
+        "migrate",
+        help="run the resumable end-to-end migration plan",
+    )
+    migrate_parser.add_argument("state_directory", type=Path)
+    migrate_parser.add_argument(
+        "--schemas",
+        type=Path,
+        default=Path("state/schemas/v1"),
+        help="versioned schema directory (default: state/schemas/v1)",
+    )
+    migrate_parser.add_argument(
+        "--engine",
+        type=Path,
+        default=Path("engine"),
+        help="engine directory containing ansible contracts (default: engine)",
+    )
+    migrate_parser.add_argument(
+        "--inventory-file",
+        type=Path,
+        default=Path("tmp/ansible-inventory.json"),
+        help="rendered inventory path (default: tmp/ansible-inventory.json)",
+    )
+    migrate_parser.add_argument(
+        "--observed",
+        type=Path,
+        default=Path("tmp/observed"),
+        help="server observation directory (default: tmp/observed)",
+    )
+    migrate_parser.add_argument(
+        "--service-observed",
+        type=Path,
+        default=Path("tmp/observed-services"),
+        help="domain observation directory (default: tmp/observed-services)",
+    )
+    migrate_parser.add_argument(
+        "--deployments",
+        type=Path,
+        default=Path("tmp/deployments"),
+        help="domain receipt directory (default: tmp/deployments)",
+    )
+    migrate_parser.add_argument(
+        "--receipts",
+        type=Path,
+        default=Path("tmp/releases"),
+        help="release receipt directory (default: tmp/releases)",
+    )
+    migrate_parser.add_argument(
+        "--artifacts",
+        type=Path,
+        default=Path("tmp/artifacts"),
+        help="artifact directory (default: tmp/artifacts)",
+    )
+    migrate_parser.add_argument(
+        "--plan-file",
+        type=Path,
+        default=Path("tmp/migrate/plan.json"),
+        help="persisted plan location (default: tmp/migrate/plan.json)",
+    )
+    migrate_parser.add_argument(
+        "--build",
+        action="append",
+        default=[],
+        metavar="COMPONENT=GIT_REF",
+        help="build this component from a git ref (repeatable)",
+    )
+    migrate_parser.add_argument(
+        "--release",
+        action="append",
+        default=[],
+        metavar="COMPONENT=RELEASE_ID",
+        help="deploy this component from an already-built release",
+    )
+    migrate_parser.add_argument(
+        "--env-file",
+        action="append",
+        default=[],
+        metavar="COMPONENT=PATH",
+        help="environment file passed to this component's deployment",
+    )
+    migrate_parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="execute the plan; without this flag only the plan is shown",
+    )
+    migrate_parser.add_argument(
+        "--restart",
+        action="store_true",
+        help="discard the persisted plan and start over",
+    )
 
 
 def _add_lifecycle_parsers(
@@ -353,6 +451,7 @@ def _dispatch(
         "deploy": _run_deploy,
         "health": _run_health,
         "inventory:show": _run_inventory_show,
+        "migrate": _run_migrate,
         "restart": _run_restart,
         "rollback": _run_rollback,
         "services:inspect": _run_services_inspect,
@@ -369,7 +468,8 @@ def _dispatch(
 
 
 def _command_key(arguments: Namespace) -> str:
-    if arguments.command in {"audit", "deploy", "health", "restart", "rollback"}:
+    top_level = {"audit", "deploy", "health", "migrate", "restart", "rollback"}
+    if arguments.command in top_level:
         return str(arguments.command)
     subcommand = getattr(arguments, f"{arguments.command}_command", None)
     return f"{arguments.command}:{subcommand}"
@@ -552,6 +652,69 @@ def _run_health(
         return _lifecycle_exit(error)
     _write_json(result.as_dict())
     return 0 if result.healthy else 1
+
+
+def _run_migrate(
+    arguments: Namespace, _state: ValidatedState, schema_directory: Path
+) -> int:
+    try:
+        builds = _key_value_pairs(arguments.build, "--build")
+        releases = _key_value_pairs(arguments.release, "--release")
+        environment_files = {
+            component: Path(value)
+            for component, value in _key_value_pairs(
+                arguments.env_file, "--env-file"
+            ).items()
+        }
+    except ValueError as error:
+        payload = {
+            "status": "error",
+            "error": {"code": "invalid_argument", "message": str(error)},
+        }
+        sys.stderr.write(f"{json.dumps(payload, sort_keys=True)}\n")
+        return 2
+    config = AgentConfig(
+        state_directory=Path(arguments.state_directory),
+        schema_directory=schema_directory,
+        engine_directory=Path(arguments.engine),
+        inventory_file=Path(arguments.inventory_file),
+        observed_directory=Path(arguments.observed),
+        service_observed_directory=Path(arguments.service_observed),
+        deployments_directory=Path(arguments.deployments),
+        releases_directory=Path(arguments.receipts),
+        artifacts_directory=Path(arguments.artifacts),
+    )
+    options = MigrateOptions(
+        plan_file=Path(arguments.plan_file),
+        builds=builds,
+        releases=releases,
+        environment_files=environment_files,
+        execute=arguments.yes,
+        restart=arguments.restart,
+    )
+    try:
+        result = execute_migration(config, options)
+    except MigrateError as error:
+        sys.stderr.write(f"{json.dumps(error.as_dict(), sort_keys=True)}\n")
+        return 2
+    _write_json(result)
+    status = str(result["status"])
+    if status in {"ok", "plan"}:
+        return 0
+    if status == "paused":
+        return 3
+    return 1
+
+
+def _key_value_pairs(entries: list[str], option: str) -> dict[str, str]:
+    pairs: dict[str, str] = {}
+    for entry in entries:
+        component, separator, value = entry.partition("=")
+        if not separator or not component or not value:
+            message = f"{option} expects COMPONENT=VALUE, got {entry!r}"
+            raise ValueError(message)
+        pairs[component] = value
+    return pairs
 
 
 def _write_json(payload: object) -> None:

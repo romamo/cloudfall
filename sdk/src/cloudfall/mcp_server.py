@@ -215,6 +215,25 @@ def _mutation_registrations(
             )
         )
 
+    def migrate(  # noqa: PLR0913 - boundary signature mirrors the toolset.
+        builds: dict[str, str] | None = None,
+        releases: dict[str, str] | None = None,
+        environment_files: dict[str, str] | None = None,
+        plan_file: str = "tmp/migrate/plan.json",
+        restart_plan: bool = False,  # noqa: FBT001, FBT002 - explicit gate.
+        confirm: bool = False,  # noqa: FBT001, FBT002 - explicit agent gate.
+    ) -> str:
+        return _dump(
+            toolset.migrate(
+                builds,
+                releases,
+                environment_files,
+                plan_file,
+                restart_plan=restart_plan,
+                confirm=confirm,
+            )
+        )
+
     return (
         (
             deploy_component,
@@ -256,6 +275,15 @@ def _mutation_registrations(
             "converge_domains",
             "Converge every declared public domain route; requires "
             "confirm=true",
+            destructive,
+        ),
+        (
+            migrate,
+            "migrate",
+            "Preview (without confirm) or execute (confirm=true) the "
+            "resumable end-to-end migration plan: baseline, services, "
+            "builds, deployments, routes, DNS verification, TLS, and a "
+            "final compliance-proving evidence pass",
             destructive,
         ),
     )

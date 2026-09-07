@@ -101,7 +101,10 @@ monitoring, and rollback path.
   (`cloudfall-mcp` with fifteen annotated tools covering import, artifact
   build, baseline/services/domains convergence, deploy/rollback/restart,
   and the full evidence pipeline)
-- A `migrate` orchestrator chaining M1–M4 as a resumable plan
+- A `migrate` orchestrator chaining M1–M4 as a resumable plan ✔
+  (`cloudfall migrate` and the `migrate` MCP tool: persisted step progress,
+  a DNS-verification pause at the cutover moment, and a final evidence pass
+  requiring a compliant audit and healthy routes)
 
 Exit: an AI agent completes the M4 migration through MCP without shell access
 to the servers. The tool surface for that exit exists; the live run joins

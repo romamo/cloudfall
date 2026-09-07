@@ -124,6 +124,22 @@ def test_import_render_tool_maps_a_blueprint(tmp_path: Path) -> None:
     assert result["components"] == ["acme-worker"]
 
 
+def test_migrate_tool_previews_the_plan_without_confirmation(
+    tmp_path: Path,
+) -> None:
+    toolset = AgentToolset(_config(tmp_path))
+
+    result = toolset.migrate(
+        builds={"crm-backend": "main"},
+        plan_file=str(tmp_path / "plan.json"),
+    )
+
+    assert result["status"] == "plan"
+    assert result["next"] == "baseline"
+    assert "confirm=true" in str(result["instruction"])
+    assert not (tmp_path / "plan.json").exists()
+
+
 def test_mcp_server_registers_annotated_tools(tmp_path: Path) -> None:
     pytest.importorskip("mcp")
     from cloudfall.mcp_server import (  # noqa: PLC0415 - optional extra.
@@ -142,6 +158,7 @@ def test_mcp_server_registers_annotated_tools(tmp_path: Path) -> None:
         "deploy_component",
         "converge_baseline",
         "converge_domains",
+        "migrate",
     } <= set(tools)
     assert tools["audit_servers"].annotations is not None
     assert tools["audit_servers"].annotations.read_only_hint is True

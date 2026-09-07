@@ -31,6 +31,7 @@ from cloudfall.lifecycle import (
     rollback,
     run_engine_playbook,
 )
+from cloudfall.migrate import MigrateError, MigrateOptions, execute_migration
 from cloudfall.observation import load_observations
 from cloudfall.operations import UtcTimestamp, build_operations_view
 from cloudfall.service_evidence import (
@@ -363,6 +364,41 @@ class AgentToolset:
                 ),
             },
         )
+
+    def migrate(  # noqa: PLR0913 - boundary signature mirrors the CLI.
+        self,
+        builds: dict[str, str] | None = None,
+        releases: dict[str, str] | None = None,
+        environment_files: dict[str, str] | None = None,
+        plan_file: str = "tmp/migrate/plan.json",
+        *,
+        restart_plan: bool = False,
+        confirm: bool = False,
+    ) -> dict[str, object]:
+        """Preview or execute the resumable end-to-end migration plan."""
+        options = MigrateOptions(
+            plan_file=self._path(plan_file),
+            builds=builds if builds is not None else {},
+            releases=releases if releases is not None else {},
+            environment_files={
+                component: self._path(value)
+                for component, value in (
+                    environment_files if environment_files is not None else {}
+                ).items()
+            },
+            execute=confirm,
+            restart=restart_plan,
+        )
+        try:
+            result = execute_migration(self._config, options)
+        except (MigrateError, StateValidationError) as error:
+            return error.as_dict()
+        if not confirm:
+            result["instruction"] = (
+                "review the plan and call this tool again with confirm=true "
+                "to execute it; interrupted runs resume automatically"
+            )
+        return result
 
     def _converge(
         self,
