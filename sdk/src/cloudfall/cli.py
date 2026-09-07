@@ -17,7 +17,17 @@ if TYPE_CHECKING:
 
 from cloudfall.audit import AuditStatus, audit_inventory
 from cloudfall.dashboard import build_dashboard
+from cloudfall.domain import ReleaseId, ResourceId
 from cloudfall.inventory import PlatformInventory
+from cloudfall.lifecycle import (
+    DeployOptions,
+    EngineContext,
+    LifecycleError,
+    deploy,
+    health,
+    restart,
+    rollback,
+)
 from cloudfall.observation import load_observations
 from cloudfall.operations import UtcTimestamp, build_operations_view
 from cloudfall.service_evidence import (
@@ -173,7 +183,77 @@ def _parser() -> argparse.ArgumentParser:
         default=Path("state/schemas/v1"),
         help="versioned schema directory (default: state/schemas/v1)",
     )
+
+    deploy_parser = commands.add_parser(
+        "deploy", help="deploy one built component release"
+    )
+    _add_lifecycle_arguments(deploy_parser)
+    deploy_parser.add_argument(
+        "--release",
+        required=True,
+        help="release id produced by cloudfall-engine artifact build",
+    )
+    deploy_parser.add_argument(
+        "--artifacts",
+        type=Path,
+        default=Path("tmp/artifacts"),
+        help="artifact directory (default: tmp/artifacts)",
+    )
+    deploy_parser.add_argument(
+        "--env-file",
+        type=Path,
+        help="optional controller-side environment file for the component",
+    )
+    deploy_parser.add_argument(
+        "--receipts",
+        type=Path,
+        default=Path("tmp/releases"),
+        help="release receipt directory (default: tmp/releases)",
+    )
+
+    rollback_parser = commands.add_parser(
+        "rollback", help="switch one component back to an existing release"
+    )
+    _add_lifecycle_arguments(rollback_parser)
+    rollback_parser.add_argument(
+        "--release",
+        required=True,
+        help="existing release id to activate",
+    )
+
+    restart_parser = commands.add_parser(
+        "restart", help="restart one component behind its health check"
+    )
+    _add_lifecycle_arguments(restart_parser)
+
+    health_parser = commands.add_parser(
+        "health", help="probe one component's declared health check"
+    )
+    _add_lifecycle_arguments(health_parser)
     return parser
+
+
+def _add_lifecycle_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("state_directory", type=Path)
+    parser.add_argument("component")
+    parser.add_argument(
+        "--schemas",
+        type=Path,
+        default=Path("state/schemas/v1"),
+        help="versioned schema directory (default: state/schemas/v1)",
+    )
+    parser.add_argument(
+        "--engine",
+        type=Path,
+        default=Path("engine"),
+        help="engine directory containing ansible contracts (default: engine)",
+    )
+    parser.add_argument(
+        "--inventory-file",
+        type=Path,
+        default=Path("tmp/ansible-inventory.json"),
+        help="rendered inventory path (default: tmp/ansible-inventory.json)",
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -195,7 +275,11 @@ def _dispatch(
     handlers: dict[str, Callable[[Namespace, ValidatedState, Path], int]] = {
         "audit": _run_audit,
         "dashboard:build": _run_dashboard_build,
+        "deploy": _run_deploy,
+        "health": _run_health,
         "inventory:show": _run_inventory_show,
+        "restart": _run_restart,
+        "rollback": _run_rollback,
         "services:inspect": _run_services_inspect,
         "services:status": _run_services_status,
         "state:validate": _run_state_validate,
@@ -210,8 +294,8 @@ def _dispatch(
 
 
 def _command_key(arguments: Namespace) -> str:
-    if arguments.command == "audit":
-        return "audit"
+    if arguments.command in {"audit", "deploy", "health", "restart", "rollback"}:
+        return str(arguments.command)
     subcommand = getattr(arguments, f"{arguments.command}_command", None)
     return f"{arguments.command}:{subcommand}"
 
@@ -312,6 +396,87 @@ def _service_operations(
         domain_observations,
         generated_at=UtcTimestamp.now(),
     )
+
+
+def _engine_context(arguments: Namespace, schema_directory: Path) -> EngineContext:
+    return EngineContext(
+        state_directory=Path(arguments.state_directory),
+        schema_directory=schema_directory,
+        engine_directory=Path(arguments.engine),
+        inventory_file=Path(arguments.inventory_file),
+    )
+
+
+def _lifecycle_exit(error: LifecycleError) -> int:
+    sys.stderr.write(f"{json.dumps(error.as_dict(), sort_keys=True)}\n")
+    return 1 if error.code == "lifecycle_execution_failed" else 2
+
+
+def _run_deploy(
+    arguments: Namespace, _state: ValidatedState, schema_directory: Path
+) -> int:
+    try:
+        result = deploy(
+            _engine_context(arguments, schema_directory),
+            ResourceId.from_boundary(arguments.component),
+            ReleaseId.from_boundary(arguments.release),
+            Path(arguments.artifacts),
+            DeployOptions(
+                environment_file=(
+                    Path(arguments.env_file)
+                    if arguments.env_file is not None
+                    else None
+                ),
+                receipt_directory=Path(arguments.receipts),
+            ),
+        )
+    except LifecycleError as error:
+        return _lifecycle_exit(error)
+    _write_json(result.as_dict())
+    return 0
+
+
+def _run_rollback(
+    arguments: Namespace, _state: ValidatedState, schema_directory: Path
+) -> int:
+    try:
+        result = rollback(
+            _engine_context(arguments, schema_directory),
+            ResourceId.from_boundary(arguments.component),
+            ReleaseId.from_boundary(arguments.release),
+        )
+    except LifecycleError as error:
+        return _lifecycle_exit(error)
+    _write_json(result.as_dict())
+    return 0
+
+
+def _run_restart(
+    arguments: Namespace, _state: ValidatedState, schema_directory: Path
+) -> int:
+    try:
+        result = restart(
+            _engine_context(arguments, schema_directory),
+            ResourceId.from_boundary(arguments.component),
+        )
+    except LifecycleError as error:
+        return _lifecycle_exit(error)
+    _write_json(result.as_dict())
+    return 0
+
+
+def _run_health(
+    arguments: Namespace, _state: ValidatedState, schema_directory: Path
+) -> int:
+    try:
+        result = health(
+            _engine_context(arguments, schema_directory),
+            ResourceId.from_boundary(arguments.component),
+        )
+    except LifecycleError as error:
+        return _lifecycle_exit(error)
+    _write_json(result.as_dict())
+    return 0 if result.healthy else 1
 
 
 def _write_json(payload: object) -> None:

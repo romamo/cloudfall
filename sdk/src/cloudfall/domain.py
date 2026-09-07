@@ -660,6 +660,26 @@ class PostgresDatabaseName:
 
 
 @dataclass(frozen=True, slots=True)
+class ReleaseId:
+    """Validated component release identifier."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        """Enforce the timestamp-and-commit release naming contract."""
+        if not re.fullmatch(
+            r"[0-9]{8}T[0-9]{6}Z-[0-9a-f]{7,40}", self.value
+        ):
+            message = f"invalid release id: {self.value!r}"
+            raise ValueError(message)
+
+    @classmethod
+    def from_boundary(cls, value: object) -> ReleaseId:
+        """Coerce a boundary value into a release identifier."""
+        return cls(_required_string(value, "release id"))
+
+
+@dataclass(frozen=True, slots=True)
 class PostgresMajorVersion:
     """Validated PostgreSQL major version."""
 

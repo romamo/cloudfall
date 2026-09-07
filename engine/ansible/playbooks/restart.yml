@@ -1,0 +1,30 @@
+---
+- name: Restart one Cloudfall component behind its health check
+  hosts: cloudfall_servers
+  become: true
+  gather_facts: true
+  any_errors_fatal: true
+  serial: 1
+  pre_tasks:
+    - name: Require an explicit component selection
+      ansible.builtin.assert:
+        that:
+          - cloudfall_deploy_component_id is defined
+        fail_msg: >-
+          Restart requires the cloudfall_deploy_component_id extra variable
+      run_once: true
+  tasks:
+    - name: Restart the selected component on its declared servers
+      ansible.builtin.include_role:
+        name: cloudfall_deploy
+        tasks_from: restart
+      vars:
+        cloudfall_deploy_component: "{{ item }}"
+      loop: >-
+        {{
+          cloudfall_components | default([])
+          | selectattr('id', 'equalto', cloudfall_deploy_component_id)
+          | list
+        }}
+      loop_control:
+        label: "{{ item.id }}"

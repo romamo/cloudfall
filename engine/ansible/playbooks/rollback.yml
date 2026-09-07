@@ -1,0 +1,32 @@
+---
+- name: Roll back one Cloudfall component release
+  hosts: cloudfall_servers
+  become: true
+  gather_facts: true
+  any_errors_fatal: true
+  serial: 1
+  pre_tasks:
+    - name: Require an explicit component and release selection
+      ansible.builtin.assert:
+        that:
+          - cloudfall_deploy_component_id is defined
+          - cloudfall_deploy_release is defined
+        fail_msg: >-
+          Rollback requires cloudfall_deploy_component_id and
+          cloudfall_deploy_release extra variables
+      run_once: true
+  tasks:
+    - name: Roll the selected component back on its declared servers
+      ansible.builtin.include_role:
+        name: cloudfall_deploy
+        tasks_from: rollback
+      vars:
+        cloudfall_deploy_component: "{{ item }}"
+      loop: >-
+        {{
+          cloudfall_components | default([])
+          | selectattr('id', 'equalto', cloudfall_deploy_component_id)
+          | list
+        }}
+      loop_control:
+        label: "{{ item.id }}"

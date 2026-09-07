@@ -3,8 +3,28 @@
 This module provides the stable Python API used by AI agents, future CLI and MCP
 entry points, and other operational tooling.
 
-Its first milestone is read-only: load state, validate it strictly, resolve
+Most of the SDK is read-only: load state, validate it strictly, resolve
 references, and expose inventory queries without depending on Ansible internals.
+
+The lifecycle module adds the first mutating operations: `deploy()`,
+`rollback()`, `restart()`, and `health()` with structured JSON results. They
+verify artifacts (schema, identity, and recomputed digest) before anything
+runs, then execute through the engine's process boundaries only — the
+`cloudfall_engine` command-line contract for inventory rendering and the
+engine's playbook contract for execution — never Ansible internals. Each
+operation is split into a pure, testable execution plan and a thin executor:
+
+```console
+uv run cloudfall deploy state/examples crm-backend --release <release-id>
+uv run cloudfall rollback state/examples crm-backend --release <release-id>
+uv run cloudfall restart state/examples crm-backend
+uv run cloudfall health state/examples crm-backend
+```
+
+`deploy` refuses to run when the built artifact is missing, misidentified, or
+fails digest verification, and refuses to report success if the engine wrote
+no release receipt. `health` exits `0` when every declared server passes the
+component's declared health check and `1` otherwise.
 
 The SDK validates v1 Server, HostProfile, Project, and Component resources and
 builds a read-only typed index. The `cloudfall state validate` command is its first

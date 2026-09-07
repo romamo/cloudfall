@@ -1,0 +1,17 @@
+---
+- name: Validate restart target and declaration
+  ansible.builtin.assert:
+    that:
+      - ansible_facts["distribution"] == "Debian"
+      - ansible_facts["service_mgr"] == "systemd"
+      - cloudfall_deploy_component.service.manager == "systemd"
+    fail_msg: Restart requires a Debian systemd host
+
+- name: Restart the component service
+  ansible.builtin.systemd_service:
+    name: "{{ cloudfall_deploy_component.service.name }}.service"
+    state: restarted
+    daemon_reload: true
+
+- name: Require the restarted component to pass its health check
+  ansible.builtin.include_tasks: health_gate.yml

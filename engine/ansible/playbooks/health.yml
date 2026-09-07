@@ -1,0 +1,30 @@
+---
+- name: Probe one Cloudfall component's declared health check
+  hosts: cloudfall_servers
+  become: false
+  gather_facts: false
+  any_errors_fatal: true
+  pre_tasks:
+    - name: Require an explicit component selection
+      ansible.builtin.assert:
+        that:
+          - cloudfall_deploy_component_id is defined
+        fail_msg: >-
+          Health probing requires the cloudfall_deploy_component_id extra
+          variable
+      run_once: true
+  tasks:
+    - name: Probe the selected component on its declared servers
+      ansible.builtin.include_role:
+        name: cloudfall_deploy
+        tasks_from: health
+      vars:
+        cloudfall_deploy_component: "{{ item }}"
+      loop: >-
+        {{
+          cloudfall_components | default([])
+          | selectattr('id', 'equalto', cloudfall_deploy_component_id)
+          | list
+        }}
+      loop_control:
+        label: "{{ item.id }}"

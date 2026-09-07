@@ -66,7 +66,9 @@ follows the same pattern afterward.
   automatic rollback on failed health checks, and release receipts ✔
   (`task deploy`)
 - SDK methods `deploy()`, `rollback()`, `restart()`, `health()` with
-  structured JSON results
+  structured JSON results ✔ (`cloudfall deploy|rollback|restart|health`,
+  executing through the engine's process boundaries; explicit rollback to
+  any retained release included)
 - Secrets v1: environment files generated from secret references (a local
   environment file per component is supported today; reference-driven
   generation pending)

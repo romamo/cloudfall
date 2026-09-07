@@ -102,3 +102,24 @@ argument_specs:
         type: str
       cloudfall_deploy_uv_url:
         type: str
+  rollback:
+    short_description: Roll one component back to an existing release
+    options:
+      cloudfall_deploy_component:
+        type: dict
+        required: true
+      cloudfall_deploy_release:
+        type: str
+        required: true
+  restart:
+    short_description: Restart one component behind its health check
+    options:
+      cloudfall_deploy_component:
+        type: dict
+        required: true
+  health:
+    short_description: Probe one component's declared health check
+    options:
+      cloudfall_deploy_component:
+        type: dict
+        required: true

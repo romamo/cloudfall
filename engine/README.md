@@ -130,7 +130,17 @@ declared servers, one host at a time:
 ```console
 task deploy COMPONENT=crm-backend RELEASE=<release-id>
 task deploy COMPONENT=crm-backend RELEASE=<release-id> ENV_FILE=/path/to/env
+task rollback COMPONENT=crm-backend RELEASE=<previous-release-id>
+task restart COMPONENT=crm-backend
+task health COMPONENT=crm-backend
 ```
+
+These tasks call the SDK's lifecycle commands, which verify the artifact and
+then execute the engine's `deploy.yml`, `rollback.yml`, `restart.yml`, and
+`health.yml` playbook contracts. Rollback activates an already-retained
+release without re-transferring an artifact and requires the declared health
+check to pass; it deliberately does not auto-restore on failure, because a
+failed rollback is an incident, not a deployment.
 
 The deploy role transfers the artifact and refuses it if the digest does not
 match the build metadata, unpacks it under `releases/<release-id>/`,

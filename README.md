@@ -36,8 +36,10 @@ Three modules with strict boundaries:
 
 Rules: state contains no execution logic, the SDK reads and validates state
 without Ansible internals, the engine never silently rewrites state, and
-entry points call the SDK rather than Ansible directly. See
-[`PROJECT_CONTEXT.md`](PROJECT_CONTEXT.md) for the full architecture.
+entry points call the SDK rather than Ansible directly. Mutating SDK
+operations execute through the engine's command-line and playbook contracts,
+never its internals. See [`PROJECT_CONTEXT.md`](PROJECT_CONTEXT.md) for the
+full architecture.
 
 ## Status
 

@@ -1,0 +1,19 @@
+---
+- name: Gate the component on its declared health check
+  ansible.builtin.uri:
+    url: >-
+      {{ cloudfall_deploy_component.healthCheck.scheme }}://127.0.0.1:{{
+        cloudfall_deploy_component.healthCheck.port
+      }}{{ cloudfall_deploy_component.healthCheck.path }}
+    status_code: >-
+      {{ cloudfall_deploy_component.healthCheck.expectedStatuses }}
+    timeout: "{{ cloudfall_deploy_component.healthCheck.timeoutSeconds }}"
+    return_content: false
+  register: cloudfall_deploy_gate
+  retries: >-
+    {{ cloudfall_deploy_component.healthCheck.attempts | int - 1 }}
+  delay: 3
+  until: >-
+    cloudfall_deploy_gate.status
+    in cloudfall_deploy_component.healthCheck.expectedStatuses
+  when: not ansible_check_mode

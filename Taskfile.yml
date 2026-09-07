@@ -142,17 +142,6 @@ tasks:
 
   deploy:
     desc: Deploy COMPONENT at RELEASE with a health-gated switch
-    deps:
-      - inventory
-    env:
-      ANSIBLE_CONFIG: engine/ansible/ansible.cfg
-    vars:
-      ARTIFACT_DIR: '{{ .ARTIFACT_DIR | default "tmp/artifacts" }}'
-      ARTIFACT_SHA256:
-        sh: >-
-          uv run python -c "import json; print(json.load(open(
-          '{{ .ARTIFACT_DIR | default "tmp/artifacts" }}/{{ .COMPONENT }}/{{ .RELEASE }}.json'
-          ))['spec']['archiveSha256'])"
     preconditions:
       - sh: test -n "{{ .COMPONENT }}"
         msg: Set COMPONENT to the component id to deploy
@@ -160,16 +149,43 @@ tasks:
         msg: Set RELEASE to a release id produced by artifact:build
     cmds:
       - >-
-        uv run ansible-playbook --inventory {{ .INVENTORY_FILE }}
-        --extra-vars cloudfall_deploy_component_id={{ .COMPONENT }}
-        --extra-vars cloudfall_deploy_release={{ .RELEASE }}
-        --extra-vars
-        cloudfall_deploy_artifact_archive={{ .ROOT_DIR }}/{{ .ARTIFACT_DIR }}/{{ .COMPONENT }}/{{ .RELEASE }}.tar.gz
-        --extra-vars cloudfall_deploy_artifact_sha256={{ .ARTIFACT_SHA256 }}
-        --extra-vars
-        cloudfall_deploy_receipt_directory={{ .ROOT_DIR }}/tmp/releases
-        {{ if .ENV_FILE }}--extra-vars cloudfall_deploy_environment_file={{ .ENV_FILE }}{{ end }}
-        engine/ansible/playbooks/deploy.yml
+        uv run cloudfall deploy {{ .STATE_DIR }} {{ .COMPONENT }}
+        --release {{ .RELEASE }} --schemas {{ .SCHEMA_DIR }}
+        --artifacts {{ .ARTIFACT_DIR | default "tmp/artifacts" }}
+        --receipts {{ .ROOT_DIR }}/tmp/releases
+        {{ if .ENV_FILE }}--env-file {{ .ENV_FILE }}{{ end }}
+
+  rollback:
+    desc: Roll COMPONENT back to an existing RELEASE
+    preconditions:
+      - sh: test -n "{{ .COMPONENT }}"
+        msg: Set COMPONENT to the component id to roll back
+      - sh: test -n "{{ .RELEASE }}"
+        msg: Set RELEASE to an existing release id on the servers
+    cmds:
+      - >-
+        uv run cloudfall rollback {{ .STATE_DIR }} {{ .COMPONENT }}
+        --release {{ .RELEASE }} --schemas {{ .SCHEMA_DIR }}
+
+  restart:
+    desc: Restart COMPONENT behind its declared health check
+    preconditions:
+      - sh: test -n "{{ .COMPONENT }}"
+        msg: Set COMPONENT to the component id to restart
+    cmds:
+      - >-
+        uv run cloudfall restart {{ .STATE_DIR }} {{ .COMPONENT }}
+        --schemas {{ .SCHEMA_DIR }}
+
+  health:
+    desc: Probe COMPONENT's declared health check
+    preconditions:
+      - sh: test -n "{{ .COMPONENT }}"
+        msg: Set COMPONENT to the component id to probe
+    cmds:
+      - >-
+        uv run cloudfall health {{ .STATE_DIR }} {{ .COMPONENT }}
+        --schemas {{ .SCHEMA_DIR }}
 
   domains:deploy:check:
     desc: Check declared domain routes without changing hosts
@@ -286,6 +302,18 @@ tasks:
         uv run ansible-playbook --syntax-check
         --inventory {{ .INVENTORY_FILE }}
         engine/ansible/playbooks/deploy.yml
+      - >-
+        uv run ansible-playbook --syntax-check
+        --inventory {{ .INVENTORY_FILE }}
+        engine/ansible/playbooks/rollback.yml
+      - >-
+        uv run ansible-playbook --syntax-check
+        --inventory {{ .INVENTORY_FILE }}
+        engine/ansible/playbooks/restart.yml
+      - >-
+        uv run ansible-playbook --syntax-check
+        --inventory {{ .INVENTORY_FILE }}
+        engine/ansible/playbooks/health.yml
       - >-
         uv run ansible-playbook --syntax-check
         --inventory {{ .INVENTORY_FILE }}
