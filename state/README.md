@@ -33,9 +33,10 @@ configuration files whose metadata or hash may be inspected.
 `observed-server.schema.json` defines the normalized, read-only evidence emitted
 by the engine. Observations are runtime evidence, not desired state, and belong
 under ignored controller storage such as `tmp/observed/`. They include
-structured NVMe SMART health when available, systemd timer states, and the
-managed nftables table as raw JSON evidence; configuration contents and
-credentials must never be written there.
+structured NVMe SMART health when available, systemd timer states, the
+managed nftables table as raw JSON evidence, and listening-socket evidence
+used to prove declared services bind only to loopback; configuration
+contents and credentials must never be written there.
 
 `observed-domain.schema.json` validates controller-side DNS, edge, TLS, origin,
 and public HTTP evidence. `deployment-receipt.schema.json` validates receipts

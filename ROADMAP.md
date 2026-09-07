@@ -47,8 +47,9 @@ Installable, audited infrastructure services, starting with exactly two.
 - Nginx site role: virtual hosts rendered from `Domain` resources, certbot
   with timer compliance, canonical client-address forwarding, and
   deployment receipts ✔ (`task domains:deploy`)
-- Audit integration: packages, units, config hashes ✔ (existing host-profile
-  checks); listening-socket evidence pending
+- Audit integration: packages, units, config hashes, and listening-socket
+  evidence proving each declared service binds only to its loopback
+  address ✔
 
 Catalog breadth (Redis, RabbitMQ, Elasticsearch, MySQL, Node runtimes)
 follows the same pattern afterward.

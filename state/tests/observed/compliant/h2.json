@@ -9,7 +9,7 @@
     "server": "h2",
     "profile": "debian-application",
     "observedAt": "2026-07-15T10:00:00Z",
-    "collectorVersion": "0.3.0",
+    "collectorVersion": "0.4.0",
     "os": {
       "distribution": "Debian",
       "version": "12.10",
@@ -118,6 +118,9 @@
     "firewall": {
       "nftAvailable": true,
       "managedTableJson": "{\"nftables\": [{\"metainfo\": {\"version\": \"1.0.6\", \"release_name\": \"Lester Gooch #5\", \"json_schema_version\": 1}}, {\"table\": {\"family\": \"inet\", \"name\": \"cloudfall\", \"handle\": 1}}, {\"chain\": {\"family\": \"inet\", \"table\": \"cloudfall\", \"name\": \"input\", \"handle\": 1, \"type\": \"filter\", \"hook\": \"input\", \"prio\": 0, \"policy\": \"drop\"}}, {\"chain\": {\"family\": \"inet\", \"table\": \"cloudfall\", \"name\": \"forward\", \"handle\": 2, \"type\": \"filter\", \"hook\": \"forward\", \"prio\": 0, \"policy\": \"drop\"}}, {\"chain\": {\"family\": \"inet\", \"table\": \"cloudfall\", \"name\": \"output\", \"handle\": 3, \"type\": \"filter\", \"hook\": \"output\", \"prio\": 0, \"policy\": \"accept\"}}, {\"rule\": {\"family\": \"inet\", \"table\": \"cloudfall\", \"chain\": \"input\", \"handle\": 4, \"expr\": [{\"match\": {\"op\": \"==\", \"left\": {\"meta\": {\"key\": \"iif\"}}, \"right\": \"lo\"}}, {\"accept\": null}]}}, {\"rule\": {\"family\": \"inet\", \"table\": \"cloudfall\", \"chain\": \"input\", \"handle\": 5, \"expr\": [{\"match\": {\"op\": \"in\", \"left\": {\"ct\": {\"key\": \"state\"}}, \"right\": [\"established\", \"related\"]}}, {\"accept\": null}]}}, {\"rule\": {\"family\": \"inet\", \"table\": \"cloudfall\", \"chain\": \"input\", \"handle\": 6, \"expr\": [{\"match\": {\"op\": \"in\", \"left\": {\"ct\": {\"key\": \"state\"}}, \"right\": \"invalid\"}}, {\"drop\": null}]}}, {\"rule\": {\"family\": \"inet\", \"table\": \"cloudfall\", \"chain\": \"input\", \"handle\": 7, \"comment\": \"ssh\", \"expr\": [{\"match\": {\"op\": \"==\", \"left\": {\"payload\": {\"protocol\": \"tcp\", \"field\": \"dport\"}}, \"right\": 22}}, {\"accept\": null}]}}, {\"rule\": {\"family\": \"inet\", \"table\": \"cloudfall\", \"chain\": \"input\", \"handle\": 8, \"comment\": \"http\", \"expr\": [{\"match\": {\"op\": \"==\", \"left\": {\"payload\": {\"protocol\": \"tcp\", \"field\": \"dport\"}}, \"right\": 80}}, {\"accept\": null}]}}, {\"rule\": {\"family\": \"inet\", \"table\": \"cloudfall\", \"chain\": \"input\", \"handle\": 9, \"comment\": \"https\", \"expr\": [{\"match\": {\"op\": \"==\", \"left\": {\"payload\": {\"protocol\": \"tcp\", \"field\": \"dport\"}}, \"right\": 443}}, {\"accept\": null}]}}]}"
+    },
+    "network": {
+      "listeningSockets": "udp   UNCONN 0 0      0.0.0.0:68      0.0.0.0:*\ntcp   LISTEN 0 128    0.0.0.0:22      0.0.0.0:*\ntcp   LISTEN 0 128    [::]:22         [::]:*\ntcp   LISTEN 0 511    0.0.0.0:80      0.0.0.0:*\ntcp   LISTEN 0 511    0.0.0.0:443     0.0.0.0:*"
     },
     "configuration": [
       {

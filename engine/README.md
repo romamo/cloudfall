@@ -142,7 +142,8 @@ a receipt.
 `ansible/roles/cloudfall_inspect` collects normalized evidence without changing the
 remote host. It reads Ansible facts, the Debian package database through
 `dpkg-query`, service facts, systemd timer units and unit files, the managed
-`inet cloudfall` nftables table as JSON, `lsblk`, `findmnt`, `/proc/mdstat`,
+`inet cloudfall` nftables table as JSON, listening TCP/UDP sockets from
+`ss -tulnH`, `lsblk`, `findmnt`, `/proc/mdstat`,
 `mdadm --detail --scan`, read-only NVMe reports from `smartctl`, and `stat` data for the
 configuration paths allowlisted by the server's `HostProfile`.
 

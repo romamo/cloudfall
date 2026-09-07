@@ -435,6 +435,14 @@
   loop_control:
     label: "{{ item.unit }}"
 
+- name: Collect listening sockets
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/ss
+      - -tulnH
+  register: cloudfall_inspect_listening_sockets
+  changed_when: false
+
 - name: Check whether nft is installed
   ansible.builtin.stat:
     path: /usr/sbin/nft
@@ -506,6 +514,8 @@
         packages: "{{ cloudfall_inspect_packages }}"
         services: "{{ cloudfall_inspect_services }}"
         timers: "{{ cloudfall_inspect_timers }}"
+        network:
+          listeningSockets: "{{ cloudfall_inspect_listening_sockets.stdout }}"
         firewall:
           nftAvailable: "{{ cloudfall_inspect_nft_binary.stat.exists }}"
           managedTableJson: >-

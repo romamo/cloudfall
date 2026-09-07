@@ -150,6 +150,59 @@ def test_audit_reports_missing_firewall_table_as_drift(tmp_path: Path) -> None:
     } <= drift_checks
 
 
+def test_audit_reports_wildcard_service_exposure_as_drift(
+    tmp_path: Path,
+) -> None:
+    observations = tmp_path / "observed"
+    shutil.copytree(COMPLIANT, observations)
+    h1 = observations / "h1.json"
+    content = json.loads(h1.read_text(encoding="utf-8"))
+    network = content["spec"]["network"]
+    network["listeningSockets"] = network["listeningSockets"].replace(
+        "127.0.0.1:5432", "0.0.0.0:5432"
+    )
+    h1.write_text(json.dumps(content), encoding="utf-8")
+
+    report = _audit(observations)
+    h1_report = next(server for server in report.servers if server.server_id == "h1")
+    bind_check = next(
+        check
+        for check in h1_report.checks
+        if check.check == "services.bind[postgresql-main]"
+    )
+
+    assert report.status is AuditStatus.DRIFT
+    assert bind_check.status is AuditStatus.DRIFT
+    assert bind_check.observed == {"listeners": ["0.0.0.0:5432"]}
+
+
+def test_audit_reports_missing_service_listener_as_drift(
+    tmp_path: Path,
+) -> None:
+    observations = tmp_path / "observed"
+    shutil.copytree(COMPLIANT, observations)
+    h1 = observations / "h1.json"
+    content = json.loads(h1.read_text(encoding="utf-8"))
+    network = content["spec"]["network"]
+    network["listeningSockets"] = "\n".join(
+        line
+        for line in network["listeningSockets"].splitlines()
+        if ":5432" not in line
+    )
+    h1.write_text(json.dumps(content), encoding="utf-8")
+
+    report = _audit(observations)
+    h1_report = next(server for server in report.servers if server.server_id == "h1")
+    bind_check = next(
+        check
+        for check in h1_report.checks
+        if check.check == "services.bind[postgresql-main]"
+    )
+
+    assert bind_check.status is AuditStatus.DRIFT
+    assert bind_check.observed is None
+
+
 def test_missing_observation_is_unknown(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],

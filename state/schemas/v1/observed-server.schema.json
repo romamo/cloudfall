@@ -430,6 +430,18 @@
             "additionalProperties": false
           }
         },
+        "network": {
+          "type": "object",
+          "properties": {
+            "listeningSockets": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "listeningSockets"
+          ],
+          "additionalProperties": false
+        },
         "timers": {
           "type": "object",
           "propertyNames": {
@@ -539,6 +551,7 @@
         "services",
         "timers",
         "firewall",
+        "network",
         "configuration"
       ],
       "additionalProperties": false

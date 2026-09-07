@@ -21,6 +21,7 @@ if TYPE_CHECKING:
         PlatformInventory,
         RaidRequirement,
         ServerInventory,
+        ServiceInventory,
     )
     from cloudfall.observation import ObservationSet, ObservedServerSnapshot
 
@@ -28,6 +29,8 @@ _RAID_HEALTH_PATTERN = re.compile(r"\[(\d+)/(\d+)\]\s+\[([U_]+)\]")
 _MANAGED_FIREWALL_TABLE = "cloudfall"
 _MANAGED_FIREWALL_INPUT_CHAIN = "input"
 _MANAGED_FIREWALL_INPUT_POLICY = "drop"
+_LOOPBACK_ADDRESSES = frozenset({"127.0.0.1", "::1"})
+_MINIMUM_SOCKET_FIELDS = 5
 
 
 class AuditStatus(StrEnum):
@@ -123,6 +126,11 @@ def audit_inventory(
         _audit_server(
             server,
             inventory.profile(server.profile_id),
+            tuple(
+                service
+                for service in inventory.services
+                if service.server_id == server.resource_id
+            ),
             observations.for_server(server.resource_id),
         )
         for server in inventory.servers
@@ -145,6 +153,7 @@ def audit_inventory(
 def _audit_server(
     server: ServerInventory,
     profile: HostProfileInventory,
+    services: tuple[ServiceInventory, ...],
     snapshot: ObservedServerSnapshot | None,
 ) -> ServerAudit:
     if snapshot is None:
@@ -181,6 +190,7 @@ def _audit_server(
     checks.extend(_audit_services(profile, snapshot))
     if profile.firewall is not None:
         checks.extend(_audit_firewall(server, profile.firewall, snapshot))
+    checks.extend(_audit_service_binds(services, snapshot))
     checks.extend(_audit_configuration(profile, snapshot))
     return ServerAudit(
         server_id=server.resource_id.value,
@@ -510,6 +520,88 @@ def _accepted_inbound_endpoint(
     if not accepts:
         return None
     return endpoint
+
+
+@dataclass(frozen=True, slots=True)
+class _SocketListener:
+    """One listening socket parsed from collected evidence."""
+
+    protocol: str
+    address: str
+    port: int
+
+
+def _audit_service_binds(
+    services: tuple[ServiceInventory, ...],
+    snapshot: ObservedServerSnapshot,
+) -> tuple[AuditCheck, ...]:
+    if not services:
+        return ()
+    network = _mapping(snapshot.spec, "network")
+    listeners = _parse_listening_sockets(_string(network, "listeningSockets"))
+    checks: list[AuditCheck] = []
+    for service in services:
+        port = service.bind.port.value
+        address = service.bind.address.value
+        on_port = tuple(
+            listener
+            for listener in listeners
+            if listener.protocol == "tcp" and listener.port == port
+        )
+        declared_present = any(
+            listener.address == address for listener in on_port
+        )
+        exposed = tuple(
+            listener
+            for listener in on_port
+            if listener.address not in _LOOPBACK_ADDRESSES
+        )
+        observed = (
+            {
+                "listeners": [
+                    f"{listener.address}:{listener.port}"
+                    for listener in on_port
+                ]
+            }
+            if on_port
+            else None
+        )
+        checks.append(
+            _comparison(
+                f"services.bind[{service.resource_id.value}]",
+                {
+                    "protocol": "tcp",
+                    "address": address,
+                    "port": port,
+                    "loopbackOnly": True,
+                },
+                observed,
+                matches=declared_present and not exposed,
+            )
+        )
+    return tuple(checks)
+
+
+def _parse_listening_sockets(raw: str) -> tuple[_SocketListener, ...]:
+    listeners: list[_SocketListener] = []
+    for line in raw.splitlines():
+        fields = line.split()
+        if len(fields) < _MINIMUM_SOCKET_FIELDS:
+            continue
+        protocol = fields[0]
+        local = fields[4]
+        address, separator, raw_port = local.rpartition(":")
+        if not separator or not raw_port.isdigit():
+            continue
+        address = address.strip("[]").split("%", maxsplit=1)[0]
+        listeners.append(
+            _SocketListener(
+                protocol=protocol,
+                address=address,
+                port=int(raw_port),
+            )
+        )
+    return tuple(listeners)
 
 
 def _audit_configuration(
