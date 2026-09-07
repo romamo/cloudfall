@@ -209,6 +209,11 @@ def _host_component(
         "project": component.project_id.value,
         "project_user": project.linux_user.value,
         "install_root": component.install_root.value,
+        "repository": component.repository.as_dict(),
+        "runtime": component.runtime.as_dict(),
+        "service": component.service.as_dict(),
+        "healthCheck": component.health_check.as_dict(),
+        "retainUntilCleanup": component.retain_until_cleanup,
     }
 
 

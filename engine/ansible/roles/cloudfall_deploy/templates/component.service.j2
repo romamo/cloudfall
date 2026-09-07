@@ -1,0 +1,24 @@
+# Managed by Cloudfall. Local changes will be overwritten.
+{% set command = cloudfall_deploy_component.service.command %}
+{% set executable = command[0]
+    if command[0].startswith('/')
+    else cloudfall_deploy_component.install_root ~ '/current/' ~ command[0] %}
+[Unit]
+Description=Cloudfall component {{ cloudfall_deploy_component.id }}
+After=network.target
+
+[Service]
+Type=exec
+User={{ cloudfall_deploy_component.project_user }}
+Group={{ cloudfall_deploy_component.project_user }}
+WorkingDirectory={{ cloudfall_deploy_component.install_root }}/current
+EnvironmentFile=-{{ cloudfall_deploy_component.install_root }}/shared/env/{{ cloudfall_deploy_component.id }}.env
+ExecStart={{ executable }}{% for argument in command[1:] %} "{{ argument }}"{% endfor %}
+
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -114,6 +114,37 @@ of every database restores into a scratch database before dropping it:
 sudo -u postgres /usr/local/sbin/cloudfall-postgresql-restore-check
 ```
 
+## Build and deploy component releases
+
+`cloudfall-engine artifact build` clones a component's declared repository at
+an explicit git ref, packages the source as a hashed tarball (without `.git`),
+and writes schema-valid artifact metadata beside it:
+
+```console
+task artifact:build COMPONENT=crm-backend REF=main
+```
+
+`ansible/playbooks/deploy.yml` deploys one built release to the component's
+declared servers, one host at a time:
+
+```console
+task deploy COMPONENT=crm-backend RELEASE=<release-id>
+task deploy COMPONENT=crm-backend RELEASE=<release-id> ENV_FILE=/path/to/env
+```
+
+The deploy role transfers the artifact and refuses it if the digest does not
+match the build metadata, unpacks it under `releases/<release-id>/`,
+materializes locked dependencies with a pinned `uv` (`uv sync --frozen
+--no-dev`, with the managed Python toolchain and cache under the component's
+`shared/` directory), optionally installs an environment file, renders the
+systemd unit from the declared service command, and then activates behind a
+health gate: symlink switch, restart, and the declared HTTP health check. If
+the health check fails, the previous release is restored and restarted
+automatically and the run fails; a first release with no predecessor is
+stopped instead. Successful runs write a schema-valid release receipt on the
+controller. The first slice supports Python components managed by uv on
+x86_64 Debian hosts.
+
 ## Public domain routes
 
 `ansible/playbooks/domains.yml` renders every declared `Domain` as a managed

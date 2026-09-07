@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cloudfall.internal/schemas/v1/release-receipt.schema.json",
+  "title": "Cloudfall component release receipt",
+  "type": "object",
+  "properties": {
+    "apiVersion": {
+      "$ref": "common.schema.json#/$defs/apiVersion"
+    },
+    "kind": {
+      "const": "ReleaseReceipt"
+    },
+    "metadata": {
+      "$ref": "common.schema.json#/$defs/metadata"
+    },
+    "spec": {
+      "type": "object",
+      "properties": {
+        "component": {
+          "$ref": "common.schema.json#/$defs/resourceId"
+        },
+        "server": {
+          "$ref": "common.schema.json#/$defs/resourceId"
+        },
+        "release": {
+          "type": "string",
+          "pattern": "^[0-9]{8}T[0-9]{6}Z-[0-9a-f]{7,40}$"
+        },
+        "artifactSha256": {
+          "$ref": "common.schema.json#/$defs/sha256"
+        },
+        "deployedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "previousRelease": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9]{8}T[0-9]{6}Z-[0-9a-f]{7,40}$"
+        },
+        "healthCheckPassed": {
+          "const": true
+        }
+      },
+      "required": [
+        "component",
+        "server",
+        "release",
+        "artifactSha256",
+        "deployedAt",
+        "previousRelease",
+        "healthCheckPassed"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "apiVersion",
+    "kind",
+    "metadata",
+    "spec"
+  ],
+  "additionalProperties": false
+}

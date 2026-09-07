@@ -72,6 +72,35 @@ def test_inventory_renders_ansible_host_variables() -> None:
                 "install_root": "/srv/apps/crm/backend",
                 "project": "crm",
                 "project_user": "crm",
+                "repository": {
+                    "url": "https://github.com/example/crm-backend.git",
+                },
+                "runtime": {
+                    "type": "python",
+                    "version": "3.14",
+                    "packageManager": "uv",
+                },
+                "service": {
+                    "manager": "systemd",
+                    "name": "crm-backend",
+                    "command": [
+                        ".venv/bin/uvicorn",
+                        "crm.asgi:application",
+                        "--host",
+                        "127.0.0.1",
+                        "--port",
+                        "8100",
+                    ],
+                },
+                "healthCheck": {
+                    "scheme": "http",
+                    "port": 8100,
+                    "path": "/health",
+                    "expectedStatuses": [200],
+                    "timeoutSeconds": 5,
+                    "attempts": 5,
+                },
+                "retainUntilCleanup": True,
             }
         ],
         "cloudfall_services": [

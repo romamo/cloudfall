@@ -1,0 +1,10 @@
+---
+cloudfall_deploy_environment_file: ""
+cloudfall_deploy_receipt_directory: ""
+cloudfall_deploy_uv_version: "0.12.10"
+cloudfall_deploy_uv_sha256: >-
+  173d95a0c32d18c896c46ba6fafbf3cf9c14ab74b033f81b76c883ef492a976b
+cloudfall_deploy_uv_url: >-
+  https://github.com/astral-sh/uv/releases/download/{{
+    cloudfall_deploy_uv_version
+  }}/uv-x86_64-unknown-linux-gnu.tar.gz

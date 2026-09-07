@@ -36,12 +36,17 @@ from cloudfall.domain import (
     PostgresMajorVersion,
     ProviderServerId,
     RaidLevel,
+    RepositoryUrl,
     RequiredServiceState,
     RequiredServiceStatus,
     ResourceDocument,
     ResourceId,
     ResourceKind,
+    RuntimePackageManager,
+    RuntimeType,
+    RuntimeVersion,
     ServerLifecycle,
+    ServiceCommand,
     ServiceKind,
     ServiceManager,
     ServiceName,
@@ -354,21 +359,105 @@ class ProjectInventory:
 
 
 @dataclass(frozen=True, slots=True)
+class ComponentRepository:
+    """Source repository for one deployable component."""
+
+    url: RepositoryUrl
+    subdirectory: str | None
+
+    def as_dict(self) -> dict[str, object]:
+        """Serialize the repository reference."""
+        result: dict[str, object] = {"url": self.url.value}
+        if self.subdirectory is not None:
+            result["subdirectory"] = self.subdirectory
+        return result
+
+
+@dataclass(frozen=True, slots=True)
+class ComponentRuntime:
+    """Declared runtime and package manager for a component."""
+
+    runtime_type: RuntimeType
+    version: RuntimeVersion
+    package_manager: RuntimePackageManager
+
+    def as_dict(self) -> dict[str, object]:
+        """Serialize the runtime contract."""
+        return {
+            "type": self.runtime_type.value,
+            "version": self.version.value,
+            "packageManager": self.package_manager.value,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ComponentService:
+    """Managed systemd service owned by a component."""
+
+    manager: ServiceManager
+    name: ResourceId
+    command: ServiceCommand
+
+    def as_dict(self) -> dict[str, object]:
+        """Serialize the service contract."""
+        return {
+            "manager": self.manager.value,
+            "name": self.name.value,
+            "command": list(self.command.value),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ComponentHealthCheck:
+    """HTTP health gate for a deployed component."""
+
+    scheme: HttpScheme
+    port: TcpPort
+    path: str
+    expected_statuses: tuple[HttpStatusCode, ...]
+    timeout_seconds: PositiveCount
+    attempts: PositiveCount
+
+    def as_dict(self) -> dict[str, object]:
+        """Serialize the health contract."""
+        return {
+            "scheme": self.scheme.value,
+            "port": self.port.value,
+            "path": self.path,
+            "expectedStatuses": [
+                status.value for status in self.expected_statuses
+            ],
+            "timeoutSeconds": self.timeout_seconds.value,
+            "attempts": self.attempts.value,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class ComponentInventory:
-    """Placement data for one deployable component."""
+    """Placement and deployment contract for one deployable component."""
 
     resource_id: ResourceId
     project_id: ResourceId
     server_ids: tuple[ResourceId, ...]
     install_root: AbsolutePath
+    retain_until_cleanup: bool
+    repository: ComponentRepository
+    runtime: ComponentRuntime
+    service: ComponentService
+    health_check: ComponentHealthCheck
 
     def as_dict(self) -> dict[str, object]:
-        """Serialize component placement for inventory consumers."""
+        """Serialize the component for inventory consumers."""
         return {
             "id": self.resource_id.value,
             "project": self.project_id.value,
             "servers": [server.value for server in self.server_ids],
             "installRoot": self.install_root.value,
+            "retainUntilCleanup": self.retain_until_cleanup,
+            "repository": self.repository.as_dict(),
+            "runtime": self.runtime.as_dict(),
+            "service": self.service.as_dict(),
+            "healthCheck": self.health_check.as_dict(),
         }
 
 
@@ -1045,11 +1134,53 @@ def _project_inventory(document: ResourceDocument) -> ProjectInventory:
 def _component_inventory(document: ResourceDocument) -> ComponentInventory:
     spec = _mapping(document.content, "spec")
     deployment = _mapping(spec, "deployment")
+    repository = _mapping(spec, "repository")
+    runtime = _mapping(spec, "runtime")
+    service = _mapping(spec, "service")
+    health = _mapping(spec, "healthCheck")
+    raw_subdirectory = repository.get("subdirectory")
+    if raw_subdirectory is not None and not isinstance(raw_subdirectory, str):
+        message = "validated repository subdirectory is not a string"
+        raise TypeError(message)
     return ComponentInventory(
         resource_id=document.key.resource_id,
         project_id=ResourceId.from_boundary(spec.get("project")),
         server_ids=_resource_ids(deployment.get("servers"), "component servers"),
         install_root=AbsolutePath.from_boundary(deployment.get("installRoot")),
+        retain_until_cleanup=_boolean(
+            deployment.get("retainUntilCleanup"), "retain until cleanup"
+        ),
+        repository=ComponentRepository(
+            url=RepositoryUrl.from_boundary(repository.get("url")),
+            subdirectory=raw_subdirectory,
+        ),
+        runtime=ComponentRuntime(
+            runtime_type=RuntimeType.from_boundary(runtime.get("type")),
+            version=RuntimeVersion.from_boundary(runtime.get("version")),
+            package_manager=RuntimePackageManager.from_boundary(
+                runtime.get("packageManager")
+            ),
+        ),
+        service=ComponentService(
+            manager=ServiceManager.from_boundary(service.get("manager")),
+            name=ResourceId.from_boundary(service.get("name")),
+            command=ServiceCommand.from_boundary(service.get("command")),
+        ),
+        health_check=ComponentHealthCheck(
+            scheme=HttpScheme.from_boundary(health.get("scheme")),
+            port=TcpPort.from_boundary(health.get("port")),
+            path=_string(health, "path"),
+            expected_statuses=tuple(
+                HttpStatusCode.from_boundary(item)
+                for item in _list(
+                    health.get("expectedStatuses"), "expected HTTP statuses"
+                )
+            ),
+            timeout_seconds=PositiveCount.from_boundary(
+                health.get("timeoutSeconds")
+            ),
+            attempts=PositiveCount.from_boundary(health.get("attempts")),
+        ),
     )
 
 

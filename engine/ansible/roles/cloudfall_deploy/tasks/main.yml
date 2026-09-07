@@ -1,0 +1,276 @@
+---
+- name: Validate deployment target and declaration
+  ansible.builtin.assert:
+    that:
+      - ansible_facts["distribution"] == "Debian"
+      - ansible_facts["service_mgr"] == "systemd"
+      - ansible_facts["architecture"] == "x86_64"
+      - cloudfall_deploy_component.service.manager == "systemd"
+      - cloudfall_deploy_component.runtime.type == "python"
+      - cloudfall_deploy_component.runtime.packageManager == "uv"
+      - cloudfall_deploy_release | length > 0
+      - cloudfall_deploy_artifact_sha256 | length == 64
+    fail_msg: >-
+      The first deploy slice supports Debian x86_64 hosts and Python
+      components managed by uv under systemd
+
+- name: Compute release paths
+  ansible.builtin.set_fact:
+    cloudfall_deploy_release_directory: >-
+      {{ cloudfall_deploy_component.install_root }}/releases/{{
+        cloudfall_deploy_release
+      }}
+    cloudfall_deploy_current_link: >-
+      {{ cloudfall_deploy_component.install_root }}/current
+    cloudfall_deploy_shared_directory: >-
+      {{ cloudfall_deploy_component.install_root }}/shared
+    cloudfall_deploy_staging_archive: >-
+      /tmp/cloudfall-{{ cloudfall_deploy_component.id }}-{{
+        cloudfall_deploy_release
+      }}.tar.gz
+
+- name: Check the installed uv version
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/uv
+      - --version
+  register: cloudfall_deploy_uv_installed
+  changed_when: false
+  failed_when: false
+
+- name: Install the pinned uv release
+  when: >-
+    cloudfall_deploy_uv_installed.rc != 0
+    or cloudfall_deploy_uv_version not in cloudfall_deploy_uv_installed.stdout
+  block:
+    - name: Download the pinned uv archive
+      ansible.builtin.get_url:
+        url: "{{ cloudfall_deploy_uv_url }}"
+        dest: /tmp/cloudfall-uv.tar.gz
+        checksum: "sha256:{{ cloudfall_deploy_uv_sha256 }}"
+        mode: "0644"
+
+    - name: Unpack the uv archive
+      ansible.builtin.unarchive:
+        src: /tmp/cloudfall-uv.tar.gz
+        dest: /tmp
+        remote_src: true
+
+    - name: Install the uv binary
+      ansible.builtin.copy:
+        src: /tmp/uv-x86_64-unknown-linux-gnu/uv
+        dest: /usr/local/bin/uv
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0755"
+
+- name: Create release and shared directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ cloudfall_deploy_component.project_user }}"
+    group: "{{ cloudfall_deploy_component.project_user }}"
+    mode: "0755"
+  loop:
+    - "{{ cloudfall_deploy_component.install_root }}/releases"
+    - "{{ cloudfall_deploy_release_directory }}"
+    - "{{ cloudfall_deploy_shared_directory }}"
+    - "{{ cloudfall_deploy_shared_directory }}/env"
+    - "{{ cloudfall_deploy_shared_directory }}/uv"
+
+- name: Transfer the release artifact
+  ansible.builtin.copy:
+    src: "{{ cloudfall_deploy_artifact_archive }}"
+    dest: "{{ cloudfall_deploy_staging_archive }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Verify the transferred artifact digest
+  ansible.builtin.stat:
+    path: "{{ cloudfall_deploy_staging_archive }}"
+    checksum_algorithm: sha256
+  register: cloudfall_deploy_staged
+
+- name: Refuse a release whose digest does not match its metadata
+  ansible.builtin.assert:
+    that:
+      - cloudfall_deploy_staged.stat.checksum
+        == cloudfall_deploy_artifact_sha256
+    fail_msg: >-
+      Transferred artifact digest does not match the declared
+      artifact metadata
+
+- name: Unpack the verified release
+  ansible.builtin.unarchive:
+    src: "{{ cloudfall_deploy_staging_archive }}"
+    dest: "{{ cloudfall_deploy_release_directory }}"
+    remote_src: true
+    owner: "{{ cloudfall_deploy_component.project_user }}"
+    group: "{{ cloudfall_deploy_component.project_user }}"
+
+- name: Remove the staged archive
+  ansible.builtin.file:
+    path: "{{ cloudfall_deploy_staging_archive }}"
+    state: absent
+
+- name: Install the component environment file
+  ansible.builtin.copy:
+    src: "{{ cloudfall_deploy_environment_file }}"
+    dest: >-
+      {{ cloudfall_deploy_shared_directory }}/env/{{
+        cloudfall_deploy_component.id
+      }}.env
+    owner: root
+    group: "{{ cloudfall_deploy_component.project_user }}"
+    mode: "0640"
+  when: cloudfall_deploy_environment_file | length > 0
+
+- name: Materialize locked dependencies for the release
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/uv
+      - sync
+      - --frozen
+      - --no-dev
+    chdir: "{{ cloudfall_deploy_release_directory }}"
+  become: true
+  become_user: "{{ cloudfall_deploy_component.project_user }}"
+  environment:
+    HOME: "{{ cloudfall_deploy_shared_directory }}"
+    UV_CACHE_DIR: "{{ cloudfall_deploy_shared_directory }}/uv/cache"
+    UV_PYTHON_INSTALL_DIR: "{{ cloudfall_deploy_shared_directory }}/uv/python"
+  changed_when: true
+
+- name: Inspect the currently active release
+  ansible.builtin.stat:
+    path: "{{ cloudfall_deploy_current_link }}"
+    follow: false
+    get_checksum: false
+  register: cloudfall_deploy_current
+
+- name: Record the rollback candidate
+  ansible.builtin.set_fact:
+    cloudfall_deploy_previous_directory: >-
+      {{
+        cloudfall_deploy_current.stat.lnk_source
+        if cloudfall_deploy_current.stat.exists
+        and cloudfall_deploy_current.stat.islnk
+        else ""
+      }}
+
+- name: Install the managed service unit
+  ansible.builtin.template:
+    src: component.service.j2
+    dest: >-
+      /etc/systemd/system/{{ cloudfall_deploy_component.service.name }}.service
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Activate the release behind the health gate
+  block:
+    - name: Switch the current release symlink
+      ansible.builtin.file:
+        src: "{{ cloudfall_deploy_release_directory }}"
+        dest: "{{ cloudfall_deploy_current_link }}"
+        state: link
+        force: true
+        follow: false
+
+    - name: Restart the component service
+      ansible.builtin.systemd_service:
+        name: "{{ cloudfall_deploy_component.service.name }}.service"
+        enabled: true
+        state: restarted
+        daemon_reload: true
+
+    - name: Gate the release on its declared health check
+      ansible.builtin.uri:
+        url: >-
+          {{ cloudfall_deploy_component.healthCheck.scheme }}://127.0.0.1:{{
+            cloudfall_deploy_component.healthCheck.port
+          }}{{ cloudfall_deploy_component.healthCheck.path }}
+        status_code: >-
+          {{ cloudfall_deploy_component.healthCheck.expectedStatuses }}
+        timeout: "{{ cloudfall_deploy_component.healthCheck.timeoutSeconds }}"
+        return_content: false
+      register: cloudfall_deploy_health
+      retries: >-
+        {{ cloudfall_deploy_component.healthCheck.attempts | int - 1 }}
+      delay: 3
+      until: >-
+        cloudfall_deploy_health.status
+        in cloudfall_deploy_component.healthCheck.expectedStatuses
+      when: not ansible_check_mode
+  rescue:
+    - name: Restore the previous release symlink
+      ansible.builtin.file:
+        src: "{{ cloudfall_deploy_previous_directory }}"
+        dest: "{{ cloudfall_deploy_current_link }}"
+        state: link
+        force: true
+        follow: false
+      when: cloudfall_deploy_previous_directory | length > 0
+
+    - name: Restart the restored release
+      ansible.builtin.systemd_service:
+        name: "{{ cloudfall_deploy_component.service.name }}.service"
+        state: restarted
+        daemon_reload: true
+      when: cloudfall_deploy_previous_directory | length > 0
+
+    - name: Stop the failed first release
+      ansible.builtin.systemd_service:
+        name: "{{ cloudfall_deploy_component.service.name }}.service"
+        state: stopped
+      when: cloudfall_deploy_previous_directory | length == 0
+
+    - name: Fail the deployment after rolling back
+      ansible.builtin.fail:
+        msg: >-
+          Release {{ cloudfall_deploy_release }} failed its health check and
+          was {{
+            'rolled back to '
+            ~ (cloudfall_deploy_previous_directory | basename)
+            if cloudfall_deploy_previous_directory | length > 0
+            else 'stopped because no previous release exists'
+          }}
+
+- name: Write the release receipt on the controller
+  ansible.builtin.copy:
+    content: >-
+      {{
+        {
+          'apiVersion': 'cloudfall/v1',
+          'kind': 'ReleaseReceipt',
+          'metadata': {
+            'id': cloudfall_deploy_component.id,
+            'description': 'Release receipt written by cloudfall_deploy',
+          },
+          'spec': {
+            'component': cloudfall_deploy_component.id,
+            'server': cloudfall_server_id,
+            'release': cloudfall_deploy_release,
+            'artifactSha256': cloudfall_deploy_artifact_sha256,
+            'deployedAt': ansible_facts['date_time']['iso8601'],
+            'previousRelease': (
+              (cloudfall_deploy_previous_directory | basename)
+              if cloudfall_deploy_previous_directory | length > 0
+              else none
+            ),
+            'healthCheckPassed': true,
+          },
+        } | to_nice_json
+      }}
+    dest: >-
+      {{ cloudfall_deploy_receipt_directory }}/{{
+        cloudfall_deploy_component.id
+      }}.json
+    mode: "0644"
+  delegate_to: localhost
+  become: false
+  when:
+    - not ansible_check_mode
+    - cloudfall_deploy_receipt_directory | length > 0

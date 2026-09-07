@@ -12,6 +12,7 @@ from cloudfall.inventory import PlatformInventory
 from cloudfall.validation import StateValidationError, validate_state
 
 from cloudfall_engine.ansible_inventory import render_ansible_inventory
+from cloudfall_engine.artifact import ArtifactBuildError, build_artifact
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -20,6 +21,7 @@ if TYPE_CHECKING:
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="cloudfall-engine")
     commands = parser.add_subparsers(dest="command", required=True)
+
     inventory_parser = commands.add_parser(
         "inventory", help="generate execution inventory"
     )
@@ -41,16 +43,39 @@ def _parser() -> argparse.ArgumentParser:
         type=Path,
         help="write inventory JSON to this file instead of stdout",
     )
+
+    artifact_parser = commands.add_parser(
+        "artifact", help="build release artifacts"
+    )
+    artifact_commands = artifact_parser.add_subparsers(
+        dest="artifact_command", required=True
+    )
+    build_parser = artifact_commands.add_parser(
+        "build", help="clone, package, and hash one component release"
+    )
+    build_parser.add_argument("state_directory", type=Path)
+    build_parser.add_argument("component")
+    build_parser.add_argument(
+        "--ref",
+        required=True,
+        help="git ref (branch, tag, or commit) to package",
+    )
+    build_parser.add_argument(
+        "--schemas",
+        type=Path,
+        default=Path("state/schemas/v1"),
+        help="versioned schema directory (default: state/schemas/v1)",
+    )
+    build_parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("tmp/artifacts"),
+        help="artifact output directory (default: tmp/artifacts)",
+    )
     return parser
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    """Render engine output and return a process exit code."""
-    arguments = _parser().parse_args(argv)
-    if arguments.command != "inventory" or arguments.inventory_command != "render":
-        message = "argparse accepted an unsupported engine command"
-        raise RuntimeError(message)
-
+def _render_inventory(arguments: argparse.Namespace) -> int:
     try:
         state = validate_state(Path(arguments.state_directory), Path(arguments.schemas))
     except StateValidationError as error:
@@ -69,6 +94,43 @@ def main(argv: Sequence[str] | None = None) -> int:
         result = {"output": str(output_path), "status": "ok"}
         sys.stdout.write(f"{json.dumps(result, sort_keys=True)}\n")
     return 0
+
+
+def _build_artifact(arguments: argparse.Namespace) -> int:
+    try:
+        state = validate_state(Path(arguments.state_directory), Path(arguments.schemas))
+    except StateValidationError as error:
+        sys.stderr.write(f"{json.dumps(error.as_dict(), sort_keys=True)}\n")
+        return 2
+
+    inventory = PlatformInventory.from_state(state)
+    try:
+        built = build_artifact(
+            inventory,
+            arguments.component,
+            arguments.ref,
+            Path(arguments.output_dir),
+            Path(arguments.schemas),
+        )
+    except ArtifactBuildError as error:
+        sys.stderr.write(f"{json.dumps(error.as_dict(), sort_keys=True)}\n")
+        return 2
+    except StateValidationError as error:
+        sys.stderr.write(f"{json.dumps(error.as_dict(), sort_keys=True)}\n")
+        return 2
+    sys.stdout.write(f"{json.dumps(built.as_dict(), sort_keys=True)}\n")
+    return 0
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Run one engine command and return a process exit code."""
+    arguments = _parser().parse_args(argv)
+    if arguments.command == "inventory":
+        return _render_inventory(arguments)
+    if arguments.command == "artifact":
+        return _build_artifact(arguments)
+    message = "argparse accepted an unsupported engine command"
+    raise RuntimeError(message)
 
 
 def run() -> None:

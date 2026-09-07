@@ -58,14 +58,18 @@ follows the same pattern afterward.
 
 `deploy()` with rollback — the heart of one-command operation.
 
-- Artifact builder on the management host (git ref → build → tarball with
-  release metadata)
-- Deploy role: `releases/` unpacking, environment-file rendering, systemd
-  unit from `Component.service`, health-check gate, symlink switch, automatic
-  rollback on failed health checks, deployment receipts
+- Artifact builder on the management host (git ref → hashed tarball with
+  schema-valid release metadata) ✔ (`task artifact:build`)
+- Deploy role: digest-verified transfer, `releases/` unpacking, locked
+  dependency materialization via pinned uv, environment-file installation,
+  systemd unit from `Component.service`, health-check gate, symlink switch,
+  automatic rollback on failed health checks, and release receipts ✔
+  (`task deploy`)
 - SDK methods `deploy()`, `rollback()`, `restart()`, `health()` with
   structured JSON results
-- Secrets v1: environment files generated from secret references
+- Secrets v1: environment files generated from secret references (a local
+  environment file per component is supported today; reference-driven
+  generation pending)
 
 Exit: the example backend component deploys end to end on a fresh host, and a
 bad release rolls back automatically.

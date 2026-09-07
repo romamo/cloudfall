@@ -1,0 +1,34 @@
+---
+- name: Deploy one Cloudfall component release
+  hosts: cloudfall_servers
+  become: true
+  gather_facts: true
+  any_errors_fatal: true
+  serial: 1
+  pre_tasks:
+    - name: Require an explicit component and release selection
+      ansible.builtin.assert:
+        that:
+          - cloudfall_deploy_component_id is defined
+          - cloudfall_deploy_release is defined
+          - cloudfall_deploy_artifact_archive is defined
+          - cloudfall_deploy_artifact_sha256 is defined
+        fail_msg: >-
+          Deployment requires cloudfall_deploy_component_id,
+          cloudfall_deploy_release, cloudfall_deploy_artifact_archive, and
+          cloudfall_deploy_artifact_sha256 extra variables
+      run_once: true
+  tasks:
+    - name: Deploy the selected component on its declared servers
+      ansible.builtin.include_role:
+        name: cloudfall_deploy
+      vars:
+        cloudfall_deploy_component: "{{ item }}"
+      loop: >-
+        {{
+          cloudfall_components | default([])
+          | selectattr('id', 'equalto', cloudfall_deploy_component_id)
+          | list
+        }}
+      loop_control:
+        label: "{{ item.id }}"

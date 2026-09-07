@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cloudfall.internal/schemas/v1/artifact.schema.json",
+  "title": "Cloudfall release artifact metadata",
+  "type": "object",
+  "properties": {
+    "apiVersion": {
+      "$ref": "common.schema.json#/$defs/apiVersion"
+    },
+    "kind": {
+      "const": "Artifact"
+    },
+    "metadata": {
+      "$ref": "common.schema.json#/$defs/metadata"
+    },
+    "spec": {
+      "type": "object",
+      "properties": {
+        "component": {
+          "$ref": "common.schema.json#/$defs/resourceId"
+        },
+        "release": {
+          "type": "string",
+          "pattern": "^[0-9]{8}T[0-9]{6}Z-[0-9a-f]{7,40}$"
+        },
+        "gitRef": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "gitCommit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "builtAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "archive": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*\\.tar\\.gz$"
+        },
+        "archiveSha256": {
+          "$ref": "common.schema.json#/$defs/sha256"
+        },
+        "sizeBytes": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "component",
+        "release",
+        "gitRef",
+        "gitCommit",
+        "builtAt",
+        "archive",
+        "archiveSha256",
+        "sizeBytes"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "apiVersion",
+    "kind",
+    "metadata",
+    "spec"
+  ],
+  "additionalProperties": false
+}

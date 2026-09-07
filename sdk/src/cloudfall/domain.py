@@ -549,6 +549,98 @@ class ServiceKind(StrEnum):
         return cls(_required_string(value, "service kind"))
 
 
+class RuntimeType(StrEnum):
+    """Component runtimes supported by the v1 contract."""
+
+    PYTHON = "python"
+    NODE = "node"
+    PM2 = "pm2"
+
+    @classmethod
+    def from_boundary(cls, value: object) -> RuntimeType:
+        """Coerce a boundary value into a runtime type."""
+        return cls(_required_string(value, "runtime type"))
+
+
+class RuntimePackageManager(StrEnum):
+    """Package managers supported by the v1 contract."""
+
+    UV = "uv"
+    NPM = "npm"
+    PNPM = "pnpm"
+    YARN = "yarn"
+
+    @classmethod
+    def from_boundary(cls, value: object) -> RuntimePackageManager:
+        """Coerce a boundary value into a package manager."""
+        return cls(_required_string(value, "runtime package manager"))
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeVersion:
+    """Opaque runtime version requested by a component."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        """Reject empty and multi-line versions."""
+        if not self.value or "\n" in self.value or "\r" in self.value:
+            message = f"invalid runtime version: {self.value!r}"
+            raise ValueError(message)
+
+    @classmethod
+    def from_boundary(cls, value: object) -> RuntimeVersion:
+        """Coerce a boundary value into a runtime version."""
+        return cls(_required_string(value, "runtime version"))
+
+
+@dataclass(frozen=True, slots=True)
+class RepositoryUrl:
+    """Validated HTTPS, SSH, or local-file git repository URL."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        """Enforce the transport allowlist and reject control characters."""
+        if not re.fullmatch(r"(?:https|ssh|file)://[^\s\x00]+", self.value):
+            message = f"invalid repository URL: {self.value!r}"
+            raise ValueError(message)
+
+    @classmethod
+    def from_boundary(cls, value: object) -> RepositoryUrl:
+        """Coerce a boundary value into a repository URL."""
+        return cls(_required_string(value, "repository URL"))
+
+
+@dataclass(frozen=True, slots=True)
+class ServiceCommand:
+    """Validated argv-style service command."""
+
+    value: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        """Reject empty commands and unit-file control characters."""
+        if not self.value:
+            message = "service command must not be empty"
+            raise ValueError(message)
+        for argument in self.value:
+            if not argument or any(
+                character in argument for character in ("\n", "\r", "\x00", '"')
+            ):
+                message = f"invalid service command argument: {argument!r}"
+                raise ValueError(message)
+
+    @classmethod
+    def from_boundary(cls, value: object) -> ServiceCommand:
+        """Coerce a boundary value into a service command."""
+        if not isinstance(value, list) or not all(
+            isinstance(item, str) for item in value
+        ):
+            message = "service command must be a list of strings"
+            raise TypeError(message)
+        return cls(tuple(value))
+
+
 @dataclass(frozen=True, slots=True)
 class PostgresDatabaseName:
     """Validated PostgreSQL database name safe for quoted identifiers."""

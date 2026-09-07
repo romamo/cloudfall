@@ -1,0 +1,104 @@
+---
+argument_specs:
+  main:
+    short_description: Deploy one verified release of a declared component
+    options:
+      cloudfall_deploy_component:
+        type: dict
+        required: true
+        options:
+          id:
+            type: str
+            required: true
+          project:
+            type: str
+            required: true
+          project_user:
+            type: str
+            required: true
+          install_root:
+            type: path
+            required: true
+          repository:
+            type: dict
+            required: true
+          runtime:
+            type: dict
+            required: true
+            options:
+              type:
+                type: str
+                required: true
+              version:
+                type: str
+                required: true
+              packageManager:
+                type: str
+                required: true
+          service:
+            type: dict
+            required: true
+            options:
+              manager:
+                type: str
+                choices:
+                  - systemd
+                required: true
+              name:
+                type: str
+                required: true
+              command:
+                type: list
+                elements: str
+                required: true
+          healthCheck:
+            type: dict
+            required: true
+            options:
+              scheme:
+                type: str
+                choices:
+                  - http
+                  - https
+                required: true
+              port:
+                type: int
+                required: true
+              path:
+                type: str
+                required: true
+              expectedStatuses:
+                type: list
+                elements: int
+                required: true
+              timeoutSeconds:
+                type: int
+                required: true
+              attempts:
+                type: int
+                required: true
+          retainUntilCleanup:
+            type: bool
+            required: true
+      cloudfall_deploy_release:
+        type: str
+        required: true
+      cloudfall_deploy_artifact_archive:
+        type: str
+        required: true
+      cloudfall_deploy_artifact_sha256:
+        type: str
+        required: true
+      cloudfall_deploy_environment_file:
+        type: str
+        default: ""
+      cloudfall_deploy_receipt_directory:
+        type: str
+        default: ""
+      cloudfall_deploy_uv_version:
+        type: str
+        default: "0.12.10"
+      cloudfall_deploy_uv_sha256:
+        type: str
+      cloudfall_deploy_uv_url:
+        type: str

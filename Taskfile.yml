@@ -125,6 +125,52 @@ tasks:
         uv run ansible-playbook --inventory {{ .INVENTORY_FILE }}
         engine/ansible/playbooks/services.yml
 
+  artifact:build:
+    desc: Build a release artifact for COMPONENT at git REF
+    deps:
+      - validate
+    preconditions:
+      - sh: test -n "{{ .COMPONENT }}"
+        msg: Set COMPONENT to the component id to build
+      - sh: test -n "{{ .REF }}"
+        msg: Set REF to the git branch, tag, or commit to package
+    cmds:
+      - >-
+        uv run cloudfall-engine artifact build {{ .STATE_DIR }}
+        {{ .COMPONENT }} --ref {{ .REF }} --schemas {{ .SCHEMA_DIR }}
+        --output-dir {{ .ARTIFACT_DIR | default "tmp/artifacts" }}
+
+  deploy:
+    desc: Deploy COMPONENT at RELEASE with a health-gated switch
+    deps:
+      - inventory
+    env:
+      ANSIBLE_CONFIG: engine/ansible/ansible.cfg
+    vars:
+      ARTIFACT_DIR: '{{ .ARTIFACT_DIR | default "tmp/artifacts" }}'
+      ARTIFACT_SHA256:
+        sh: >-
+          uv run python -c "import json; print(json.load(open(
+          '{{ .ARTIFACT_DIR | default "tmp/artifacts" }}/{{ .COMPONENT }}/{{ .RELEASE }}.json'
+          ))['spec']['archiveSha256'])"
+    preconditions:
+      - sh: test -n "{{ .COMPONENT }}"
+        msg: Set COMPONENT to the component id to deploy
+      - sh: test -n "{{ .RELEASE }}"
+        msg: Set RELEASE to a release id produced by artifact:build
+    cmds:
+      - >-
+        uv run ansible-playbook --inventory {{ .INVENTORY_FILE }}
+        --extra-vars cloudfall_deploy_component_id={{ .COMPONENT }}
+        --extra-vars cloudfall_deploy_release={{ .RELEASE }}
+        --extra-vars
+        cloudfall_deploy_artifact_archive={{ .ROOT_DIR }}/{{ .ARTIFACT_DIR }}/{{ .COMPONENT }}/{{ .RELEASE }}.tar.gz
+        --extra-vars cloudfall_deploy_artifact_sha256={{ .ARTIFACT_SHA256 }}
+        --extra-vars
+        cloudfall_deploy_receipt_directory={{ .ROOT_DIR }}/tmp/releases
+        {{ if .ENV_FILE }}--extra-vars cloudfall_deploy_environment_file={{ .ENV_FILE }}{{ end }}
+        engine/ansible/playbooks/deploy.yml
+
   domains:deploy:check:
     desc: Check declared domain routes without changing hosts
     deps:
@@ -236,6 +282,10 @@ tasks:
         uv run ansible-playbook --syntax-check
         --inventory {{ .INVENTORY_FILE }}
         engine/ansible/playbooks/services.yml
+      - >-
+        uv run ansible-playbook --syntax-check
+        --inventory {{ .INVENTORY_FILE }}
+        engine/ansible/playbooks/deploy.yml
       - >-
         uv run ansible-playbook --syntax-check
         --inventory {{ .INVENTORY_FILE }}

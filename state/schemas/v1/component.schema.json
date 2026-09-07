@@ -26,7 +26,7 @@
             "url": {
               "type": "string",
               "format": "uri",
-              "pattern": "^(?:https|ssh)://"
+              "pattern": "^(?:https|ssh|file)://"
             },
             "subdirectory": {
               "type": "string",
