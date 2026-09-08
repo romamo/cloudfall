@@ -1,0 +1,16 @@
+[project]
+name = "render-demo"
+version = "1.0.0"
+description = "Minimal Render web service used to prove the Cloudfall migration wedge"
+requires-python = ">=3.13"
+dependencies = [
+    "uvicorn>=0.30,<1",
+    "psycopg[binary]>=3.2,<4",
+]
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/demo"]

@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: render-demo
+    runtime: python
+    repo: https://github.com/romamo/cloudfall
+    branch: main
+    rootDir: examples/render-demo
+    plan: free
+    buildCommand: pip install uv && uv sync --frozen
+    startCommand: .venv/bin/uvicorn demo.asgi:application --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.13"
+      - key: PORT
+        value: "8100"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: render-demo-db
+          property: connectionString
+    domains:
+      - app.188.34.153.101.sslip.io
+
+databases:
+  - name: render-demo-db
+    databaseName: demo
+    user: demo_user
+    plan: free
+    postgresMajorVersion: "17"
