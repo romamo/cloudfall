@@ -13,9 +13,11 @@ table inet cloudfall {
         ip protocol icmp accept
         meta l4proto ipv6-icmp accept
 {% for rule in cloudfall_firewall_ruleset.allowedInbound %}
+{% if rule.description is defined %}
+        {{ rule.protocol }} dport {{ rule.port }} accept comment "{{ rule.description }}"
+{% else %}
         {{ rule.protocol }} dport {{ rule.port }} accept
-        {%- if rule.description is defined %} comment "{{ rule.description }}"
-        {%- endif %}
+{% endif %}
 {% endfor %}
     }
 

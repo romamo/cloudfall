@@ -18,6 +18,7 @@ def _render(ruleset: dict[str, object]) -> str:
         undefined=StrictUndefined,
         autoescape=False,  # noqa: S701 - configuration files are not HTML.
         keep_trailing_newline=True,
+        trim_blocks=True,
     )
     return environment.get_template("nftables.conf.j2").render(
         cloudfall_firewall_ruleset=ruleset,
@@ -46,3 +47,24 @@ def test_firewall_template_renders_default_deny_with_declared_rules() -> None:
     assert "udp dport 5000 accept" in rendered
     assert "flush ruleset" in rendered
     assert "table inet cloudfall {" in rendered
+
+
+def test_firewall_template_keeps_described_rules_on_their_own_lines() -> None:
+    """A rule comment must not swallow the newline before the closing brace.
+
+    The 2026-09-08 live proving run caught ``nft --check`` rejecting the
+    rendered file because the last described rule and the input chain's
+    closing brace collapsed onto one line under Ansible's trim semantics.
+    """
+    rendered = _render(
+        {
+            "policy": "default-deny",
+            "allowedInbound": [
+                {"port": 2222, "protocol": "tcp", "description": "ssh"},
+            ],
+        }
+    )
+
+    lines = rendered.splitlines()
+    assert '        tcp dport 2222 accept comment "ssh"' in lines
+    assert lines.count("    }") == 3

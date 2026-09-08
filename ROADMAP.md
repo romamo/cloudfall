@@ -31,8 +31,12 @@ One command turns an installed Debian host into a compliant Cloudfall server.
 
 Exit: the baseline run is idempotent (second run reports no changes) and
 `cloudfall audit` reports the host compliant, including firewall and timers.
-Remaining before exit: a live idempotence and observability run on a
-disposable host.
+Both criteria were met on a disposable containerized Debian 13 host on
+2026-09-08 (see the
+[proving-run report](docs/proving-runs/2026-09-08-debian-container-m1.md),
+which also caught and fixed a live firewall-template bug). Remaining before
+exit: repeating the run on a real bare-metal or VPS host and a live
+observability run.
 
 ## M2 — Layer 2: service catalog v1
 
