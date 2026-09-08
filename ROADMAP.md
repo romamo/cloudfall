@@ -120,9 +120,12 @@ realistic blueprint migrated end to end
 application actually hosted on Render — built by Render from this
 repository, serving rows from its managed PostgreSQL — cut over with its
 data to a byte-identical response on the Cloudfall host
-([cutover report](docs/proving-runs/2026-09-08-render-cutover.md)). The one
-unexercised wedge step is a TTL-lowered DNS record change on an owned
-domain; the guided data-migration playbook also remains pending.
+([cutover report](docs/proving-runs/2026-09-08-render-cutover.md)), and
+finally the TTL-lowered DNS record cutover itself on an owned domain, with
+the migrate plan pausing at `dns-verify` and resuming after the flip
+([DNS cutover report](docs/proving-runs/2026-09-08-dns-cutover.md)). Every
+wedge step is now proven live; the guided data-migration playbook remains
+pending (dump/restore is manual per the import report).
 
 ## M5 — Agent layer
 

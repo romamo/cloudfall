@@ -17,11 +17,12 @@ server.
 > with peer-auth databases, real Let's Encrypt certificates, health-gated
 > deploys with an automatic rollback of a bad release, and — for the full
 > wedge — an application actually hosted on Render, cut over with its data
-> by an AI agent through `cloudfall-mcp` alone and serving byte-identical
-> responses from the Cloudfall host (see the
-> [proving-run reports](docs/proving-runs/)). Not yet exercised: a
-> TTL-lowered DNS record change on an owned domain and bare-metal
-> RAID/storage provisioning (see the [roadmap](ROADMAP.md))
+> and a real TTL-lowered DNS record flip on an owned domain, driven by an AI
+> agent through `cloudfall-mcp` alone, with the migrate plan pausing at DNS
+> verification and resuming to byte-identical responses from the Cloudfall
+> host (see the [proving-run reports](docs/proving-runs/)). Not yet
+> exercised: bare-metal RAID/storage provisioning (see the
+> [roadmap](ROADMAP.md))
 
 ## Why Cloudfall
 
