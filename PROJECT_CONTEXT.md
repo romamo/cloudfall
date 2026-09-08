@@ -363,111 +363,21 @@ Keep until cleanup policy removes old releases.
 
 ## Implementation Status
 
-The monorepo foundation and first executable state-validation slice are in
-place.
+This document captures the durable architecture. Live milestone tracking,
+including what is implemented versus outstanding, lives in
+[`ROADMAP.md`](ROADMAP.md) and is the authoritative source for status.
 
-Monorepo modules:
+At a high level, the monorepo modules (`state/`, `engine/`, `sdk/`) and their
+boundaries are established, and the platform implements state validation,
+typed inventory, deterministic Ansible inventory rendering, read-only server
+inspection, desired-versus-observed drift audit, the Debian baseline (bootstrap,
+firewall, UTC time, unattended upgrades), a guarded Loki/Grafana/Alloy logging
+stack, a service catalog (PostgreSQL and Nginx/TLS sites), the health-gated
+deploy slice with artifact releases and symlink rollback, the `cloudfall-mcp`
+server, the `render.yaml` blueprint importer, the resumable `cloudfall migrate`
+orchestrator, and an evidence-derived operations dashboard.
 
-`state/` `engine/` `sdk/`
-
-Implemented v1 schemas:
-
-server.schema.json host-profile.schema.json project.schema.json
-component.schema.json observed-server.schema.json
-
-The SDK loads YAML, validates it against JSON Schema Draft 2020-12, checks
-cross-resource references, and exposes a typed read-only index. The
-`cloudfall state validate` command emits structured success and error responses.
-
-The SDK also exposes typed non-secret inventory projections and placement
-queries. The engine renders those projections as deterministic Ansible JSON with
-server host variables and environment, project, and component groups.
-
-Servers reference typed HostProfile resources. A read-only Ansible inspection
-role collects normalized OS, hardware, block-device, filesystem, software RAID,
-package, service, and allowlisted configuration metadata/hash evidence into
-local JSON snapshots. The SDK validates those snapshots before comparing them
-with desired profiles. `cloudfall audit` emits structured per-check drift reports
-and distinct exit codes for compliant, drifted, invalid, and unknown results.
-
-An initial `cloudfall_bootstrap` role prepares an already-installed Debian system by
-installing baseline packages, creating project service accounts, and creating
-the `/srv/apps` project/component directory tree. Syntax validation and the
-ansible-lint production profile pass; live-host validation remains outstanding.
-
-The first replacement-logging slice is also implemented for a parallel pilot.
-`LoggingStack` state declares one loopback Loki/Grafana backend, an mTLS-only
-ingestion gateway, Alloy collectors, bounded retention, package pins, and
-explicit journal/file sources. The playbook validates native configurations
-and never changes legacy agents. No production stack is declared and live-host
-validation remains outstanding.
-
-------------------------------------------------------------------------
-
-## Current Progress
-
-Completed:
-
--   Overall architecture
--   Deployment model
--   Infrastructure model
--   Project/component abstraction
--   Secrets strategy
--   Monitoring direction
--   Logging strategy
--   Platform layering
--   AI-first control plane
--   Monorepo structure and module boundaries
--   Server, project, and component v1 schemas
--   HostProfile and ObservedServer v1 schemas
--   Valid and deliberately invalid state fixtures
--   Read-only state validation SDK and CLI
--   Typed SDK inventory and component/server placement queries
--   Deterministic Ansible JSON inventory renderer
--   Read-only Debian server observation collector
--   Desired-versus-observed RAID, mount, package, service, and config audit
--   Debian bootstrap Ansible role and Task workflows
--   Strict test, type-check, and lint configuration
--   Artifact deployment decision
--   User/directory conventions
--   Rollback strategy
--   Guarded parallel Loki/Grafana/Alloy logging pilot
-
-Architecture is approximately 95% complete.
-
-------------------------------------------------------------------------
-
-## Remaining Tasks
-
-1.  Add cluster and artifact schemas when required by real state
-2.  Validate bootstrap idempotence on a disposable Debian host
-3.  Integrate Infisical references and environment-file generation
-4.  Add artifact builder and release metadata
-5.  Deploy first backend component with health checks and rollback
-6.  Add GitHub Actions runner
-7.  Implement MCP server
-
-------------------------------------------------------------------------
-
-## Recommended Next Steps
-
-Immediate priorities:
-
-1.  Model current infrastructure requirements in `Server` and `HostProfile`
-    resources.
-
-2.  Run `task inspect` to capture current server evidence, followed by
-    `task audit` to establish the first drift baseline.
-
-3.  Extend schemas only where the real infrastructure exposes a missing
-    concept.
-
-4.  Run the bootstrap role twice on a disposable Debian host and verify the
-    second run reports no changes.
-
-5.  Deploy a single backend component end-to-end.
-
-Success milestone:
-
-A brand-new Debian server can be provisioned and one backend component
-deployed using a single high-level command through the platform.
+The primary outstanding work is live-host validation on disposable Debian
+targets and broadening the service catalog (Redis, MySQL, Elasticsearch, Node
+runtimes) along the same patterns. See the roadmap for the per-milestone
+breakdown and exit criteria.
