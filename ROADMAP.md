@@ -31,12 +31,14 @@ One command turns an installed Debian host into a compliant Cloudfall server.
 
 Exit: the baseline run is idempotent (second run reports no changes) and
 `cloudfall audit` reports the host compliant, including firewall and timers.
-Both criteria were met on a disposable containerized Debian 13 host on
-2026-09-08 (see the
-[proving-run report](docs/proving-runs/2026-09-08-debian-container-m1.md),
-which also caught and fixed a live firewall-template bug). Remaining before
-exit: repeating the run on a real bare-metal or VPS host and a live
-observability run.
+**Met on 2026-09-08** on a disposable Hetzner Cloud Debian 13 server,
+including live host metrics through the logging stack; see the
+[Hetzner proving-run report](docs/proving-runs/2026-09-08-hetzner-m1.md) and
+the earlier [container dry run](docs/proving-runs/2026-09-08-debian-container-m1.md).
+Each run caught and fixed a real bug (a firewall-template rendering error and
+an observation-schema rejection of escaped systemd unit names), which is the
+point of proving runs. Bare-metal specifics (software RAID, storage
+provisioning) remain unexercised.
 
 ## M2 — Layer 2: service catalog v1
 

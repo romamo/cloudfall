@@ -81,6 +81,12 @@
       - main
     signed_by: "{{ cloudfall_logging_collector_grafana_repository_key_path }}"
     state: present
+  register: cloudfall_logging_collector_repository
+
+- name: Refresh APT cache after repository changes
+  ansible.builtin.apt:
+    update_cache: true
+  when: cloudfall_logging_collector_repository is changed
 
 - name: Create Alloy service group before package configuration
   ansible.builtin.group:

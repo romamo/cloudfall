@@ -13,7 +13,13 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 255,
-      "pattern": "^[A-Za-z0-9@_.:-]+\\.timer$"
+      "pattern": "^[A-Za-z0-9@_.:\\\\-]+\\.timer$"
+    },
+    "observedServiceName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "pattern": "^[A-Za-z0-9@_.:\\\\-]+\\.service$"
     },
     "nullableInteger": {
       "type": [
@@ -403,13 +409,13 @@
         "services": {
           "type": "object",
           "propertyNames": {
-            "$ref": "common.schema.json#/$defs/serviceName"
+            "$ref": "#/$defs/observedServiceName"
           },
           "additionalProperties": {
             "type": "object",
             "properties": {
               "name": {
-                "$ref": "common.schema.json#/$defs/serviceName"
+                "$ref": "#/$defs/observedServiceName"
               },
               "state": {
                 "type": "string"

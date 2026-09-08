@@ -11,11 +11,14 @@ stop paying PaaS margins. See the [roadmap](ROADMAP.md) for the milestone
 plan; the wedge use case is a migration from Render onto a Hetzner-class
 server.
 
-> **Not yet validated on live hosts.** Cloudfall's workflows are exercised by
-> tests and CI against example state, not yet against a real server. The first
-> end-to-end proving run on a disposable Debian host is the current milestone
-> (see the [roadmap](ROADMAP.md)) — until it lands, expect rough edges on real
-> hardware
+> **Partially validated on live hosts.** The server baseline and
+> observability layer (M1) were proven on 2026-09-08 on a disposable Hetzner
+> Cloud Debian 13 server: idempotent convergence, a fully compliant audit,
+> and live host metrics through the mTLS logging stack (see the
+> [proving-run reports](docs/proving-runs/)). The service catalog, deploy,
+> import, and migrate layers are exercised by tests and CI but not yet
+> against a real server — expect rough edges there until they join the
+> proving batch (see the [roadmap](ROADMAP.md))
 
 ## Why Cloudfall
 

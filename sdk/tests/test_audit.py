@@ -33,6 +33,31 @@ def test_compliant_observations_match_desired_state() -> None:
     assert report.unmatched_observations == ()
 
 
+def test_observed_systemd_escaped_unit_names_are_accepted(tmp_path: Path) -> None:
+    r"""Observed units may carry systemd path escapes such as ``\x2d``.
+
+    The 2026-09-08 Hetzner proving run failed observation validation because
+    a real host reported ``systemd-fsck@dev-disk-by\x2duuid-....service``,
+    which the declared-state unit-name pattern rejects.
+    """
+    observations = tmp_path / "observed"
+    shutil.copytree(COMPLIANT, observations)
+    h1 = observations / "h1.json"
+    snapshot = json.loads(h1.read_text(encoding="utf-8"))
+    escaped = "systemd-fsck@dev-disk-by\\x2duuid-E079\\x2d7D41.service"
+    snapshot["spec"]["services"][escaped] = {
+        "name": escaped,
+        "state": "stopped",
+        "status": "static",
+        "source": "systemd",
+    }
+    h1.write_text(json.dumps(snapshot), encoding="utf-8")
+
+    report = _audit(observations)
+
+    assert report.status is AuditStatus.COMPLIANT
+
+
 def test_audit_reports_raid_package_service_and_config_drift(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
