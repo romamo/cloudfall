@@ -9,17 +9,17 @@ Kubernetes. This document describes the durable design shared by both stories;
 [`ROADMAP.md`](ROADMAP.md) is the authoritative source for what is implemented
 today.
 
-Every layer keeps the same invariants: no action without declared state, no
+Every layer keeps the same invariants: no action without declared config, no
 status without evidence, no compliance without audit.
 
 ## Control plane stack
 
 ```text
-Human → AI agent → Platform SDK → Platform state (YAML) → Execution engine → Servers
+Human → AI agent → CLI / Python API → Config (YAML) → Execution engine → Servers
 ```
 
-The agent operates against structured platform state through a stable SDK
-instead of inventing shell commands or discovering infrastructure over SSH.
+The agent operates against structured config through a stable CLI and Python
+API instead of inventing shell commands or discovering infrastructure over SSH.
 Every mutating operation goes through the engine's explicit playbook
 contracts and produces receipts; status is derived from validated
 observations, never inferred.
@@ -28,36 +28,39 @@ observations, never inferred.
 
 Cloudfall is a monorepo with three architectural modules:
 
-- [`state/`](state/README.md) — declarative configuration and JSON Schemas
-- [`sdk/`](sdk/README.md) — the stable Python API consumed by agents and tooling
-- [`engine/`](engine/README.md) — Ansible-based execution of explicit plans
+- [`state/`](state/README.md) — the config: declarative YAML resources and
+  their JSON Schemas
+- [`sdk/`](sdk/README.md) — the `cloudfall` CLI and Python API consumed by
+  agents and tooling
+- [`engine/`](engine/README.md) — internal execution machinery: Ansible-based
+  execution of explicit plans
 
-The boundaries are strict even inside one repository: state contains no
-execution logic, the SDK reads and validates state without Ansible internals,
-the engine never silently rewrites state, and external entry points call the
-SDK rather than Ansible directly. Mutating SDK operations execute through the
-engine's command-line and playbook contracts, never its internals. The modules
-may split into separate repositories later if independent release cycles or
-access control require it.
+The boundaries are strict even inside one repository: the config contains no
+execution logic, the CLI reads and validates the config without Ansible
+internals, the engine never silently rewrites the config, and external entry
+points call the CLI rather than Ansible directly. Mutating operations execute
+through the engine's command-line and playbook contracts, never its
+internals. The modules may split into separate repositories later if
+independent release cycles or access control require it.
 
-## Platform state
+## Config
 
-State is declarative configuration only, organized as typed resources
-validated against versioned JSON Schemas: servers, host profiles, projects,
+The config is declarative only, organized as typed resources validated
+against versioned JSON Schemas: servers, server types, applications,
 components, services, domains, logging stacks, and SSH public keys.
 
-State never contains secret values; schemas and validation reject them.
+The config never contains secret values; schemas and validation reject them.
 Secrets exist as references, materialized into environment files outside the
-state directory and consumed by systemd via `EnvironmentFile`.
+config directory and consumed by systemd via `EnvironmentFile`.
 
-## Project and component model
+## Application and component model
 
-A project is an independent SaaS product that composes components; a
-component (frontend, backend, worker, scheduler) owns its own deployment.
-Components are named `crm-backend` style rather than by path, and each may
-deploy to one or more servers.
+An application (declared as a `Project` resource) is an independent SaaS
+product that composes components; a component (frontend, backend, worker,
+scheduler) owns its own deployment. Components are named `crm-backend` style
+rather than by path, and each may deploy to one or more servers.
 
-On disk, each project owns a Linux user and a `/srv/apps/<project>/`
+On disk, each application owns a Linux user and a `/srv/apps/<application>/`
 directory with one subdirectory per component. Releases unpack into
 `releases/` and a `current` symlink points at the active release, which is
 what makes rollback a symlink switch.
@@ -78,7 +81,7 @@ environment file → systemd unit → health-check gate → symlink switch
 A failed health check triggers automatic rollback to the previous release.
 Releases are retained until a cleanup policy removes them, so explicit
 rollback to any retained release stays available. Deployment approval is
-automatic or manual per project.
+automatic or manual per application.
 
 ## Supported workloads
 
@@ -90,12 +93,13 @@ fits the model.
 ## Infrastructure model
 
 Servers are traditional long-lived Debian hosts (not immutable), bootstrapped
-with RAID1, described by reusable host profiles, and treated as "all-fit-all":
+with RAID1, described by reusable server types (`HostProfile` resources), and
+treated as "all-fit-all":
 
 - Infrastructure services (PostgreSQL today; Redis, MySQL, Elasticsearch, and
   friends as the catalog grows) stay pinned to declared servers
 - Application components are movable: reassigning `crm-backend` from `h1,h2`
-  to `h3` is a state change followed by convergence
+  to `h3` is a config change followed by convergence
 - Failover is manual with easy reassignment rather than automated
   orchestration
 
@@ -107,7 +111,7 @@ load balancing is Cloudflare plus Nginx, with HAProxy optional later.
 
 ## Long-term vision: fleet operation
 
-The wedge proves the model on one host. The same state, audit, and deploy
+The wedge proves the model on one host. The same config, audit, and deploy
 machinery is designed to extend to fleet operation without architectural
 change:
 
@@ -115,14 +119,14 @@ change:
   runtime services following the PostgreSQL pattern: pinned installs,
   loopback-only binds, backup policies, audited evidence
 - **Multi-server assignment** — components spread across servers and moved by
-  editing state
+  editing the config
 - **Secrets manager integration** — environment files generated from a
   central secrets manager instead of locally maintained files, keeping the
-  platform/project/component hierarchy
+  platform/application/component hierarchy
 - **Fleet observability** — per-service exporters and alerting layered on the
   existing Loki/Grafana/Alloy stack
 - **Backup and restore** — declared backup policies with restore-proof
-  commands as first-class SDK operations
+  commands as first-class CLI operations
 
 ## Status
 

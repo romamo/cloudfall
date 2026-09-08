@@ -8,22 +8,23 @@ Cloudfall is built toward one complete story first:
 > from GitHub with health checks and rollback, and a DNS cutover checklist.
 
 Every milestone keeps the invariants that define Cloudfall: no action without
-declared state, no status without evidence, no compliance without audit.
+declared config, no status without evidence, no compliance without audit.
 
 ## M0 — Publishable base
 
 - Public repository with license, CI, and contribution docs ✔
-- Schemas, validation SDK, audit pipeline, and generic engine roles ✔
+- Schemas, the validation CLI and Python API, audit pipeline, and generic
+  engine roles ✔
 
 ## M1 — Layer 1: server baseline
 
 One command turns an installed Debian host into a compliant Cloudfall server.
 
-- Baseline packages, project users, `/srv/apps`, UTC enforcement, SSH
+- Baseline packages, application users, `/srv/apps`, UTC enforcement, SSH
   hardening from declared `SshPublicKey` resources, unattended security
   upgrades ✔ (`task server:baseline`)
-- nftables firewall role: default-deny inbound, allowances declared in state,
-  firewall evidence in observations and audit ✔
+- nftables firewall role: default-deny inbound, allowances declared in the
+  config, firewall evidence in observations and audit ✔
 - Systemd timer units modeled and audited alongside services ✔
 - Host metrics through the Loki/Grafana/Alloy stack ✔ — Alloy's embedded
   unix exporter pushes to a loopback Prometheus over the existing mTLS
@@ -47,8 +48,8 @@ Installable, audited infrastructure services, starting with exactly two.
 - A `Service` schema: kind, version, servers, ports, bind policy, backup
   policy ✔
 - PostgreSQL role: pinned install, localhost-only bind by default,
-  per-project databases and users from state (peer authentication, no
-  database passwords), scheduled dumps, and a restore-proof command ✔
+  per-application databases and users from the config (peer authentication,
+  no database passwords), scheduled dumps, and a restore-proof command ✔
   (`task services:deploy`)
 - Nginx site role: virtual hosts rendered from `Domain` resources, certbot
   with timer compliance, canonical client-address forwarding, and
@@ -71,8 +72,8 @@ follows the same pattern afterward.
   systemd unit from `Component.service`, health-check gate, symlink switch,
   automatic rollback on failed health checks, and release receipts ✔
   (`task deploy`)
-- SDK methods `deploy()`, `rollback()`, `restart()`, `health()` with
-  structured JSON results ✔ (`cloudfall deploy|rollback|restart|health`,
+- CLI and Python API operations `deploy()`, `rollback()`, `restart()`,
+  `health()` with structured JSON results ✔ (`cloudfall deploy|rollback|restart|health`,
   executing through the engine's process boundaries; explicit rollback to
   any retained release included)
 - Secrets v1: environment files generated from secret references (a local
@@ -85,8 +86,9 @@ bad release rolls back automatically.
 ## M4 — Migration importer
 
 - `cloudfall import render`: map `render.yaml` resources to Cloudfall
-  projects, components, services, and domains, with environment files kept
-  outside state and a structured gap report for anything unmappable ✔
+  applications, components, services, and domains, with environment files
+  kept outside the config and a structured gap report for anything
+  unmappable ✔
   (blueprint files; the Render API and cron jobs are pending)
 - Data migration: managed-Postgres dump and restore with verification
   (currently a required-action item in the import report; a guided playbook
@@ -102,7 +104,7 @@ monitoring, and rollback path.
 
 ## M5 — Agent layer
 
-- MCP server over the SDK: read-only tools exposed freely; mutating tools
+- MCP server over the Python API: read-only tools exposed freely; mutating tools
   gated by explicit confirmation and always writing receipts ✔
   (`cloudfall-mcp` with fifteen annotated tools covering import, artifact
   build, baseline/services/domains convergence, deploy/rollback/restart,

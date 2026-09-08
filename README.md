@@ -22,15 +22,16 @@ server.
 
 ## Why Cloudfall
 
-- **Declarative and auditable.** Servers, projects, components, and domains
-  are typed YAML validated against JSON Schemas. A read-only inspection
-  pipeline collects evidence from hosts, and `cloudfall audit` reports drift
-  between desired and observed state with distinct exit codes
+- **Declarative and auditable.** Servers, applications, components, and
+  domains are declared in typed YAML config validated against JSON Schemas.
+  A read-only inspection pipeline collects evidence from hosts, and
+  `cloudfall audit` reports drift between the config and the observed servers
+  with distinct exit codes
 - **Evidence over inference.** Deployments produce receipts; status is
   derived from validated observations. Cloudfall never reports success it cannot
   prove
-- **AI-agent native.** Agents operate through a stable SDK and structured
-  JSON results instead of inventing shell commands over SSH. The
+- **AI-agent native.** Agents operate through a stable CLI and Python API
+  with structured JSON results instead of inventing shell commands over SSH. The
   `cloudfall-mcp` server exposes read-only evidence tools freely and gates
   every server-changing tool behind an explicit confirmation handshake
 - **systemd, not containers.** Applications run as native systemd services
@@ -40,22 +41,24 @@ server.
 
 Three modules with strict boundaries:
 
-- [`state/`](state/README.md) — declarative platform state and JSON Schemas
-- [`sdk/`](sdk/README.md) — the stable Python API used by agents and tooling
-- [`engine/`](engine/README.md) — Ansible-based execution of explicit plans
+- [`state/`](state/README.md) — the config: declarative YAML resources and
+  their JSON Schemas
+- [`sdk/`](sdk/README.md) — the `cloudfall` CLI and Python API used by
+  agents and tooling
+- [`engine/`](engine/README.md) — internal execution machinery (Ansible-based)
 
-Rules: state contains no execution logic, the SDK reads and validates state
-without Ansible internals, the engine never silently rewrites state, and
-entry points call the SDK rather than Ansible directly. Mutating SDK
+Rules: the config contains no execution logic, the CLI reads and validates
+the config without Ansible internals, the engine never silently rewrites the
+config, and entry points call the CLI rather than Ansible directly. Mutating
 operations execute through the engine's command-line and playbook contracts,
 never its internals. See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the
 full architecture and the long-term fleet vision.
 
 ## Status
 
-Cloudfall is pre-1.0. Implemented today: state validation, typed inventory,
+Cloudfall is pre-1.0. Implemented today: config validation, typed inventory,
 deterministic Ansible inventory rendering, read-only server inspection,
-desired-versus-observed drift audit, a Debian bootstrap role, a UTC time
+config-versus-observed drift audit, a Debian bootstrap role, a UTC time
 baseline, an nftables firewall, a guarded Loki/Grafana/Alloy logging stack,
 an evidence-derived operations dashboard, a service catalog (PostgreSQL and
 Nginx/TLS sites), the health-gated deploy slice with artifact releases and
@@ -73,9 +76,9 @@ Cloudfall requires Python 3.14 and uses [`uv`](https://docs.astral.sh/uv/):
 uv run cloudfall state validate state/examples
 ```
 
-The command validates every YAML document against the v1 JSON Schemas and then
-checks cross-resource references. Successful and failed results are emitted as
-structured JSON.
+The command validates every YAML config document against the v1 JSON Schemas
+and then checks cross-resource references. Successful and failed results are
+emitted as structured JSON.
 
 Show the non-secret platform inventory and render it as deterministic Ansible
 JSON:
@@ -87,7 +90,7 @@ uv run cloudfall-engine inventory render state/examples
 
 ## Migrate from Render
 
-Map a `render.yaml` blueprint onto declarative Cloudfall state:
+Map a `render.yaml` blueprint onto Cloudfall config:
 
 ```console
 uv run cloudfall import render render.yaml --project acme --server h1
@@ -95,17 +98,18 @@ uv run cloudfall import render render.yaml --project acme --server h1
 
 Web, private, and worker services become `Component` resources (workers use
 a service-active health gate instead of a fabricated HTTP check), managed
-PostgreSQL becomes a `Service` with project-owned peer-authentication
+PostgreSQL becomes a `Service` with application-owned peer-authentication
 databases, and custom domains become TLS-required `Domain` routes. Each web
 component receives an explicit listen port written as `PORT` into an
-environment file outside the state directory — state never contains secret
-values.
+environment file outside the config directory — the config never contains
+secret values. The full walkthrough, including the Render-to-Cloudfall name
+mapping, is in the [Render migration guide](docs/render-migration-guide.md).
 
 The importer never guesses silently. `IMPORT-REPORT.md` records everything
 that was not imported (cron, static, and container services today), every
 assumption it made, and every action required before cutover, including data
 migration and DNS steps. Merge the emitted fragment with your servers and
-host profiles, validate, then drive the whole migration with one resumable
+server types, validate, then drive the whole migration with one resumable
 plan:
 
 ```console
@@ -122,12 +126,12 @@ pause resumes exactly where it stopped.
 
 ## Inspect servers and audit drift
 
-Each `Server` references a reusable `HostProfile` describing its required
-Debian version, software RAID, filesystem capacity, packages, systemd
-services, and allowlisted configuration evidence.
+Each `Server` references a reusable server type (a `HostProfile` resource)
+describing its required Debian version, software RAID, filesystem capacity,
+packages, systemd services, and allowlisted configuration evidence.
 
 Collect a read-only snapshot from every reachable server, then compare it
-with desired state:
+with the config:
 
 ```console
 task inspect
@@ -142,8 +146,8 @@ equivalents exist for every task.
 
 ## Operations dashboard
 
-Cloudfall projects validated state, observations, and audit results into a local
-read-only dashboard with an evidence-derived task queue and a public-service
+Cloudfall renders validated config, host observations, and audit results into
+a local read-only dashboard with an evidence-derived task queue and a public-service
 lifecycle (planned → ready → deployed → configured → healthy):
 
 ```console
