@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cloudfall — leave PaaS, keep the PaaS feel</title>
+<meta name="description" content="Cloudfall is an open-source, evidence-based control plane for moving a SaaS off Render onto one Debian server you own: hardened, monitored, deployed with rollback. No Kubernetes.">
+<meta property="og:title" content="Cloudfall">
+<meta property="og:description" content="Leave PaaS, keep the PaaS feel. Open-source, evidence-based control plane for moving a SaaS off Render onto a server you own. No Kubernetes.">
+<meta property="og:url" content="https://cloudfall.dev">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M9 20a6 6 0 1 1 1.2-11.9A8 8 0 0 1 25.7 11 5.5 5.5 0 0 1 24 21.8L9 22z' fill='%2367b7ff'/%3E%3Cpath d='M12 24v4m5-4v5m5-5v3' stroke='%2367b7ff' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #0b1017;
+    --bg-raised: #101724;
+    --bg-card: #121a29;
+    --line: #1e2a3d;
+    --text: #dbe4f0;
+    --text-dim: #8b9bb3;
+    --accent: #67b7ff;
+    --accent-soft: rgba(103, 183, 255, 0.12);
+    --good: #4ad295;
+    --pause: #f2c14e;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .wrap { max-width: 1060px; margin: 0 auto; padding: 0 24px; }
+
+  /* Nav */
+  header {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(11, 16, 23, 0.85);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+  }
+  nav { display: flex; align-items: center; gap: 28px; height: 60px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; color: var(--text); letter-spacing: -0.01em; }
+  .brand:hover { text-decoration: none; }
+  .brand svg { width: 26px; height: 26px; }
+  nav .links { margin-left: auto; display: flex; gap: 22px; align-items: center; font-size: 14.5px; }
+  nav .links a { color: var(--text-dim); }
+  nav .links a:hover { color: var(--text); text-decoration: none; }
+  .btn {
+    display: inline-block; padding: 9px 18px; border-radius: 8px;
+    font-size: 14.5px; font-weight: 600; transition: background 0.15s, border-color 0.15s;
+  }
+  .btn-primary { background: var(--accent); color: #06111d; }
+  .btn-primary:hover { background: #85c6ff; text-decoration: none; }
+  .btn-ghost { border: 1px solid var(--line); color: var(--text); background: transparent; }
+  .btn-ghost:hover { border-color: var(--accent); text-decoration: none; }
+
+  /* Hero */
+  .hero { padding: 88px 0 56px; position: relative; overflow: hidden; }
+  .hero::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(ellipse 60% 45% at 50% 0%, rgba(103, 183, 255, 0.10), transparent 70%);
+  }
+  .hero .wrap { position: relative; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 13px; color: var(--accent);
+    background: var(--accent-soft); border: 1px solid rgba(103, 183, 255, 0.25);
+    border-radius: 999px; padding: 5px 14px; margin-bottom: 26px;
+  }
+  .badge .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--good); }
+  h1 {
+    font-size: clamp(34px, 5.5vw, 58px);
+    line-height: 1.08; letter-spacing: -0.025em; font-weight: 800;
+    max-width: 780px;
+  }
+  h1 .accent { color: var(--accent); }
+  .hero p.sub {
+    margin: 22px 0 30px; font-size: clamp(16px, 2vw, 19px);
+    color: var(--text-dim); max-width: 660px;
+  }
+  .hero .cta { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+  .hero .cta .btn { padding: 12px 24px; font-size: 15.5px; }
+
+  /* Terminal */
+  .term {
+    margin: 56px auto 0; max-width: 860px;
+    background: #0a0f16; border: 1px solid var(--line); border-radius: 12px;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+    overflow: hidden;
+  }
+  .term-bar {
+    display: flex; align-items: center; gap: 7px;
+    padding: 11px 16px; border-bottom: 1px solid var(--line); background: var(--bg-raised);
+  }
+  .term-bar span { width: 11px; height: 11px; border-radius: 50%; background: #2a3850; }
+  .term-bar .title { margin-left: 10px; font-family: var(--mono); font-size: 12px; color: var(--text-dim); background: none; width: auto; height: auto; border-radius: 0; }
+  .term pre {
+    padding: 20px 22px; overflow-x: auto;
+    font-family: var(--mono); font-size: 13.5px; line-height: 1.75; color: #b6c2d4;
+  }
+  .term .p { color: var(--text-dim); }
+  .term .cmd { color: #e8eef7; font-weight: 600; }
+  .term .ok { color: var(--good); }
+  .term .pause { color: var(--pause); }
+  .term .step { color: #9fb4d0; }
+  .term .cm { color: #5c6b82; }
+
+  /* Proof strip */
+  .proof { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--bg-raised); }
+  .proof .wrap { padding: 34px 24px; }
+  .proof p { color: var(--text-dim); font-size: 15.5px; max-width: 900px; }
+  .proof strong { color: var(--text); }
+
+  /* Sections */
+  section { padding: 76px 0; }
+  .kicker {
+    font-family: var(--mono); font-size: 13px; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--accent); margin-bottom: 14px;
+  }
+  h2 { font-size: clamp(26px, 3.4vw, 36px); letter-spacing: -0.02em; line-height: 1.15; max-width: 640px; }
+  .section-sub { color: var(--text-dim); margin-top: 14px; max-width: 640px; font-size: 16.5px; }
+
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; margin-top: 44px; }
+  .card {
+    background: var(--bg-card); border: 1px solid var(--line); border-radius: 12px;
+    padding: 26px 26px 24px;
+  }
+  .card h3 { font-size: 18px; margin-bottom: 10px; letter-spacing: -0.01em; }
+  .card p { color: var(--text-dim); font-size: 15px; }
+  .card code, .steps code, .proof code {
+    font-family: var(--mono); font-size: 0.88em;
+    background: var(--accent-soft); color: var(--accent);
+    padding: 1.5px 6px; border-radius: 5px; white-space: nowrap;
+  }
+
+  /* How it works */
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 44px; counter-reset: step; }
+  .step-card {
+    background: var(--bg-card); border: 1px solid var(--line); border-radius: 12px; padding: 26px;
+    position: relative;
+  }
+  .step-card .num {
+    font-family: var(--mono); font-size: 13px; color: var(--accent);
+    border: 1px solid rgba(103, 183, 255, 0.35); border-radius: 999px;
+    width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+    margin-bottom: 16px;
+  }
+  .step-card h3 { font-size: 17px; margin-bottom: 8px; }
+  .step-card p { color: var(--text-dim); font-size: 14.5px; }
+
+  /* Status */
+  .status-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 44px; }
+  .status-card { background: var(--bg-card); border: 1px solid var(--line); border-radius: 12px; padding: 26px; }
+  .status-card h3 { font-size: 16px; margin-bottom: 14px; display: flex; align-items: center; gap: 9px; }
+  .status-card ul { list-style: none; }
+  .status-card li {
+    padding: 6px 0 6px 24px; position: relative; color: var(--text-dim); font-size: 14.5px;
+  }
+  .status-card li::before { position: absolute; left: 0; font-family: var(--mono); }
+  .status-card.done li::before { content: "✓"; color: var(--good); }
+  .status-card.next li::before { content: "→"; color: var(--pause); }
+
+  /* Quickstart */
+  .quickstart { text-align: center; border-top: 1px solid var(--line); background: var(--bg-raised); }
+  .quickstart h2 { margin: 0 auto; }
+  .quickstart .install {
+    margin: 34px auto 0; max-width: 620px;
+    background: #0a0f16; border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 22px; font-family: var(--mono); font-size: 14px; color: #e8eef7;
+    overflow-x: auto; text-align: left;
+  }
+  .quickstart .install .p { color: var(--text-dim); }
+  .quickstart .cta { margin-top: 30px; display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+
+  /* Footer */
+  footer { border-top: 1px solid var(--line); padding: 36px 0 44px; }
+  footer .wrap { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
+  footer .brand { font-size: 15px; }
+  footer .brand svg { width: 20px; height: 20px; }
+  footer .links { margin-left: auto; display: flex; gap: 20px; font-size: 14px; }
+  footer .links a { color: var(--text-dim); }
+  footer .links a:hover { color: var(--text); }
+  footer .license { width: 100%; color: var(--text-dim); font-size: 13px; margin-top: 6px; }
+
+  @media (max-width: 760px) {
+    .grid, .steps, .status-cols { grid-template-columns: 1fr; }
+    nav .links a.hide-sm { display: none; }
+    .hero { padding-top: 64px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="brand" href="#">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M9 20a6 6 0 1 1 1.2-11.9A8 8 0 0 1 25.7 11 5.5 5.5 0 0 1 24 21.8L9 22z" fill="#67b7ff"/><path d="M12 24v4m5-4v5m5-5v3" stroke="#67b7ff" stroke-width="2.2" stroke-linecap="round"/></svg>
+        Cloudfall
+      </a>
+      <div class="links">
+        <a class="hide-sm" href="#why">Why</a>
+        <a class="hide-sm" href="#how">How it works</a>
+        <a class="hide-sm" href="#status">Status</a>
+        <a href="https://github.com/romamo/cloudfall/blob/main/docs/render-migration-guide.md">Docs</a>
+        <a class="btn btn-ghost" href="https://github.com/romamo/cloudfall">GitHub</a>
+      </div>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="hero">
+    <div class="wrap">
+      <div class="badge"><span class="dot"></span>Every layer proven live · open source · AGPL-3.0</div>
+      <h1>Leave PaaS.<br>Keep the <span class="accent">PaaS feel</span>.</h1>
+      <p class="sub">
+        Cloudfall moves your SaaS off Render onto one Debian server you own:
+        hardened baseline, firewall, monitoring, PostgreSQL, TLS, health-gated
+        deploys with rollback, and a real DNS cutover. Plain systemd and nginx.
+        No Kubernetes.
+      </p>
+      <div class="cta">
+        <a class="btn btn-primary" href="https://github.com/romamo/cloudfall">View on GitHub</a>
+        <a class="btn btn-ghost" href="https://github.com/romamo/cloudfall/blob/main/docs/render-migration-guide.md">Read the migration guide</a>
+      </div>
+
+      <div class="term">
+        <div class="term-bar">
+          <span></span><span></span><span></span>
+          <div class="title">cloudfall migrate</div>
+        </div>
+        <pre><span class="p">$</span> <span class="cmd">uv run cloudfall import render render.yaml --project acme --server h1</span>
+<span class="p">$</span> <span class="cmd">uv run cloudfall migrate state --build web=main --yes</span>
+  <span class="ok">✓ baseline</span>       <span class="step">converge every server to the managed baseline</span>
+  <span class="ok">✓ services</span>       <span class="step">converge every declared infrastructure service</span>
+  <span class="ok">✓ data:acme-db</span>   <span class="step">migrate external data with row-count verification</span>
+  <span class="ok">✓ build:web</span>      <span class="step">build a release artifact for web</span>
+  <span class="ok">✓ deploy:web</span>     <span class="step">deploy web behind its health gate</span>
+  <span class="ok">✓ domains-http</span>   <span class="step">render every declared domain route over HTTP</span>
+  <span class="pause">⏸ dns-verify</span>     <span class="step">paused: point acme.example.com at your server, then resume</span>
+<span class="p">$</span> <span class="cmd">uv run cloudfall migrate state --yes</span>   <span class="cm"># resume after the DNS flip</span>
+  <span class="ok">✓ dns-verify</span>     <span class="step">public DNS points at the declared proxy servers</span>
+  <span class="ok">✓ domains-tls</span>    <span class="step">Let's Encrypt issued, HTTPS routes enabled</span>
+  <span class="ok">✓ inspect</span>        <span class="step">read-only server evidence collected</span>
+  <span class="ok">✓ audit</span>          <span class="step">compliant: config matches the observed servers</span>
+  <span class="ok">✓ verify-routes</span>  <span class="step">every declared route healthy over HTTPS</span></pre>
+      </div>
+    </div>
+  </div>
+
+  <div class="proof">
+    <div class="wrap">
+      <p>
+        <strong>Proven live, not promised.</strong> On 2026-09-08 the full wedge ran on
+        disposable Hetzner servers: an application actually hosted on Render was cut over
+        with its data and a real TTL-lowered DNS flip on an owned domain, resuming to
+        byte-identical responses from the Cloudfall host, with a bad release rolled back
+        automatically along the way. The entire run was driven by an AI agent through
+        <code>cloudfall-mcp</code> alone.
+        <a href="https://github.com/romamo/cloudfall/tree/main/docs/proving-runs">Read the proving-run reports</a>
+      </p>
+    </div>
+  </div>
+
+  <section id="why">
+    <div class="wrap">
+      <div class="kicker">Why Cloudfall</div>
+      <h2>An agent that can't fake success</h2>
+      <p class="section-sub">
+        Every claim Cloudfall makes about your servers is backed by evidence
+        collected from the servers themselves.
+      </p>
+      <div class="grid">
+        <div class="card">
+          <h3>Evidence over inference</h3>
+          <p>
+            Deployments produce receipts. Status is derived from validated
+            observations, and <code>cloudfall audit</code> reports drift between
+            your config and the observed servers with distinct exit codes.
+            Cloudfall never reports success it cannot prove.
+          </p>
+        </div>
+        <div class="card">
+          <h3>Typed state you own</h3>
+          <p>
+            Servers, applications, and domains are declared in YAML validated
+            against JSON Schemas: versionable, diffable, agent-readable. The
+            config is the whole interface; no imperative dashboard holds your
+            infrastructure hostage.
+          </p>
+        </div>
+        <div class="card">
+          <h3>AI-agent native</h3>
+          <p>
+            Agents operate through a stable CLI and Python API with structured
+            JSON results instead of inventing shell commands over SSH. The
+            <code>cloudfall-mcp</code> server exposes read-only evidence tools
+            freely and gates every server-changing tool behind an explicit
+            confirmation handshake.
+          </p>
+        </div>
+        <div class="card">
+          <h3>systemd, not containers</h3>
+          <p>
+            Applications run as native systemd services with artifact releases
+            and symlink rollback on long-lived Debian servers. It is all plain
+            systemd, nginx, and Postgres, so any Linux admin can take over
+            without Cloudfall. No lock-in if you ever hire one.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="how">
+    <div class="wrap">
+      <div class="kicker">How it works</div>
+      <h2>From <code style="font-size:0.85em">render.yaml</code> to your own server</h2>
+      <p class="section-sub">
+        One resumable migration: it pauses where you must act and picks up
+        exactly where it left off.
+      </p>
+      <div class="steps">
+        <div class="step-card">
+          <div class="num">1</div>
+          <h3>Import</h3>
+          <p>
+            <code>cloudfall import render</code> maps your Render blueprint onto
+            typed Cloudfall config with an explicit gap report. Nothing is
+            guessed silently.
+          </p>
+        </div>
+        <div class="step-card">
+          <div class="num">2</div>
+          <h3>Migrate</h3>
+          <p>
+            <code>cloudfall migrate</code> converges the baseline and services,
+            migrates your data with row-count verification, deploys behind
+            health gates, and pauses at DNS verification before issuing TLS.
+          </p>
+        </div>
+        <div class="step-card">
+          <div class="num">3</div>
+          <h3>Operate</h3>
+          <p>
+            Cut DNS and stop paying PaaS margins. Audit drift, watch the
+            evidence-derived dashboard, and let an agent run day-two operations
+            through MCP with receipts for every action.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="status">
+    <div class="wrap">
+      <div class="kicker">Status</div>
+      <h2>Pre-1.0, honestly labeled</h2>
+      <p class="section-sub">
+        Cloudfall is early. Here is exactly where it stands.
+      </p>
+      <div class="status-cols">
+        <div class="status-card done">
+          <h3>Implemented and proven live</h3>
+          <ul>
+            <li>Hardened Debian baseline, nftables firewall, UTC time</li>
+            <li>Loki / Grafana / Alloy logging with host metrics over mTLS</li>
+            <li>Loopback PostgreSQL with peer-auth databases and backup checks</li>
+            <li>Health-gated deploys with automatic rollback of bad releases</li>
+            <li>Let's Encrypt TLS and nginx routes from declared domains</li>
+            <li>Render blueprint importer and guided data migration</li>
+            <li>Resumable migrate with a real DNS cutover on an owned domain</li>
+            <li><code>cloudfall-mcp</code> agent server with confirm-gated writes</li>
+          </ul>
+        </div>
+        <div class="status-card next">
+          <h3>Not there yet</h3>
+          <ul>
+            <li>Bare-metal RAID and storage provisioning</li>
+            <li>Broader service catalog: Redis, MySQL, Elasticsearch, Node runtimes</li>
+            <li>Reference-driven secrets management</li>
+            <li>Importers beyond Render</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="quickstart">
+    <div class="wrap">
+      <div class="kicker">Get started</div>
+      <h2>One command to see it validate</h2>
+      <div class="install"><span class="p">$</span> git clone https://github.com/romamo/cloudfall && cd cloudfall
+<span class="p">$</span> uv run cloudfall state validate state/examples</div>
+      <div class="cta">
+        <a class="btn btn-primary" href="https://github.com/romamo/cloudfall">Star on GitHub</a>
+        <a class="btn btn-ghost" href="https://github.com/romamo/cloudfall/blob/main/ROADMAP.md">See the roadmap</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <a class="brand" href="#">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M9 20a6 6 0 1 1 1.2-11.9A8 8 0 0 1 25.7 11 5.5 5.5 0 0 1 24 21.8L9 22z" fill="#67b7ff"/><path d="M12 24v4m5-4v5m5-5v3" stroke="#67b7ff" stroke-width="2.2" stroke-linecap="round"/></svg>
+      Cloudfall
+    </a>
+    <div class="links">
+      <a href="https://github.com/romamo/cloudfall">GitHub</a>
+      <a href="https://github.com/romamo/cloudfall/blob/main/ROADMAP.md">Roadmap</a>
+      <a href="https://github.com/romamo/cloudfall/blob/main/SECURITY.md">Security</a>
+      <a href="https://github.com/romamo/cloudfall/blob/main/CONTRIBUTING.md">Contributing</a>
+    </div>
+    <div class="license">AGPL-3.0-or-later · commercial exception reserved · © 2026 Cloudfall</div>
+  </div>
+</footer>
+
+</body>
+</html>

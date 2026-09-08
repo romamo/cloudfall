@@ -1,0 +1,13 @@
+{
+  // Cloudflare Worker serving the cloudfall.dev landing page as static assets
+  "name": "cloudfall-landing",
+  "compatibility_date": "2025-08-01",
+  "assets": {
+    "directory": "./public",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page"
+  },
+  "routes": [
+    { "pattern": "cloudfall.dev", "custom_domain": true }
+  ]
+}
