@@ -11,6 +11,12 @@ stop paying PaaS margins. See the [roadmap](ROADMAP.md) for the milestone
 plan; the wedge use case is a migration from Render onto a Hetzner-class
 server.
 
+> **Not yet validated on live hosts.** Cloudfall's workflows are exercised by
+> tests and CI against example state, not yet against a real server. The first
+> end-to-end proving run on a disposable Debian host is the current milestone
+> (see the [roadmap](ROADMAP.md)) — until it lands, expect rough edges on real
+> hardware
+
 ## Why Cloudfall
 
 - **Declarative and auditable.** Servers, projects, components, and domains
