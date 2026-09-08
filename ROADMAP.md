@@ -114,13 +114,15 @@ records an explicit origin skip when origin and proxy share a host.
   the gap report)
 
 Exit: a real PaaS application migrated onto one host with its data, TLS,
-monitoring, and rollback path. **Partially met on 2026-09-08**: a realistic
-blueprint (web service, managed PostgreSQL, custom domain) imported and
-migrated onto a disposable Hetzner host with real TLS and a rollback path —
-see the
-[M4/M5 proving-run report](docs/proving-runs/2026-09-08-hetzner-m4-m5.md).
-Still outstanding for full exit: an application actually hosted on Render,
-its real data dump/restore, and a real DNS TTL cutover.
+monitoring, and rollback path. **Met on 2026-09-08** in two stages: a
+realistic blueprint migrated end to end
+([M4/M5 report](docs/proving-runs/2026-09-08-hetzner-m4-m5.md)), then an
+application actually hosted on Render — built by Render from this
+repository, serving rows from its managed PostgreSQL — cut over with its
+data to a byte-identical response on the Cloudfall host
+([cutover report](docs/proving-runs/2026-09-08-render-cutover.md)). The one
+unexercised wedge step is a TTL-lowered DNS record change on an owned
+domain; the guided data-migration playbook also remains pending.
 
 ## M5 — Agent layer
 
