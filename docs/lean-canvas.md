@@ -2,7 +2,8 @@
 
 > One-pager business model. The **evidence-based control plane** for moving a
 > SaaS off cloud PaaS onto one self-hosted Debian server — hardened, monitored,
-> and deployed with rollback, in under an hour. No Kubernetes.
+> and deployed with rollback. Under an hour as proven in the live M1–M5 runs;
+> a cold first run pre-1.0 is closer to an afternoon. No Kubernetes.
 
 | | |
 | --- | --- |
@@ -53,10 +54,10 @@ No skills leak through: the typed state is the whole interface, the agent mediat
 
 ## 6 · Revenue Streams
 
-- **Autonomous operator subscription** (core stream): the always-on agent that
-  manages the fleet 24/7 — evidence-backed, confirm-gated. The AGPL tool and
-  migration stay free: the importer is the acquisition motion, the operator is
-  the monetization
+- **Autonomous operator subscription** (core stream, pricing hypothesis to
+  validate): the always-on agent that manages the fleet 24/7 —
+  evidence-backed, confirm-gated. The AGPL tool and migration stay free: the
+  importer is the acquisition motion, the operator is the monetization
 - **Migration & support engagements** for teams that want the cutover done for
   them
 - **Commercial license exception** for teams who can't ship AGPL
@@ -69,10 +70,19 @@ No skills leak through: the typed state is the whole interface, the agent mediat
 
 ## 8 · Key Metrics
 
+*Wedge (acquisition):*
+
 - Completed migrations (Render → self-host)
 - Time-to-cutover — target **< 1 hour**
 - Audit-clean hosts (zero drift)
 - Share of ops run through the SDK vs. manual SSH
+
+*Operator (revenue):*
+
+- Autonomous actions executed with receipts, per fleet per month
+- Alert-to-resolution time for agent-handled incidents
+- Inference cost per operated fleet vs. subscription price
+- Operator subscription MRR and churn
 
 ## 9 · Unfair Advantage
 
