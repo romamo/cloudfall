@@ -1,0 +1,28 @@
+---
+- name: Migrate external data into declared Cloudfall services
+  hosts: cloudfall_servers
+  become: true
+  gather_facts: true
+  any_errors_fatal: true
+  serial: 1
+  tasks:
+    - name: Migrate data into the selected PostgreSQL service
+      ansible.builtin.include_role:
+        name: cloudfall_data_migration
+      vars:
+        cloudfall_data_migration_service: "{{ cloudfall_data_service_item }}"
+        cloudfall_data_migration_database: "{{ cloudfall_data_database }}"
+        cloudfall_data_migration_source_url_file: >-
+          {{ cloudfall_data_source_url_file }}
+        cloudfall_data_migration_receipt_directory: >-
+          {{ cloudfall_data_receipt_directory | default("") }}
+      loop: >-
+        {{
+          cloudfall_services | default([])
+          | selectattr('serviceKind', 'equalto', 'postgresql')
+          | selectattr('id', 'equalto', cloudfall_data_service_id)
+          | list
+        }}
+      loop_control:
+        loop_var: cloudfall_data_service_item
+        label: "{{ cloudfall_data_service_item.id }}"

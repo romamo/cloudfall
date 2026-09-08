@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from cloudfall.domain import ReleaseId, ResourceId
-    from cloudfall.inventory import ComponentInventory
+    from cloudfall.inventory import ComponentInventory, ServiceInventory
 
 _ARTIFACT_SCHEMA = "artifact.schema.json"
 _STEP_TIMEOUT_SECONDS = 3600
@@ -41,6 +41,9 @@ _ERROR_ANSIBLE_MISSING = "lifecycle_ansible_missing"
 _ERROR_ENGINE_MISSING = "lifecycle_engine_missing"
 _ERROR_EXECUTION_FAILED = "lifecycle_execution_failed"
 _ERROR_RECEIPT_MISSING = "lifecycle_receipt_missing"
+_ERROR_SERVICE_MISSING = "lifecycle_service_missing"
+_ERROR_DATABASE_MISSING = "lifecycle_database_missing"
+_ERROR_SOURCE_URL_MISSING = "lifecycle_source_url_missing"
 
 
 class LifecycleError(RuntimeError):
@@ -496,6 +499,105 @@ def health(
         detail=detail,
         receipt=None,
     )
+
+
+def plan_data_migration(
+    context: EngineContext,
+    service_id: ResourceId,
+    database: str,
+    source_url_file: Path,
+    receipt_directory: Path | None,
+) -> ExecutionPlan:
+    """Compose the subprocess steps for one guided data migration.
+
+    The plan reuses ``ExecutionPlan`` with the service identifier in the
+    ``component_id`` slot; the source URL never crosses a process argument,
+    only the controller-side file path does.
+    """
+    extra_vars: dict[str, object] = {
+        "cloudfall_data_service_id": service_id.value,
+        "cloudfall_data_database": database,
+        "cloudfall_data_source_url_file": str(source_url_file.resolve()),
+    }
+    if receipt_directory is not None:
+        extra_vars["cloudfall_data_receipt_directory"] = str(
+            receipt_directory.resolve()
+        )
+    return ExecutionPlan(
+        action="data-migration",
+        component_id=service_id,
+        release=None,
+        steps=(
+            _render_inventory_step(context),
+            _playbook_step(context, "data.yml", extra_vars),
+        ),
+    )
+
+
+def migrate_data(
+    context: EngineContext,
+    service_id: ResourceId,
+    database: str,
+    source_url_file: Path,
+    receipt_directory: Path | None = None,
+) -> dict[str, object]:
+    """Dump one external database and restore it into a declared service."""
+    service = _postgresql_service(context, service_id)
+    declared = {
+        entry.name.value for entry in service.postgresql.databases
+    }
+    if database not in declared:
+        detail = (
+            f"database {database!r} is not declared on service "
+            f"{service_id}; declared: {sorted(declared)}"
+        )
+        raise LifecycleError(_ERROR_DATABASE_MISSING, detail)
+    if not source_url_file.is_file() or not source_url_file.read_text(
+        encoding="utf-8"
+    ).strip():
+        detail = (
+            "source URL file does not exist or is empty: "
+            f"{source_url_file}"
+        )
+        raise LifecycleError(_ERROR_SOURCE_URL_MISSING, detail)
+    plan = plan_data_migration(
+        context, service_id, database, source_url_file, receipt_directory
+    )
+    execute_plan(plan)
+    result: dict[str, object] = {
+        "status": "ok",
+        "action": "data-migration",
+        "service": service_id.value,
+        "database": database,
+        "servers": [service.server_id.value],
+        "verification": "per-table row counts matched",
+    }
+    if receipt_directory is not None:
+        result["receipt"] = str(
+            receipt_directory / f"{service_id.value}-{database}.json"
+        )
+    return result
+
+
+def _postgresql_service(
+    context: EngineContext, service_id: ResourceId
+) -> ServiceInventory:
+    state = validate_state(context.state_directory, context.schema_directory)
+    inventory = PlatformInventory.from_state(state)
+    service = next(
+        (
+            candidate
+            for candidate in inventory.services
+            if candidate.resource_id == service_id
+        ),
+        None,
+    )
+    if service is None or service.service_kind.value != "postgresql":
+        detail = (
+            f"declared PostgreSQL service does not exist: {service_id}"
+        )
+        raise LifecycleError(_ERROR_SERVICE_MISSING, detail)
+    return service
 
 
 def _component(

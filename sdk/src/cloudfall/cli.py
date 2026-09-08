@@ -36,6 +36,7 @@ from cloudfall.lifecycle import (
     LifecycleError,
     deploy,
     health,
+    migrate_data,
     restart,
     rollback,
 )
@@ -337,6 +338,17 @@ def _add_migrate_parser(
         help="environment file passed to this component's deployment",
     )
     migrate_parser.add_argument(
+        "--data",
+        action="append",
+        default=[],
+        metavar="DATABASE=URL_FILE",
+        help=(
+            "migrate external data into a declared database before cutover; "
+            "URL_FILE is a controller file containing only the source "
+            "connection URL"
+        ),
+    )
+    migrate_parser.add_argument(
         "--yes",
         action="store_true",
         help="execute the plan; without this flag only the plan is shown",
@@ -351,6 +363,60 @@ def _add_migrate_parser(
 def _add_lifecycle_parsers(
     commands: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
+    data_parser = commands.add_parser(
+        "data", help="migrate data into declared services"
+    )
+    data_commands = data_parser.add_subparsers(
+        dest="data_command", required=True
+    )
+    data_migrate_parser = data_commands.add_parser(
+        "migrate",
+        help=(
+            "dump an external PostgreSQL database and restore it into a "
+            "declared service with row-count verification"
+        ),
+    )
+    data_migrate_parser.add_argument("state_directory", type=Path)
+    data_migrate_parser.add_argument("service")
+    data_migrate_parser.add_argument(
+        "--database",
+        required=True,
+        help="declared database name inside the service",
+    )
+    data_migrate_parser.add_argument(
+        "--source-url-file",
+        type=Path,
+        required=True,
+        help=(
+            "controller-side file whose only content is the source "
+            "database connection URL"
+        ),
+    )
+    data_migrate_parser.add_argument(
+        "--receipts",
+        type=Path,
+        default=Path("tmp/data-migrations"),
+        help="migration receipt directory (default: tmp/data-migrations)",
+    )
+    data_migrate_parser.add_argument(
+        "--schemas",
+        type=Path,
+        default=Path("state/schemas/v1"),
+        help="versioned schema directory (default: state/schemas/v1)",
+    )
+    data_migrate_parser.add_argument(
+        "--engine",
+        type=Path,
+        default=Path("engine"),
+        help="engine directory containing ansible contracts (default: engine)",
+    )
+    data_migrate_parser.add_argument(
+        "--inventory-file",
+        type=Path,
+        default=Path("tmp/ansible-inventory.json"),
+        help="rendered inventory path (default: tmp/ansible-inventory.json)",
+    )
+
     deploy_parser = commands.add_parser(
         "deploy", help="deploy one built component release"
     )
@@ -503,6 +569,7 @@ def _dispatch(
 ) -> int:
     handlers: dict[str, Callable[[Namespace, ValidatedState, Path], int]] = {
         "audit": _run_audit,
+        "data:migrate": _run_data_migrate,
         "dashboard:build": _run_dashboard_build,
         "dashboard:serve": _run_dashboard_serve,
         "deploy": _run_deploy,
@@ -679,6 +746,23 @@ def _lifecycle_exit(error: LifecycleError) -> int:
     return 1 if error.code == "lifecycle_execution_failed" else 2
 
 
+def _run_data_migrate(
+    arguments: Namespace, _state: ValidatedState, schema_directory: Path
+) -> int:
+    try:
+        result = migrate_data(
+            _engine_context(arguments, schema_directory),
+            ResourceId.from_boundary(arguments.service),
+            str(arguments.database),
+            Path(arguments.source_url_file),
+            Path(arguments.receipts),
+        )
+    except LifecycleError as error:
+        return _lifecycle_exit(error)
+    _write_json(result)
+    return 0
+
+
 def _run_deploy(
     arguments: Namespace, _state: ValidatedState, schema_directory: Path
 ) -> int:
@@ -758,6 +842,12 @@ def _run_migrate(
                 arguments.env_file, "--env-file"
             ).items()
         }
+        data_migrations = {
+            database: Path(value)
+            for database, value in _key_value_pairs(
+                arguments.data, "--data"
+            ).items()
+        }
     except ValueError as error:
         payload = {
             "status": "error",
@@ -781,6 +871,7 @@ def _run_migrate(
         builds=builds,
         releases=releases,
         environment_files=environment_files,
+        data_migrations=data_migrations,
         execute=arguments.yes,
         restart=arguments.restart,
     )

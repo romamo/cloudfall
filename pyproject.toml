@@ -46,6 +46,9 @@ testpaths = ["sdk/tests", "engine/tests"]
 [tool.ruff]
 line-length = 88
 target-version = "py314"
+# Standalone example applications are their own projects, not part of the
+# package's lint domain.
+extend-exclude = ["examples"]
 
 [tool.ruff.lint]
 select = ["ALL"]

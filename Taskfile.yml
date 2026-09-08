@@ -304,6 +304,10 @@ tasks:
       - >-
         uv run ansible-playbook --syntax-check
         --inventory {{ .INVENTORY_FILE }}
+        engine/ansible/playbooks/data.yml
+      - >-
+        uv run ansible-playbook --syntax-check
+        --inventory {{ .INVENTORY_FILE }}
         engine/ansible/playbooks/inspect.yml
       - >-
         uv run ansible-playbook --syntax-check

@@ -195,6 +195,18 @@ def _mutation_registrations(
     ) -> str:
         return _dump(toolset.restart_component(component, confirm=confirm))
 
+    def migrate_database(
+        service: str,
+        database: str,
+        source_url_file: str,
+        confirm: bool = False,  # noqa: FBT001, FBT002 - explicit agent gate.
+    ) -> str:
+        return _dump(
+            toolset.migrate_database(
+                service, database, source_url_file, confirm=confirm
+            )
+        )
+
     def converge_baseline(
         confirm: bool = False,  # noqa: FBT001, FBT002 - explicit agent gate.
     ) -> str:
@@ -219,6 +231,7 @@ def _mutation_registrations(
         builds: dict[str, str] | None = None,
         releases: dict[str, str] | None = None,
         environment_files: dict[str, str] | None = None,
+        data_migrations: dict[str, str] | None = None,
         plan_file: str = "tmp/migrate/plan.json",
         restart_plan: bool = False,  # noqa: FBT001, FBT002 - explicit gate.
         confirm: bool = False,  # noqa: FBT001, FBT002 - explicit agent gate.
@@ -228,6 +241,7 @@ def _mutation_registrations(
                 builds,
                 releases,
                 environment_files,
+                data_migrations,
                 plan_file,
                 restart_plan=restart_plan,
                 confirm=confirm,
@@ -254,6 +268,15 @@ def _mutation_registrations(
             "restart_component",
             "Restart one component behind its health check; requires "
             "confirm=true",
+            destructive,
+        ),
+        (
+            migrate_database,
+            "migrate_database",
+            "Dump an external PostgreSQL database and restore it into a "
+            "declared service with per-table row-count verification; the "
+            "source_url_file is a controller-side file containing only the "
+            "connection URL; requires confirm=true",
             destructive,
         ),
         (
@@ -322,6 +345,11 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--artifacts", type=Path, default=Path("tmp/artifacts")
     )
+    parser.add_argument(
+        "--data-migrations",
+        type=Path,
+        default=Path("tmp/data-migrations"),
+    )
     return parser
 
 
@@ -338,6 +366,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         deployments_directory=Path(arguments.deployments),
         releases_directory=Path(arguments.releases),
         artifacts_directory=Path(arguments.artifacts),
+        data_migrations_directory=Path(arguments.data_migrations),
     )
     create_server(config).run(transport="stdio")
     return 0

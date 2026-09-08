@@ -565,8 +565,11 @@ def _import_databases(
     state.gap(
         _CATEGORY_ACTION,
         _POSTGRES_SERVICE_ID,
-        "migrate data with pg_dump from Render and restore into the "
-        "deployed service before cutover",
+        "before cutover, save the Render database connection URL into a "
+        "local file and migrate the data with: cloudfall data migrate "
+        f"<state-dir> {_POSTGRES_SERVICE_ID} --database <name> "
+        "--source-url-file <file> (or pass --data <name>=<file> to "
+        "cloudfall migrate)",
     )
     return [
         {

@@ -1,0 +1,36 @@
+---
+argument_specs:
+  main:
+    short_description: Migrate one external PostgreSQL database into a declared service
+    options:
+      cloudfall_data_migration_service:
+        type: dict
+        required: true
+        description: The rendered declared PostgreSQL service receiving the data
+      cloudfall_data_migration_database:
+        type: str
+        required: true
+        description: Declared database name inside the service to restore into
+      cloudfall_data_migration_source_url_file:
+        type: path
+        required: true
+        description: >-
+          Controller-side file whose only content is the source database
+          connection URL; the URL itself never crosses a command line
+      cloudfall_data_migration_receipt_directory:
+        type: str
+        required: false
+        default: ""
+        description: Controller directory receiving the migration receipt
+      cloudfall_data_migration_url_path:
+        type: path
+        required: false
+        default: /root/.cloudfall-data-source-url
+      cloudfall_data_migration_dump_path:
+        type: path
+        required: false
+        default: /var/tmp/cloudfall-data-migration.dump
+      cloudfall_data_migration_count_query:
+        type: str
+        required: false
+        description: Deterministic per-table row-count query used on both sides

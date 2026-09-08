@@ -1,0 +1,201 @@
+---
+- name: Validate the migration target service
+  ansible.builtin.assert:
+    that:
+      - cloudfall_data_migration_service.serviceKind == "postgresql"
+    fail_msg: Data migration supports declared PostgreSQL services only
+
+- name: Select the declared target database
+  ansible.builtin.set_fact:
+    cloudfall_data_migration_entries: >-
+      {{
+        cloudfall_data_migration_service.postgresql.databases
+        | selectattr('name', 'equalto', cloudfall_data_migration_database)
+        | list
+      }}
+
+- name: Require exactly one declared database entry
+  ansible.builtin.assert:
+    that:
+      - cloudfall_data_migration_entries | length == 1
+    fail_msg: >-
+      Database {{ cloudfall_data_migration_database }} is not declared on
+      service {{ cloudfall_data_migration_service.id }}; declare it in the
+      config before migrating data into it
+
+- name: Record the declared database owner
+  ansible.builtin.set_fact:
+    cloudfall_data_migration_owner: >-
+      {{ cloudfall_data_migration_entries[0].owner }}
+
+- name: Migrate and verify the declared database
+  block:
+    - name: Stage the source connection URL on the target host
+      ansible.builtin.copy:
+        src: "{{ cloudfall_data_migration_source_url_file }}"
+        dest: "{{ cloudfall_data_migration_url_path }}"
+        owner: root
+        group: root
+        mode: "0600"
+      no_log: true
+
+    - name: Count existing tables in the target database
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/psql
+          - --dbname
+          - "{{ cloudfall_data_migration_database }}"
+          - --tuples-only
+          - --no-align
+          - --command
+          - >-
+            SELECT count(*) FROM information_schema.tables
+            WHERE table_schema = 'public'
+      become: true
+      become_user: postgres
+      register: cloudfall_data_migration_target_tables
+      changed_when: false
+
+    - name: Refuse to restore into a non-empty database
+      ansible.builtin.assert:
+        that:
+          - cloudfall_data_migration_target_tables.stdout | trim == "0"
+        fail_msg: >-
+          Database {{ cloudfall_data_migration_database }} already contains
+          {{ cloudfall_data_migration_target_tables.stdout | trim }}
+          tables; data migration refuses to overwrite existing data
+
+    - name: Dump the source database on the target host
+      ansible.builtin.shell:
+        cmd: >-
+          pg_dump
+          --dbname "$(cat {{ cloudfall_data_migration_url_path | quote }})"
+          --no-owner --no-privileges --format custom
+          --file {{ cloudfall_data_migration_dump_path | quote }}
+      register: cloudfall_data_migration_dump
+      retries: 3
+      delay: 10
+      until: cloudfall_data_migration_dump.rc == 0
+      changed_when: true
+
+    - name: Restrict the staged dump to the postgres user
+      ansible.builtin.file:
+        path: "{{ cloudfall_data_migration_dump_path }}"
+        owner: postgres
+        group: postgres
+        mode: "0600"
+
+    - name: Read source table row counts
+      ansible.builtin.shell:
+        cmd: >-
+          psql
+          --dbname "$(cat {{ cloudfall_data_migration_url_path | quote }})"
+          --csv --tuples-only
+          --command {{ cloudfall_data_migration_count_query | quote }}
+      register: cloudfall_data_migration_source_counts
+      changed_when: false
+
+    - name: Require at least one source table
+      ansible.builtin.assert:
+        that:
+          - cloudfall_data_migration_source_counts.stdout_lines | length > 0
+        fail_msg: >-
+          The source database contains no tables in schema public; there is
+          nothing to migrate
+
+    - name: Restore the dump into the declared database
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/pg_restore
+          - --no-owner
+          - --no-privileges
+          - --role
+          - "{{ cloudfall_data_migration_owner }}"
+          - --dbname
+          - "{{ cloudfall_data_migration_database }}"
+          - "{{ cloudfall_data_migration_dump_path }}"
+      become: true
+      become_user: postgres
+      changed_when: true
+
+    - name: Read restored table row counts
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/psql
+          - --dbname
+          - "{{ cloudfall_data_migration_database }}"
+          - --csv
+          - --tuples-only
+          - --command
+          - "{{ cloudfall_data_migration_count_query }}"
+      become: true
+      become_user: postgres
+      register: cloudfall_data_migration_restored_counts
+      changed_when: false
+
+    - name: Require identical per-table row counts
+      ansible.builtin.assert:
+        that:
+          - >-
+            cloudfall_data_migration_source_counts.stdout_lines
+            == cloudfall_data_migration_restored_counts.stdout_lines
+        fail_msg: >-
+          Restored row counts do not match the source; source
+          {{ cloudfall_data_migration_source_counts.stdout_lines }}
+          versus restored
+          {{ cloudfall_data_migration_restored_counts.stdout_lines }}
+  always:
+    - name: Remove the staged source connection URL
+      ansible.builtin.file:
+        path: "{{ cloudfall_data_migration_url_path }}"
+        state: absent
+
+    - name: Remove the staged dump
+      ansible.builtin.file:
+        path: "{{ cloudfall_data_migration_dump_path }}"
+        state: absent
+
+- name: Ensure the controller receipt directory exists
+  ansible.builtin.file:
+    path: "{{ cloudfall_data_migration_receipt_directory }}"
+    state: directory
+    mode: "0755"
+  delegate_to: localhost
+  become: false
+  when: cloudfall_data_migration_receipt_directory | length > 0
+
+- name: Write the data-migration receipt on the controller
+  ansible.builtin.copy:
+    content: >-
+      {{
+        {
+          'apiVersion': 'cloudfall/v1',
+          'kind': 'DataMigrationReceipt',
+          'metadata': {
+            'id': cloudfall_data_migration_service.id
+              ~ '-' ~ cloudfall_data_migration_database,
+            'description':
+              'Data-migration receipt written by cloudfall_data_migration',
+          },
+          'spec': {
+            'service': cloudfall_data_migration_service.id,
+            'database': cloudfall_data_migration_database,
+            'owner': cloudfall_data_migration_owner,
+            'server': cloudfall_server_id,
+            'migratedAt': ansible_facts['date_time']['iso8601'],
+            'tables': cloudfall_data_migration_source_counts.stdout_lines
+              | map('regex_replace', '^(.*),([0-9]+)$',
+                    '{"table": "\1", "rows": \2}')
+              | map('from_json') | list,
+            'verification': 'per-table row counts matched',
+          },
+        } | to_nice_json
+      }}
+    dest: >-
+      {{ cloudfall_data_migration_receipt_directory }}/{{
+        cloudfall_data_migration_service.id
+      }}-{{ cloudfall_data_migration_database }}.json
+    mode: "0644"
+  delegate_to: localhost
+  become: false
+  when: cloudfall_data_migration_receipt_directory | length > 0

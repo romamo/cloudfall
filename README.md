@@ -128,6 +128,13 @@ and a final evidence pass that requires a compliant audit and healthy
 routes. Progress persists after every step, so a failed step or the DNS
 pause resumes exactly where it stopped.
 
+Managed-database contents follow the same guided path: save the source
+connection URL into a local file and either run `cloudfall data migrate`
+directly or add `--data <database>=<url-file>` to the migration plan. The
+engine dumps on the target host, restores over the peer-authenticated
+socket, refuses non-empty target databases, verifies per-table row counts,
+and writes a `DataMigrationReceipt`.
+
 ## Inspect servers and audit drift
 
 Each `Server` references a reusable server type (a `HostProfile` resource)

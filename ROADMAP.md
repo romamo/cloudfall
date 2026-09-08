@@ -104,9 +104,12 @@ records an explicit origin skip when origin and proxy share a host.
   kept outside the config and a structured gap report for anything
   unmappable ✔
   (blueprint files; the Render API and cron jobs are pending)
-- Data migration: managed-Postgres dump and restore with verification
-  (currently a required-action item in the import report; a guided playbook
-  is pending)
+- Data migration: managed-Postgres dump and restore with verification ✔
+  (`cloudfall data migrate`, the `--data` step of `cloudfall migrate`, and
+  the confirm-gated `migrate_database` MCP tool: per-table row-count
+  verification, a non-empty-target refusal guard, secret-file hygiene, and
+  a `DataMigrationReceipt`; proven live in the
+  [guided data-migration report](docs/proving-runs/2026-09-08-guided-data-migration.md))
 - Cutover generator: DNS TTL lowering, parallel-run verification, switch, and
   a rollback window (DNS steps surface in the import report today)
 - v1 limitation: native Python and Node builds; container runtimes are a
@@ -124,14 +127,13 @@ data to a byte-identical response on the Cloudfall host
 finally the TTL-lowered DNS record cutover itself on an owned domain, with
 the migrate plan pausing at `dns-verify` and resuming after the flip
 ([DNS cutover report](docs/proving-runs/2026-09-08-dns-cutover.md)). Every
-wedge step is now proven live; the guided data-migration playbook remains
-pending (dump/restore is manual per the import report).
+wedge step is now proven live, including the guided data migration.
 
 ## M5 — Agent layer
 
 - MCP server over the Python API: read-only tools exposed freely; mutating tools
   gated by explicit confirmation and always writing receipts ✔
-  (`cloudfall-mcp` with fifteen annotated tools covering import, artifact
+  (`cloudfall-mcp` with seventeen annotated tools covering import, artifact
   build, baseline/services/domains convergence, deploy/rollback/restart,
   and the full evidence pipeline)
 - A `migrate` orchestrator chaining M1–M4 as a resumable plan ✔

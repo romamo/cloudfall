@@ -27,6 +27,7 @@ from cloudfall.lifecycle import (
     build_release_artifact,
     deploy,
     health,
+    migrate_data,
     restart,
     rollback,
     run_engine_playbook,
@@ -64,6 +65,7 @@ class AgentConfig:
     deployments_directory: Path
     releases_directory: Path
     artifacts_directory: Path
+    data_migrations_directory: Path = Path("tmp/data-migrations")
 
     def context(self) -> EngineContext:
         """Return the engine execution context shared by mutating tools."""
@@ -321,6 +323,41 @@ class AgentToolset:
             return error.as_dict()
         return result.as_dict()
 
+    def migrate_database(
+        self,
+        service: str,
+        database: str,
+        source_url_file: str,
+        *,
+        confirm: bool = False,
+    ) -> dict[str, object]:
+        """Dump an external database and restore it into a declared service."""
+        gate = _confirmation_gate(
+            confirm,
+            "data-migration",
+            (
+                f"dump the database behind {source_url_file} and restore it "
+                f"into declared database {database} on service {service} "
+                "with per-table row-count verification"
+            ),
+        )
+        if gate is not None:
+            return gate
+        try:
+            service_id = ResourceId.from_boundary(service)
+        except (TypeError, ValueError) as error:
+            return _invalid_argument(error)
+        try:
+            return migrate_data(
+                self._config.context(),
+                service_id,
+                database,
+                Path(source_url_file),
+                self._config.data_migrations_directory,
+            )
+        except LifecycleError as error:
+            return error.as_dict()
+
     def converge_baseline(self, *, confirm: bool = False) -> dict[str, object]:
         """Converge every declared server to the managed baseline."""
         return self._converge(
@@ -370,6 +407,7 @@ class AgentToolset:
         builds: dict[str, str] | None = None,
         releases: dict[str, str] | None = None,
         environment_files: dict[str, str] | None = None,
+        data_migrations: dict[str, str] | None = None,
         plan_file: str = "tmp/migrate/plan.json",
         *,
         restart_plan: bool = False,
@@ -384,6 +422,12 @@ class AgentToolset:
                 component: self._path(value)
                 for component, value in (
                     environment_files if environment_files is not None else {}
+                ).items()
+            },
+            data_migrations={
+                database: self._path(value)
+                for database, value in (
+                    data_migrations if data_migrations is not None else {}
                 ).items()
             },
             execute=confirm,

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 import socket
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
 from ipaddress import ip_address
@@ -26,6 +26,7 @@ from cloudfall.lifecycle import (
     LifecycleError,
     build_release_artifact,
     deploy,
+    migrate_data,
     run_engine_playbook,
 )
 from cloudfall.observation import load_observations
@@ -64,6 +65,7 @@ _ERROR_RELEASE_MISSING = "migrate_release_missing"
 _ERROR_DNS_UNVERIFIED = "migrate_dns_unverified"
 _ERROR_AUDIT_DRIFT = "migrate_audit_drift"
 _ERROR_ROUTES_UNHEALTHY = "migrate_routes_unhealthy"
+_ERROR_DATABASE_UNKNOWN = "migrate_database_unknown"
 
 
 class MigrateError(RuntimeError):
@@ -122,6 +124,7 @@ class MigrateOptions:
     builds: Mapping[str, str]
     releases: Mapping[str, str]
     environment_files: Mapping[str, Path]
+    data_migrations: Mapping[str, Path] = field(default_factory=dict)
     execute: bool = False
     restart: bool = False
 
@@ -195,6 +198,14 @@ def _computed_steps(
             "services", "converge every declared infrastructure service"
         ),
     ]
+    steps.extend(
+        PlanStep(
+            f"data:{database}",
+            f"migrate external data into database {database} with "
+            "row-count verification",
+        )
+        for database in sorted(options.data_migrations)
+    )
     for component in inventory.components:
         component_id = component.resource_id.value
         if component_id not in options.releases:
@@ -267,6 +278,25 @@ def _require_known_components(
             f"(--release component=id) for: {', '.join(unbuilt)}"
         )
         raise MigrateError(_ERROR_COMPONENT_UNBUILT, detail)
+    _require_known_databases(inventory, options)
+
+
+def _require_known_databases(
+    inventory: PlatformInventory, options: MigrateOptions
+) -> None:
+    declared_databases = {
+        database.name.value
+        for service in inventory.services
+        if service.service_kind.value == "postgresql"
+        for database in service.postgresql.databases
+    }
+    unknown = sorted(set(options.data_migrations) - declared_databases)
+    if unknown:
+        detail = (
+            "--data references databases not declared on any PostgreSQL "
+            f"service: {', '.join(unknown)}"
+        )
+        raise MigrateError(_ERROR_DATABASE_UNKNOWN, detail)
 
 
 def _load_plan(
@@ -427,7 +457,38 @@ def _build_runners(
                 component_id, git_ref
             )
         runners[f"deploy:{component_id}"] = _deploy_runner(component_id)
+    for database, source_url_file in options.data_migrations.items():
+        runners[f"data:{database}"] = _data_runner(
+            config, inventory, database, source_url_file
+        )
     return runners
+
+
+def _data_runner(
+    config: AgentConfig,
+    inventory: PlatformInventory,
+    database: str,
+    source_url_file: Path,
+) -> Runner:
+    def _run() -> dict[str, object]:
+        service = next(
+            service
+            for service in inventory.services
+            if service.service_kind.value == "postgresql"
+            and any(
+                entry.name.value == database
+                for entry in service.postgresql.databases
+            )
+        )
+        return migrate_data(
+            config.context(),
+            service.resource_id,
+            database,
+            source_url_file,
+            config.data_migrations_directory,
+        )
+
+    return _run
 
 
 def _playbook(
