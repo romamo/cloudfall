@@ -17,7 +17,12 @@ if TYPE_CHECKING:
 
 from cloudfall.agent_tools import AgentConfig
 from cloudfall.audit import AuditStatus, audit_inventory
-from cloudfall.dashboard import build_dashboard
+from cloudfall.dashboard import RefreshInterval, build_dashboard
+from cloudfall.dashboard_server import (
+    EvidenceSources,
+    ListenEndpoint,
+    create_dashboard_server,
+)
 from cloudfall.domain import ReleaseId, ResourceId
 from cloudfall.importer import (
     ImportTargets,
@@ -189,6 +194,57 @@ def _parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path("state/schemas/v1"),
         help="versioned schema directory (default: state/schemas/v1)",
+    )
+
+    dashboard_serve_parser = dashboard_commands.add_parser(
+        "serve", help="serve a live-refreshing read-only dashboard over HTTP"
+    )
+    dashboard_serve_parser.add_argument("state_directory", type=Path)
+    dashboard_serve_parser.add_argument(
+        "--observed",
+        type=Path,
+        required=True,
+        help="directory containing observed-server JSON snapshots",
+    )
+    dashboard_serve_parser.add_argument(
+        "--service-observed",
+        type=Path,
+        default=Path("tmp/observed-services"),
+        help="domain observation directory (default: tmp/observed-services)",
+    )
+    dashboard_serve_parser.add_argument(
+        "--deployments",
+        type=Path,
+        default=Path("tmp/deployments"),
+        help="deployment receipt directory (default: tmp/deployments)",
+    )
+    dashboard_serve_parser.add_argument(
+        "--schemas",
+        type=Path,
+        default=Path("state/schemas/v1"),
+        help="versioned schema directory (default: state/schemas/v1)",
+    )
+    dashboard_serve_parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="listen address; use the VPS address to expose it (default: 127.0.0.1)",
+    )
+    dashboard_serve_parser.add_argument(
+        "--port",
+        type=int,
+        default=8100,
+        help="listen port; 0 picks a free port (default: 8100)",
+    )
+    dashboard_serve_parser.add_argument(
+        "--refresh",
+        type=int,
+        default=10,
+        help="evidence refresh interval in seconds (default: 10)",
+    )
+    dashboard_serve_parser.add_argument(
+        "--inspect-services",
+        action="store_true",
+        help="probe DNS, TLS, origin, and public routes on every refresh",
     )
 
     _add_lifecycle_parsers(commands)
@@ -448,6 +504,7 @@ def _dispatch(
     handlers: dict[str, Callable[[Namespace, ValidatedState, Path], int]] = {
         "audit": _run_audit,
         "dashboard:build": _run_dashboard_build,
+        "dashboard:serve": _run_dashboard_serve,
         "deploy": _run_deploy,
         "health": _run_health,
         "inventory:show": _run_inventory_show,
@@ -551,6 +608,41 @@ def _run_dashboard_build(
             "dashboard": artifacts.as_dict(),
         }
     )
+    return 0
+
+
+def _run_dashboard_serve(
+    arguments: Namespace, _state: ValidatedState, schema_directory: Path
+) -> int:
+    sources = EvidenceSources(
+        state_directory=Path(arguments.state_directory),
+        schema_directory=schema_directory,
+        observed_directory=Path(arguments.observed),
+        service_observed_directory=Path(arguments.service_observed),
+        deployments_directory=Path(arguments.deployments),
+        inspect_services=bool(arguments.inspect_services),
+    )
+    endpoint = ListenEndpoint(host=str(arguments.host), port=int(arguments.port))
+    refresh = RefreshInterval.from_boundary(int(arguments.refresh))
+    server = create_dashboard_server(sources, endpoint, refresh)
+    bound_port = int(server.server_address[1])
+    _write_json(
+        {
+            "status": "ok",
+            "dashboard": {
+                "url": f"http://{endpoint.host}:{bound_port}/",
+                "refreshSeconds": refresh.seconds,
+                "inspectServices": sources.inspect_services,
+            },
+        }
+    )
+    sys.stdout.flush()
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        return 0
+    finally:
+        server.server_close()
     return 0
 
 

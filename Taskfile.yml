@@ -275,6 +275,21 @@ tasks:
         --deployments {{ .DEPLOYMENT_DIR }}
         --output {{ .ROOT_DIR }}/tmp/dashboard
 
+  dashboard:serve:
+    desc: Serve the live-refreshing read-only operations dashboard over HTTP
+    deps:
+      - validate
+    cmds:
+      - >-
+        uv run cloudfall dashboard serve {{ .STATE_DIR }}
+        --schemas {{ .SCHEMA_DIR }} --observed {{ .OBSERVATION_DIR }}
+        --service-observed {{ .SERVICE_OBSERVATION_DIR }}
+        --deployments {{ .DEPLOYMENT_DIR }}
+        --host {{ .DASHBOARD_HOST | default "127.0.0.1" }}
+        --port {{ .DASHBOARD_PORT | default "8100" }}
+        --refresh {{ .DASHBOARD_REFRESH | default "10" }}
+        --inspect-services
+
   ansible:syntax:
     desc: Run Ansible syntax and lint checks
     deps:

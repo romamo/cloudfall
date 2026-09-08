@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass
 from html import escape
@@ -25,6 +26,45 @@ if TYPE_CHECKING:
 _FILESYSTEM_WARNING_BASIS_POINTS = 8_500
 _FILESYSTEM_CRITICAL_BASIS_POINTS = 9_500
 _SMART_WARNING_PERCENT_USED = 90
+_REFRESH_MINIMUM_SECONDS = 1
+_REFRESH_MAXIMUM_SECONDS = 3_600
+
+
+@dataclass(frozen=True, slots=True)
+class RefreshInterval:
+    """How often live dashboard consumers re-derive and re-fetch evidence."""
+
+    seconds: int
+
+    def __post_init__(self) -> None:
+        """Reject intervals outside the supported live-refresh range."""
+        if not (
+            _REFRESH_MINIMUM_SECONDS <= self.seconds <= _REFRESH_MAXIMUM_SECONDS
+        ):
+            message = (
+                "refresh interval must be between "
+                f"{_REFRESH_MINIMUM_SECONDS} and {_REFRESH_MAXIMUM_SECONDS} "
+                f"seconds, got {self.seconds}"
+            )
+            raise ValueError(message)
+
+    @classmethod
+    def from_boundary(cls, value: object) -> RefreshInterval:
+        """Coerce a boundary value while keeping internal APIs strictly typed."""
+        if isinstance(value, RefreshInterval):
+            return value
+        if not isinstance(value, int) or isinstance(value, bool):
+            message = (
+                "refresh interval must be an integer number of seconds, "
+                f"got {type(value).__name__}"
+            )
+            raise TypeError(message)
+        return cls(value)
+
+    @property
+    def milliseconds(self) -> int:
+        """Return the interval for JavaScript timer consumption."""
+        return self.seconds * 1_000
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,7 +103,59 @@ def _atomic_write(path: Path, content: str) -> None:
     temporary.replace(path)
 
 
-def _render_html(operations: FleetOperations) -> str:
+def operations_fingerprint(operations: FleetOperations) -> str:
+    """Hash evidence-derived content, ignoring the generation timestamp."""
+    payload = dict(operations.as_dict())
+    del payload["generatedAt"]
+    serialized = json.dumps(payload, sort_keys=True)
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def render_dashboard_html(
+    operations: FleetOperations, live: RefreshInterval | None = None
+) -> str:
+    """Render the dashboard page, optionally with self-updating live refresh."""
+    return _render_html(operations, live)
+
+
+_LIVE_SCRIPT_TEMPLATE = """<script>
+(() => {
+  const REFRESH_MS = __REFRESH_MS__;
+  const schedule = () => setTimeout(refresh, REFRESH_MS);
+  const setStatus = (text, stale) => {
+    const status = document.getElementById("live-status");
+    status.textContent = text;
+    status.classList.toggle("stale", stale);
+  };
+  const refresh = async () => {
+    try {
+      const response = await fetch(window.location.pathname, { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const markup = await response.text();
+      const next = new DOMParser().parseFromString(markup, "text/html").querySelector("main");
+      if (next === null) {
+        throw new Error("refresh payload has no <main> element");
+      }
+      const current = document.querySelector("main");
+      if (next.dataset.fingerprint !== current.dataset.fingerprint) {
+        current.replaceWith(next);
+      }
+      setStatus(`live · checked ${new Date().toLocaleTimeString()}`, false);
+    } catch (error) {
+      setStatus(`refresh failed: ${error.message}`, true);
+    }
+    schedule();
+  };
+  schedule();
+})();
+</script>"""
+
+
+def _render_html(
+    operations: FleetOperations, live: RefreshInterval | None = None
+) -> str:
     payload = operations.as_dict()
     summary = payload["summary"]
     if not isinstance(summary, dict):
@@ -83,6 +175,17 @@ def _render_html(operations: FleetOperations) -> str:
             '<tr><td colspan="5" class="empty">No open tasks from current '
             "evidence.</td></tr>"
         )
+    fingerprint = operations_fingerprint(operations)
+    live_status = (
+        f'<div class="muted" id="live-status">live · every {live.seconds}s</div>'
+        if live is not None
+        else ""
+    )
+    live_script = (
+        _LIVE_SCRIPT_TEMPLATE.replace("__REFRESH_MS__", str(live.milliseconds))
+        if live is not None
+        else ""
+    )
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -135,17 +238,18 @@ def _render_html(operations: FleetOperations) -> str:
       padding: 28px; text-align: center; }}
     a {{ color: #7dc4ff; }} footer {{ margin-top: 20px; color: var(--muted);
       font-size: 13px; }}
+    #live-status {{ margin-top: 4px; }} #live-status.stale {{ color: var(--critical); }}
     @media (max-width: 720px) {{ header {{ display: block; }}
       .summary {{ grid-template-columns: repeat(2, 1fr); }}
       .servers, .domains {{ grid-template-columns: 1fr; }} main {{ margin-top: 24px; }} }}
   </style>
 </head>
 <body>
-<main>
+<main data-fingerprint="{fingerprint}">
   <header>
     <div><h1>Cloudfall Operations</h1><p class="muted">Evidence-backed fleet status</p></div>
     <div><span class="badge {operations.health.value}">{operations.health.value}</span>
-      <div class="muted">Generated {escape(operations.generated_at.as_string())}</div></div>
+      <div class="muted">Generated {escape(operations.generated_at.as_string())}</div>{live_status}</div>
   </header>
   <section class="summary" aria-label="Fleet summary">
     <div class="stat"><strong>{len(operations.domains)}</strong><span>services</span></div>
@@ -165,6 +269,7 @@ def _render_html(operations: FleetOperations) -> str:
   </table></div>
   <footer>Read-only projection. <a href="operations.json">View operations JSON</a>.</footer>
 </main>
+{live_script}
 </body>
 </html>
 """

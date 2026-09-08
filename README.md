@@ -162,6 +162,23 @@ The build writes `tmp/dashboard/index.html` and machine-readable
 visible as `no` or `unknown`; Cloudfall does not infer deployment merely because
 a playbook exists.
 
+For a live view, run the dashboard as a server on the management host (a
+VPS or your local machine):
+
+```console
+task dashboard:serve
+```
+
+`cloudfall dashboard serve` re-derives the projection from state and evidence
+on a refresh interval (default 10 seconds) and serves a page that updates
+itself in place; `--inspect-services` additionally probes DNS, TLS, origin,
+and public routes on every refresh, so service health is live. Server
+hardware evidence still comes from observation snapshots: schedule
+`task inspect` (cron or a timer) on the management host to keep it fresh.
+The server binds `127.0.0.1:8100` by default; set `DASHBOARD_HOST`,
+`DASHBOARD_PORT`, and `DASHBOARD_REFRESH` to override. The projection stays
+strictly read-only either way.
+
 ## Logging and storage guides
 
 - A guarded parallel logging slice deploys Loki, loopback-only Grafana, an
