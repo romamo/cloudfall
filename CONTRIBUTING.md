@@ -45,6 +45,21 @@ uv run ansible-lint engine/ansible
 ## Pull requests
 
 Keep changes scoped to one concern. Include tests for behavior changes and
-update the relevant README when a workflow changes. By contributing you agree
-that your contributions are licensed under the AGPL-3.0-or-later license of
-this repository.
+update the relevant README when a workflow changes.
+
+## Licensing of contributions
+
+Cloudfall is dual-licensed: AGPL-3.0-or-later for everyone, with commercial
+licensing exceptions offered by the copyright holder. To keep that model
+possible while accepting outside work, contributions carry two grants:
+
+1. Your contribution is licensed under the AGPL-3.0-or-later license of this
+   repository
+2. You additionally grant the Cloudfall copyright holder a perpetual,
+   worldwide, non-exclusive, irrevocable, royalty-free license to use,
+   reproduce, modify, sublicense, and distribute your contribution under
+   other license terms, including commercial licenses
+
+You keep the copyright to your contribution. By opening a pull request you
+confirm that you wrote the contribution or otherwise have the right to submit
+it under these terms.
