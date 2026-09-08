@@ -38,6 +38,58 @@
     get_checksum: false
   register: cloudfall_nginx_site_certificate
 
+# The TLS server block references certificate files, so on a host without
+# them the vhost first goes live HTTP-only. That serves the ACME challenge
+# location, which is exactly what webroot issuance needs; the vhost is
+# re-rendered with TLS after the certificate exists.
+- name: Determine whether TLS can be enabled before issuance
+  ansible.builtin.set_fact:
+    cloudfall_nginx_site_tls_active: >-
+      {{
+        cloudfall_nginx_site_domain.tls.mode == "required"
+        and cloudfall_nginx_site_certificate.stat.exists
+      }}
+
+- name: Render the managed virtual host
+  ansible.builtin.template:
+    src: domain-site.conf.j2
+    dest: "{{ cloudfall_nginx_site_domain.proxy.configurationPath }}"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload Nginx
+
+- name: Enable the managed virtual host
+  ansible.builtin.file:
+    src: "{{ cloudfall_nginx_site_domain.proxy.configurationPath }}"
+    dest: >-
+      /etc/nginx/sites-enabled/{{
+        cloudfall_nginx_site_domain.proxy.configurationPath | basename
+      }}
+    state: link
+  notify: Reload Nginx
+  when: >-
+    cloudfall_nginx_site_domain.proxy.configurationPath.startswith(
+      '/etc/nginx/sites-available/'
+    )
+
+- name: Enable Nginx
+  ansible.builtin.systemd_service:
+    name: nginx.service
+    enabled: true
+    state: started
+
+- name: Validate the Nginx configuration before issuance
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/nginx
+      - -t
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Serve the ACME challenge location before issuance
+  ansible.builtin.meta: flush_handlers
+
 - name: Issue the declared certificate
   ansible.builtin.command:
     argv: >-
@@ -81,7 +133,7 @@
         and cloudfall_nginx_site_certificate.stat.exists
       }}
 
-- name: Render the managed virtual host
+- name: Render the managed virtual host with issued material
   ansible.builtin.template:
     src: domain-site.conf.j2
     dest: "{{ cloudfall_nginx_site_domain.proxy.configurationPath }}"
@@ -89,26 +141,6 @@
     group: root
     mode: "0644"
   notify: Reload Nginx
-
-- name: Enable the managed virtual host
-  ansible.builtin.file:
-    src: "{{ cloudfall_nginx_site_domain.proxy.configurationPath }}"
-    dest: >-
-      /etc/nginx/sites-enabled/{{
-        cloudfall_nginx_site_domain.proxy.configurationPath | basename
-      }}
-    state: link
-  notify: Reload Nginx
-  when: >-
-    cloudfall_nginx_site_domain.proxy.configurationPath.startswith(
-      '/etc/nginx/sites-available/'
-    )
-
-- name: Enable Nginx
-  ansible.builtin.systemd_service:
-    name: nginx.service
-    enabled: true
-    state: started
 
 - name: Enable the certificate renewal timer
   ansible.builtin.systemd_service:
@@ -136,6 +168,15 @@
   when:
     - not ansible_check_mode
     - cloudfall_nginx_site_receipt_directory | length > 0
+
+- name: Ensure the controller receipt directory exists
+  ansible.builtin.file:
+    path: "{{ cloudfall_nginx_site_receipt_directory }}"
+    state: directory
+    mode: "0755"
+  delegate_to: localhost
+  become: false
+  when: cloudfall_nginx_site_receipt_directory | length > 0
 
 - name: Write the deployment receipt on the controller
   ansible.builtin.copy:

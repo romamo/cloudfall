@@ -96,7 +96,9 @@
     state: present
   register: cloudfall_logging_backend_repository
 
-- name: Refresh APT cache after repository changes
+# Not a handler: the refreshed index must exist before the pinned
+# install below runs, and handlers only flush later.
+- name: Refresh APT cache after repository changes  # noqa: no-handler
   ansible.builtin.apt:
     update_cache: true
   when: cloudfall_logging_backend_repository is changed

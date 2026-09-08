@@ -224,16 +224,20 @@ def plan_deploy(
     extra_vars: dict[str, object] = {
         "cloudfall_deploy_component_id": component_id.value,
         "cloudfall_deploy_release": release.value,
-        "cloudfall_deploy_artifact_archive": str(artifact.archive_path),
+        # The engine resolves relative paths against its own tree, so every
+        # controller-side path must cross this boundary absolute.
+        "cloudfall_deploy_artifact_archive": str(
+            artifact.archive_path.resolve()
+        ),
         "cloudfall_deploy_artifact_sha256": artifact.sha256,
     }
     if options.environment_file is not None:
         extra_vars["cloudfall_deploy_environment_file"] = str(
-            options.environment_file
+            options.environment_file.resolve()
         )
     if options.receipt_directory is not None:
         extra_vars["cloudfall_deploy_receipt_directory"] = str(
-            options.receipt_directory
+            options.receipt_directory.resolve()
         )
     return ExecutionPlan(
         action="deploy",

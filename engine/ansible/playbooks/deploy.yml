@@ -23,7 +23,7 @@
       ansible.builtin.include_role:
         name: cloudfall_deploy
       vars:
-        cloudfall_deploy_component: "{{ item }}"
+        cloudfall_deploy_component: "{{ cloudfall_component_item }}"
       loop: >-
         {{
           cloudfall_components | default([])
@@ -31,4 +31,5 @@
           | list
         }}
       loop_control:
-        label: "{{ item.id }}"
+        loop_var: cloudfall_component_item
+        label: "{{ cloudfall_component_item.id }}"

@@ -90,6 +90,27 @@ def test_builder_packages_a_hashed_release_with_metadata(
     assert all(".git" not in Path(name).parts for name in names)
 
 
+def test_builder_packages_a_non_default_branch(tmp_path: Path) -> None:
+    """A fresh clone must build refs beyond the default branch.
+
+    The 2026-09-08 M2/M3 proving run failed here: bare branch names trigger
+    git's remote-branch DWIM checkout, which conflicts with ``--detach``.
+    """
+    inventory = _fixture_inventory(tmp_path)
+    repository = tmp_path / "repository"
+    _git("-C", str(repository), "checkout", "--quiet", "-b", "feature")
+    (repository / "app.py").write_text("print('feature')\n", encoding="utf-8")
+    _git("-C", str(repository), "commit", "--quiet", "-am", "feature change")
+    _git("-C", str(repository), "checkout", "--quiet", "main")
+
+    built = build_artifact(
+        inventory, "crm-backend", "feature", tmp_path / "artifacts", SCHEMAS
+    )
+
+    assert built.git_ref == "feature"
+    assert built.archive_path.is_file()
+
+
 def test_builder_rejects_an_unknown_component(tmp_path: Path) -> None:
     inventory = _fixture_inventory(tmp_path)
 

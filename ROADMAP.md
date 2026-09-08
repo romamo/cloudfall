@@ -61,6 +61,12 @@ Installable, audited infrastructure services, starting with exactly two.
 Catalog breadth (Redis, RabbitMQ, Elasticsearch, MySQL, Node runtimes)
 follows the same pattern afterward.
 
+Exit: **met on 2026-09-08** on a disposable Hetzner Cloud Debian 13 server —
+loopback-only PostgreSQL with a peer-authenticated application database, and
+an Nginx route with a real Let's Encrypt certificate issued through the
+role's webroot flow; see the
+[M2/M3 proving-run report](docs/proving-runs/2026-09-08-hetzner-m2-m3.md).
+
 ## M3 — Layer 3: deploy slice
 
 `deploy()` with rollback — the heart of one-command operation.
@@ -81,7 +87,14 @@ follows the same pattern afterward.
   generation pending)
 
 Exit: the example backend component deploys end to end on a fresh host, and a
-bad release rolls back automatically.
+bad release rolls back automatically. **Met on 2026-09-08** on the same
+disposable Hetzner host as the M2 exit: a uv-locked ASGI component deployed
+through `cloudfall deploy` with a passing health gate, and a broken release
+failed its gate and rolled back automatically with the service staying
+healthy; see the
+[M2/M3 proving-run report](docs/proving-runs/2026-09-08-hetzner-m2-m3.md).
+The run fixed six engine/CLI bugs; the remaining known gap is a false origin
+warning from `services status` on single-host topologies.
 
 ## M4 — Migration importer
 

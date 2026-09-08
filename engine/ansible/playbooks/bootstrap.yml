@@ -5,7 +5,20 @@
   gather_facts: true
   any_errors_fatal: true
   serial: 1
+  vars:
+    cloudfall_bootstrap_component_keys:
+      - id
+      - install_root
+      - project
+      - project_user
   roles:
     - role: cloudfall_bootstrap
       cloudfall_bootstrap_projects: "{{ cloudfall_projects }}"
-      cloudfall_bootstrap_components: "{{ cloudfall_components }}"
+      cloudfall_bootstrap_components: >-
+        {{
+          cloudfall_components
+          | map('dict2items')
+          | map('selectattr', 'key', 'in', cloudfall_bootstrap_component_keys)
+          | map('items2dict')
+          | list
+        }}

@@ -238,6 +238,15 @@
             else 'stopped because no previous release exists'
           }}
 
+- name: Ensure the controller receipt directory exists
+  ansible.builtin.file:
+    path: "{{ cloudfall_deploy_receipt_directory }}"
+    state: directory
+    mode: "0755"
+  delegate_to: localhost
+  become: false
+  when: cloudfall_deploy_receipt_directory | length > 0
+
 - name: Write the release receipt on the controller
   ansible.builtin.copy:
     content: >-

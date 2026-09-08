@@ -98,10 +98,14 @@ def build_artifact(
     with tempfile.TemporaryDirectory(prefix="cloudfall-artifact-") as workdir:
         checkout = Path(workdir) / "source"
         _run_git("clone", "--quiet", component.repository.url.value, str(checkout))
+        # A fresh clone has local branches only for the default branch, and
+        # bare branch names trigger git's remote-branch DWIM, which conflicts
+        # with --detach. Resolving the ref to a commit first supports
+        # branches, tags, and commits uniformly.
+        commit = _resolve_ref_commit(checkout, git_ref)
         _run_git(
-            "-C", str(checkout), "checkout", "--quiet", "--detach", git_ref, "--"
+            "-C", str(checkout), "checkout", "--quiet", "--detach", commit, "--"
         )
-        commit = _run_git("-C", str(checkout), "rev-parse", "HEAD").strip()
         source_root = checkout
         if component.repository.subdirectory is not None:
             source_root = checkout / component.repository.subdirectory
@@ -191,6 +195,26 @@ def _validate_ref(git_ref: str) -> None:
     if not _GIT_REF_PATTERN.fullmatch(git_ref):
         detail = f"git ref contains unsupported characters: {git_ref!r}"
         raise ArtifactBuildError(_ERROR_REF_INVALID, detail)
+
+
+def _resolve_ref_commit(checkout: Path, git_ref: str) -> str:
+    candidates = (git_ref, f"origin/{git_ref}")
+    for candidate in candidates:
+        try:
+            return _run_git(
+                "-C",
+                str(checkout),
+                "rev-parse",
+                "--verify",
+                "--quiet",
+                "--end-of-options",
+                f"{candidate}^{{commit}}",
+            ).strip()
+        except ArtifactBuildError as error:
+            if error.code != _ERROR_GIT_FAILED:
+                raise
+    detail = f"git ref does not resolve to a commit: {git_ref!r}"
+    raise ArtifactBuildError(_ERROR_GIT_FAILED, detail)
 
 
 def _run_git(*arguments: str) -> str:

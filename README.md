@@ -11,12 +11,14 @@ stop paying PaaS margins. See the [roadmap](ROADMAP.md) for the milestone
 plan; the wedge use case is a migration from Render onto a Hetzner-class
 server.
 
-> **Partially validated on live hosts.** The server baseline and
-> observability layer (M1) were proven on 2026-09-08 on a disposable Hetzner
-> Cloud Debian 13 server: idempotent convergence, a fully compliant audit,
-> and live host metrics through the mTLS logging stack (see the
-> [proving-run reports](docs/proving-runs/)). The service catalog, deploy,
-> import, and migrate layers are exercised by tests and CI but not yet
+> **Validated live through the deploy layer.** The server baseline,
+> observability stack, service catalog, and deploy slice (M1–M3) were proven
+> on 2026-09-08 on disposable Hetzner Cloud Debian 13 servers: idempotent
+> convergence, compliant audits, loopback PostgreSQL with peer-auth
+> databases, a real Let's Encrypt certificate on an Nginx route, health-gated
+> deploys, and an automatic rollback of a bad release (see the
+> [proving-run reports](docs/proving-runs/)). The Render importer and the
+> `migrate` orchestrator (M4–M5) are exercised by tests and CI but not yet
 > against a real server — expect rough edges there until they join the
 > proving batch (see the [roadmap](ROADMAP.md))
 
