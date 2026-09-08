@@ -1,8 +1,8 @@
 # Cloudfall — Lean Canvas
 
-> One-pager business model. The **AI-native control plane** for moving a SaaS off
-> cloud PaaS onto one self-hosted Debian server — hardened, monitored, and
-> deployed with rollback, in under an hour. No Kubernetes.
+> One-pager business model. The **evidence-based control plane** for moving a
+> SaaS off cloud PaaS onto one self-hosted Debian server — hardened, monitored,
+> and deployed with rollback, in under an hour. No Kubernetes.
 
 | | |
 | --- | --- |
@@ -31,11 +31,11 @@ The blocks below are numbered in canonical Lean Canvas fill order.
 
 ## 3 · Unique Value Proposition
 
-**Leave PaaS in an hour — and let an AI agent operate the server it can't fake success on.**
+**Leave PaaS in an hour and keep the PaaS feel — your own server, a tenth of the cost, no special skills, operated by an AI agent that can't fake success.**
 
-Evidence over inference: every deploy produces receipts, status is derived from validated observations, and Cloudfall never reports success it cannot prove.
+No skills leak through: the typed state is the whole interface, the agent mediates it in plain language, and the founder never opens an SSH session. Evidence over inference: every deploy produces receipts, status is derived from validated observations, and Cloudfall never reports success it cannot prove — proof of outcome is the claim no one else makes. And because it is all plain systemd + nginx + Postgres on stock Debian, any Linux admin can take over without Cloudfall: no special skills required, no lock-in if you ever hire them.
 
-*High-level concept:* Terraform-grade rigor for *getting off the cloud* — driven by an agent instead of a platform team.
+*High-level concept:* Render-grade operational feel on hardware you own, with a flight recorder built in — it starts from your `render.yaml`, not an empty server.
 
 ## 4 · Solution
 
@@ -53,9 +53,13 @@ Evidence over inference: every deploy produces receipts, status is derived from 
 
 ## 6 · Revenue Streams
 
+- **Autonomous operator subscription** (core stream): the always-on agent that
+  manages the fleet 24/7 — evidence-backed, confirm-gated. The AGPL tool and
+  migration stay free: the importer is the acquisition motion, the operator is
+  the monetization
+- **Migration & support engagements** for teams that want the cutover done for
+  them
 - **Commercial license exception** for teams who can't ship AGPL
-- **Managed / hosted fleet control plane** (subscription)
-- **Migration & support engagements** for the cutover itself
 
 ## 7 · Cost Structure
 
@@ -72,6 +76,7 @@ Evidence over inference: every deploy produces receipts, status is derived from 
 
 ## 9 · Unfair Advantage
 
-- **Evidence-based audit model.** Receipts and desired-vs-observed drift detection — hard to bolt on after the fact.
-- **Agent-native by design.** Stable SDK + MCP server; every mutation gated behind an explicit confirm handshake.
-- **Dual license.** AGPL-3.0 for the community, commercial exception reserved to the holder.
+- **Proof of outcome, not gated actions.** Rivals gate what an agent may do (RBAC, confirm flags, plan approval); only Cloudfall proves what happened: per-deploy receipts, status from validated observations, desired-vs-observed drift. It is the foundation of the status model — near-impossible to bolt on after the fact.
+- **The unclaimed migration axis.** No competitor productizes PaaS exit; PaaS tools start from an empty server, and incumbents are structurally disincentivized (Render pays up to $10K in credits to pull workloads *in*).
+- **State the user owns.** Typed, schema-validated YAML of the whole server: versionable, diffable, agent-readable. Category rivals are imperative dashboards.
+- **Dual license.** AGPL-3.0 for the community, commercial exception reserved to the holder. Separates Cloudfall from its closest operational twin (Devopness, closed SaaS).
