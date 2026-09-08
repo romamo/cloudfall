@@ -141,6 +141,8 @@ def test_importer_writes_environment_files_outside_state(
     env_path = targets.environment_directory / "acme-api.env"
     content = env_path.read_text(encoding="utf-8").splitlines()
     assert content[0] == "PORT=8100"
+    # The 2026-09-08 M4 proving run found a declared PORT emitted twice.
+    assert sum(line.startswith("PORT=") for line in content) == 1
     assert "DJANGO_SETTINGS_MODULE=acme.settings" in content
     assert "SECRET_KEY=" in content
     assert "DATABASE_URL=postgresql:///acme?host=/var/run/postgresql" in content

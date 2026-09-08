@@ -815,6 +815,11 @@ def _endpoint_check(
             f"domain has no {endpoint} observation",
         )
     evidence = observation.origin if endpoint == "origin" else observation.public
+    if evidence.skipped:
+        return DomainCheck(
+            RouteCheckStatus.HEALTHY,
+            evidence.skip_reason or f"{endpoint} probe skipped by evidence",
+        )
     if not evidence.reachable or evidence.status is None:
         return DomainCheck(
             RouteCheckStatus.UNHEALTHY,

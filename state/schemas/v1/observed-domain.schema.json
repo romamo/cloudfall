@@ -27,6 +27,14 @@
         },
         "error": {
           "$ref": "#/$defs/nullableError"
+        },
+        "skipped": {
+          "type": "boolean"
+        },
+        "skipReason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
         }
       },
       "required": [

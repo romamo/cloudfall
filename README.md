@@ -11,16 +11,17 @@ stop paying PaaS margins. See the [roadmap](ROADMAP.md) for the milestone
 plan; the wedge use case is a migration from Render onto a Hetzner-class
 server.
 
-> **Validated live through the deploy layer.** The server baseline,
-> observability stack, service catalog, and deploy slice (M1–M3) were proven
-> on 2026-09-08 on disposable Hetzner Cloud Debian 13 servers: idempotent
-> convergence, compliant audits, loopback PostgreSQL with peer-auth
-> databases, a real Let's Encrypt certificate on an Nginx route, health-gated
-> deploys, and an automatic rollback of a bad release (see the
-> [proving-run reports](docs/proving-runs/)). The Render importer and the
-> `migrate` orchestrator (M4–M5) are exercised by tests and CI but not yet
-> against a real server — expect rough edges there until they join the
-> proving batch (see the [roadmap](ROADMAP.md))
+> **Every layer proven live.** On 2026-09-08 all five milestones ran on
+> disposable Hetzner Cloud Debian 13 servers: idempotent baseline, compliant
+> audits, host metrics through the mTLS logging stack, loopback PostgreSQL
+> with peer-auth databases, real Let's Encrypt certificates, health-gated
+> deploys with an automatic rollback of a bad release, and — for the full
+> wedge — an AI agent migrating a Render-style blueprint through
+> `cloudfall-mcp` alone, bare Debian to TLS-served audit-compliant app in
+> about seven minutes (see the
+> [proving-run reports](docs/proving-runs/)). Not yet exercised: a workload
+> actually hosted on Render (real data dump and DNS TTL cutover) and
+> bare-metal RAID/storage provisioning (see the [roadmap](ROADMAP.md))
 
 ## Why Cloudfall
 

@@ -317,7 +317,14 @@ def _import_component(  # noqa: PLR0913 - one boundary mapping, many inputs.
     port: int | None = None
     if service_type in {"web", "pserv"}:
         port = state.claim_port(resolved.get("PORT"), name)
-        environment = [f"PORT={port}", *environment]
+        environment = [
+            f"PORT={port}",
+            *(
+                line
+                for line in environment
+                if not line.startswith("PORT=")
+            ),
+        ]
 
     if raw_service.get("buildCommand"):
         state.gap(

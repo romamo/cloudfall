@@ -110,6 +110,8 @@ class EndpointEvidence:
     reachable: bool
     status: HttpStatusCode | None
     error: str | None
+    skipped: bool = False
+    skip_reason: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -299,16 +301,31 @@ def _inspect_domain(
         addresses = ()
         dns_error = _error_message(error)
     proxy_addresses = _server_addresses(proxy, client)
-    origin_response = client.request(
-        ProbeTarget(
-            address=origin.address,
-            port=domain.origin.port,
-            server_name=domain.origin.server_name,
-            scheme=domain.origin.scheme,
-            path=domain.health_check.path,
-            timeout=domain.health_check.timeout_seconds,
+    if domain.origin.server_id == domain.proxy.server_id:
+        # A single-host route has no separate origin hop to probe: the
+        # public probe already traverses the same proxy and upstream, and
+        # the origin port is rightly firewalled from the outside.
+        origin_evidence: dict[str, object] = {
+            "reachable": False,
+            "status": None,
+            "error": None,
+            "skipped": True,
+            "skipReason": (
+                "origin shares the proxy host; covered by the public probe"
+            ),
+        }
+    else:
+        origin_response = client.request(
+            ProbeTarget(
+                address=origin.address,
+                port=domain.origin.port,
+                server_name=domain.origin.server_name,
+                scheme=domain.origin.scheme,
+                path=domain.health_check.path,
+                timeout=domain.health_check.timeout_seconds,
+            )
         )
-    )
+        origin_evidence = _endpoint_dict(origin_response.endpoint)
     public_response = client.request(
         ProbeTarget(
             address=ConnectionAddress(domain.primary_name.value),
@@ -337,7 +354,7 @@ def _inspect_domain(
                 "error": dns_error,
             },
             "tls": _tls_dict(public_response.tls),
-            "origin": _endpoint_dict(origin_response.endpoint),
+            "origin": origin_evidence,
             "public": _endpoint_dict(public_response.endpoint),
         },
     }
@@ -520,6 +537,8 @@ def _endpoint(content: Mapping[str, object]) -> EndpointEvidence:
             else None
         ),
         error=_optional_string(content, "error"),
+        skipped=bool(content.get("skipped", False)),
+        skip_reason=_optional_string(content, "skipReason"),
     )
 
 

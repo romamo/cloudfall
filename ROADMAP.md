@@ -93,8 +93,9 @@ through `cloudfall deploy` with a passing health gate, and a broken release
 failed its gate and rolled back automatically with the service staying
 healthy; see the
 [M2/M3 proving-run report](docs/proving-runs/2026-09-08-hetzner-m2-m3.md).
-The run fixed six engine/CLI bugs; the remaining known gap is a false origin
-warning from `services status` on single-host topologies.
+The run fixed six engine/CLI bugs. The false origin warning it left open for
+single-host topologies was fixed in the M4/M5 run: domain evidence now
+records an explicit origin skip when origin and proxy share a host.
 
 ## M4 — Migration importer
 
@@ -113,7 +114,13 @@ warning from `services status` on single-host topologies.
   the gap report)
 
 Exit: a real PaaS application migrated onto one host with its data, TLS,
-monitoring, and rollback path.
+monitoring, and rollback path. **Partially met on 2026-09-08**: a realistic
+blueprint (web service, managed PostgreSQL, custom domain) imported and
+migrated onto a disposable Hetzner host with real TLS and a rollback path —
+see the
+[M4/M5 proving-run report](docs/proving-runs/2026-09-08-hetzner-m4-m5.md).
+Still outstanding for full exit: an application actually hosted on Render,
+its real data dump/restore, and a real DNS TTL cutover.
 
 ## M5 — Agent layer
 
@@ -128,5 +135,10 @@ monitoring, and rollback path.
   requiring a compliant audit and healthy routes)
 
 Exit: an AI agent completes the M4 migration through MCP without shell access
-to the servers. The tool surface for that exit exists; the live run joins
-the proving batch.
+to the servers. **Met on 2026-09-08**: an AI agent drove the blueprint import
+and the full ten-step migration (baseline through the final evidence pass)
+purely through `cloudfall-mcp` with the confirmation handshake, taking a
+fresh Debian host to a TLS-served, audit-compliant application in about
+seven minutes, and a later session resumed the persisted plan as a no-op —
+see the
+[M4/M5 proving-run report](docs/proving-runs/2026-09-08-hetzner-m4-m5.md).
