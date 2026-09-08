@@ -47,9 +47,14 @@ full architecture.
 Cloudfall is pre-1.0. Implemented today: state validation, typed inventory,
 deterministic Ansible inventory rendering, read-only server inspection,
 desired-versus-observed drift audit, a Debian bootstrap role, a UTC time
-baseline, a guarded Loki/Grafana/Alloy logging stack, and an evidence-derived
-operations dashboard. The deploy slice, service catalog, and migration
-importer are the next milestones.
+baseline, an nftables firewall, a guarded Loki/Grafana/Alloy logging stack,
+an evidence-derived operations dashboard, a service catalog (PostgreSQL and
+Nginx/TLS sites), the health-gated deploy slice with artifact releases and
+symlink rollback, the `cloudfall-mcp` server, the `render.yaml` blueprint
+importer, and the resumable `cloudfall migrate` orchestrator. Live-host
+validation on disposable Debian targets and broader catalog breadth (Redis,
+MySQL, Elasticsearch, Node runtimes) are the next milestones. See the
+[roadmap](ROADMAP.md) for the milestone plan.
 
 ## Quickstart
 
