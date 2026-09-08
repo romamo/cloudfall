@@ -67,16 +67,24 @@ baseline, an nftables firewall, a guarded Loki/Grafana/Alloy logging stack,
 an evidence-derived operations dashboard, a service catalog (PostgreSQL and
 Nginx/TLS sites), the health-gated deploy slice with artifact releases and
 symlink rollback, the `cloudfall-mcp` server, the `render.yaml` blueprint
-importer, and the resumable `cloudfall migrate` orchestrator. Live-host
-validation on disposable Debian targets and broader catalog breadth (Redis,
-MySQL, Elasticsearch, Node runtimes) are the next milestones. See the
-[roadmap](ROADMAP.md) for the milestone plan.
+importer, and the resumable `cloudfall migrate` orchestrator. Every
+implemented layer has been validated live on disposable Debian targets (see
+the [proving-run reports](docs/proving-runs/)). Next up: broader catalog
+breadth (Redis, MySQL, Elasticsearch, Node runtimes), Render API import,
+an automated cutover generator, and bare-metal storage provisioning. See
+the [roadmap](ROADMAP.md) for the milestone plan.
 
 ## Quickstart
 
-Cloudfall requires Python 3.14 and uses [`uv`](https://docs.astral.sh/uv/):
+Cloudfall is not on PyPI yet; run it from a clone of this repository. The
+only prerequisite is [`uv`](https://docs.astral.sh/uv/): it provisions the
+required Python 3.14 interpreter and all dependencies automatically, so you
+do not need Python 3.14 preinstalled.
 
 ```console
+git clone https://github.com/romamo/cloudfall.git
+cd cloudfall
+uv sync
 uv run cloudfall state validate state/examples
 ```
 
@@ -142,18 +150,25 @@ describing its required Debian version, software RAID, filesystem capacity,
 packages, systemd services, and allowlisted configuration evidence.
 
 Collect a read-only snapshot from every reachable server, then compare it
-with the config:
+with the config. Workflow commands use [Task](https://taskfile.dev)
+(`brew install go-task` / `apt install task`); every task is a thin wrapper
+over a `uv run` command, so if you prefer not to install Task, copy the
+underlying command from [`Taskfile.yml`](Taskfile.yml):
 
 ```console
 task inspect
 task audit
 ```
 
+The direct equivalent of `task audit`, for example, is:
+
+```console
+uv run cloudfall audit state/examples --observed tmp/observed
+```
+
 Snapshots are written to `tmp/observed/<server>.json` with mode `0600` and
 never include configuration-file contents. The audit emits one JSON report:
 exit code `0` compliant, `1` drift, `2` invalid input, `3` compliance unknown.
-Task workflows are defined in [`Taskfile.yml`](Taskfile.yml); direct `uv run`
-equivalents exist for every task.
 
 ## Operations dashboard
 
@@ -200,6 +215,11 @@ strictly read-only either way.
 ## Contributing and security
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
+Notable changes are recorded in the [changelog](CHANGELOG.md).
+
+Cloudfall is developed in the open, business model included: the
+[lean canvas](docs/lean-canvas.md) describes the problem, the wedge, and
+how the project intends to sustain itself.
 
 ## License
 

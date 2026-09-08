@@ -1,11 +1,13 @@
 # State
 
-This module is the declarative source of truth for Cloudfall. It will contain
-versioned JSON Schemas and YAML documents for servers, projects, components,
-clusters, domains, monitoring, backups, and secret references.
+This module is the declarative source of truth for Cloudfall: versioned JSON
+Schemas and the YAML resources they validate — servers, host profiles,
+projects, components, services, domains, logging stacks, and SSH public keys.
 
-It must not contain credentials or execution logic. Secret values remain in
-Infisical; state stores references only.
+It must not contain credentials or execution logic. Secret values live in
+environment files outside the config directory (generation from a central
+secrets manager is on the [roadmap](../ROADMAP.md)); state stores references
+only.
 
 ## v1 contract
 

@@ -149,3 +149,30 @@ fresh Debian host to a TLS-served, audit-compliant application in about
 seven minutes, and a later session resumed the persisted plan as a no-op —
 see the
 [M4/M5 proving-run report](docs/proving-runs/2026-09-08-hetzner-m4-m5.md).
+
+## M6 — Next: from proven wedge to routine migrations
+
+M0–M5 proved the wedge end to end. The next milestones make the migration
+routine and widen what it can carry, in rough priority order:
+
+- **Catalog breadth** — Redis, MySQL, Elasticsearch, RabbitMQ, and Node
+  runtime services following the PostgreSQL pattern: pinned installs,
+  loopback-only binds, backup policies, audited evidence
+- **Render API import** — import live services and cron jobs through the
+  Render API instead of requiring a `render.yaml` blueprint
+- **Cutover generator** — TTL lowering, parallel-run verification, the DNS
+  switch, and a rollback window generated as explicit plan steps rather
+  than surfacing only in the import report
+- **Secrets v2** — environment files generated from secret references in a
+  central secrets manager, replacing locally maintained per-component files
+- **Bare-metal provisioning** — software RAID and storage layout for
+  dedicated servers per the
+  [hybrid storage design](docs/hybrid-storage-design.md), the one part of
+  the server model still unexercised live
+- **Backup and restore as first-class operations** — declared backup
+  policies with restore-proof commands on the CLI and MCP surface
+- **Fleet observability** — per-service exporters and alerting layered on
+  the existing Loki/Grafana/Alloy stack
+
+Exit: a second real application migrated by someone other than the author,
+using only the public documentation.

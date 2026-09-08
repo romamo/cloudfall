@@ -317,38 +317,82 @@ def _dump(payload: dict[str, object]) -> str:
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="cloudfall-mcp")
-    parser.add_argument("--state", type=Path, required=True)
-    parser.add_argument(
-        "--schemas", type=Path, default=Path("state/schemas/v1")
+    parser = argparse.ArgumentParser(
+        prog="cloudfall-mcp",
+        description=(
+            "Expose the Cloudfall agent toolset over MCP stdio. Read-only"
+            " evidence tools are available freely; every server-changing"
+            " tool requires an explicit two-step confirmation handshake."
+        ),
     )
-    parser.add_argument("--engine", type=Path, default=Path("engine"))
+    parser.add_argument(
+        "--state",
+        type=Path,
+        required=True,
+        help="declarative state directory to operate on",
+    )
+    parser.add_argument(
+        "--schemas",
+        type=Path,
+        default=Path("state/schemas/v1"),
+        help="JSON Schema directory used to validate state (default:"
+        " %(default)s)",
+    )
+    parser.add_argument(
+        "--engine",
+        type=Path,
+        default=Path("engine"),
+        help="engine module directory containing the Ansible playbooks"
+        " (default: %(default)s)",
+    )
     parser.add_argument(
         "--inventory-file",
         type=Path,
         default=Path("tmp/ansible-inventory.json"),
+        help="path where the rendered Ansible inventory is written"
+        " (default: %(default)s)",
     )
     parser.add_argument(
-        "--observed", type=Path, default=Path("tmp/observed")
+        "--observed",
+        type=Path,
+        default=Path("tmp/observed"),
+        help="directory holding read-only server observation snapshots"
+        " (default: %(default)s)",
     )
     parser.add_argument(
         "--service-observed",
         type=Path,
         default=Path("tmp/observed-services"),
+        help="directory holding DNS, TLS, origin, and public route evidence"
+        " (default: %(default)s)",
     )
     parser.add_argument(
-        "--deployments", type=Path, default=Path("tmp/deployments")
+        "--deployments",
+        type=Path,
+        default=Path("tmp/deployments"),
+        help="directory holding domain deployment receipts (default:"
+        " %(default)s)",
     )
     parser.add_argument(
-        "--releases", type=Path, default=Path("tmp/releases")
+        "--releases",
+        type=Path,
+        default=Path("tmp/releases"),
+        help="directory holding component release receipts (default:"
+        " %(default)s)",
     )
     parser.add_argument(
-        "--artifacts", type=Path, default=Path("tmp/artifacts")
+        "--artifacts",
+        type=Path,
+        default=Path("tmp/artifacts"),
+        help="directory holding built release artifacts (default:"
+        " %(default)s)",
     )
     parser.add_argument(
         "--data-migrations",
         type=Path,
         default=Path("tmp/data-migrations"),
+        help="directory holding data-migration receipts (default:"
+        " %(default)s)",
     )
     return parser
 
