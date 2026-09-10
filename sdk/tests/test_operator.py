@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import pytest
+from cloudfall.audit import AuditCheck, AuditReport, AuditStatus, ServerAudit
 from cloudfall.cli import main
 from cloudfall.domain import ResourceId
 from cloudfall.inventory import PlatformInventory
@@ -18,8 +19,12 @@ from cloudfall.operator import (
     ProposalStore,
     RunReport,
     SkippedAlert,
-    alert_fingerprint,
+    TriggerKind,
+    alert_resolution_verifier,
     approve,
+    drift_pass,
+    drift_resolution_verifier,
+    fingerprint_of,
     parse_prometheus_alerts,
     run_once,
 )
@@ -99,7 +104,7 @@ def test_parse_prometheus_alerts_returns_firing_actionable_alerts() -> None:
     assert alert.cloudfall_rule.value == "postgresql-down"
     assert alert.server.value == "h1"
     assert alert.service.value == "postgresql-main"
-    assert alert.fingerprint == alert_fingerprint(_LABELS)
+    assert alert.fingerprint == fingerprint_of(_LABELS)
 
 
 def test_parse_prometheus_alerts_ignores_pending_alerts() -> None:
@@ -179,7 +184,7 @@ def test_approve_executes_and_verifies_resolution(tmp_path: Path) -> None:
         store,
         ResourceId.from_boundary(report.proposed[0]),
         lambda proposal: executed.append(proposal.resource_id.value),
-        feed,
+        alert_resolution_verifier(feed),
         _FAST_APPROVE,
     )
 
@@ -200,13 +205,13 @@ def test_approve_marks_unresolved_alerts_failed(tmp_path: Path) -> None:
         store,
         ResourceId.from_boundary(report.proposed[0]),
         lambda _proposal: None,
-        feed,
+        alert_resolution_verifier(feed),
         _FAST_APPROVE,
     )
 
     assert result.status is ProposalStatus.FAILED
     assert result.outcome is not None
-    assert "still firing" in result.outcome.detail
+    assert "unresolved" in result.outcome.detail
 
 
 def test_approve_records_execution_failure(tmp_path: Path) -> None:
@@ -225,7 +230,7 @@ def test_approve_records_execution_failure(tmp_path: Path) -> None:
             store,
             proposal_id,
             _boom,
-            feed,
+            alert_resolution_verifier(feed),
             _FAST_APPROVE,
         )
 
@@ -245,7 +250,7 @@ def test_approve_refuses_non_open_proposals(tmp_path: Path) -> None:
         store,
         proposal_id,
         lambda _proposal: None,
-        feed,
+        alert_resolution_verifier(feed),
         _FAST_APPROVE,
     )
 
@@ -254,10 +259,128 @@ def test_approve_refuses_non_open_proposals(tmp_path: Path) -> None:
             store,
             proposal_id,
             lambda _proposal: None,
-            feed,
+            alert_resolution_verifier(feed),
             _FAST_APPROVE,
         )
     assert caught.value.code == "operator_proposal_not_open"
+
+
+def _audit_report(*checks: tuple[str, AuditStatus]) -> AuditReport:
+    server_checks = tuple(
+        AuditCheck(
+            check=name,
+            status=status,
+            desired={"declared": True},
+            observed=None,
+            message="synthetic",
+        )
+        for name, status in checks
+    )
+    statuses = {check.status for check in server_checks}
+    status = (
+        AuditStatus.DRIFT
+        if AuditStatus.DRIFT in statuses
+        else AuditStatus.COMPLIANT
+    )
+    server = ServerAudit(
+        server_id="h1",
+        profile_id="debian-application",
+        status=status,
+        observation="synthetic",
+        observed_at="2026-09-10T15:00:00Z",
+        checks=server_checks,
+    )
+    return AuditReport(
+        status=status, servers=(server,), unmatched_observations=()
+    )
+
+
+def test_drift_pass_splits_service_and_baseline_proposals(
+    tmp_path: Path,
+) -> None:
+    store = _store(tmp_path)
+    report = drift_pass(
+        lambda: _audit_report(
+            ("services.bind[postgresql-main]", AuditStatus.DRIFT),
+            ("packages.required[curl]", AuditStatus.DRIFT),
+            ("os.distribution", AuditStatus.COMPLIANT),
+        ),
+        store,
+    )
+
+    assert len(report.proposed) == 2
+    proposals = store.list()
+    kinds = {
+        proposal.operation_kind.value: proposal for proposal in proposals
+    }
+    assert set(kinds) == {"converge-services", "converge-baseline"}
+    services = kinds["converge-services"]
+    assert services.trigger_kind is TriggerKind.DRIFT
+    assert services.drift is not None
+    assert services.drift.checks == ("services.bind[postgresql-main]",)
+    baseline = kinds["converge-baseline"]
+    assert baseline.drift is not None
+    assert baseline.drift.checks == ("packages.required[curl]",)
+
+
+def test_drift_pass_does_not_duplicate_open_proposals(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    auditor = lambda: _audit_report(  # noqa: E731
+        ("packages.required[curl]", AuditStatus.DRIFT)
+    )
+
+    first = drift_pass(auditor, store)
+    second = drift_pass(auditor, store)
+
+    assert len(first.proposed) == 1
+    assert second.proposed == ()
+
+
+def test_approve_drift_proposal_verifies_through_the_audit(
+    tmp_path: Path,
+) -> None:
+    store = _store(tmp_path)
+    report = drift_pass(
+        lambda: _audit_report(("packages.required[curl]", AuditStatus.DRIFT)),
+        store,
+    )
+    proposal_id = ResourceId.from_boundary(report.proposed[0])
+    executed: list[str] = []
+
+    result = approve(
+        store,
+        proposal_id,
+        lambda proposal: executed.append(proposal.operation_kind.value),
+        drift_resolution_verifier(
+            lambda: _audit_report(
+                ("packages.required[curl]", AuditStatus.COMPLIANT)
+            )
+        ),
+        _FAST_APPROVE,
+    )
+
+    assert executed == ["converge-baseline"]
+    assert result.status is ProposalStatus.VERIFIED
+
+
+def test_approve_drift_proposal_fails_when_drift_persists(
+    tmp_path: Path,
+) -> None:
+    store = _store(tmp_path)
+    auditor = lambda: _audit_report(  # noqa: E731
+        ("packages.required[curl]", AuditStatus.DRIFT)
+    )
+    report = drift_pass(auditor, store)
+
+    result = approve(
+        store,
+        ResourceId.from_boundary(report.proposed[0]),
+        lambda _proposal: None,
+        drift_resolution_verifier(auditor),
+        _FAST_APPROVE,
+    )
+
+    assert result.status is ProposalStatus.FAILED
 
 
 def test_cli_operator_list_emits_structured_output(

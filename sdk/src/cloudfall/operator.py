@@ -1,11 +1,11 @@
-"""Alert-driven operator loop: watch, diagnose, propose, execute, verify.
+"""Alert- and drift-driven operator loop: watch, diagnose, propose, verify.
 
 The operator is deliberately deterministic. It never invents actions: every
-proposal maps a declared alert onto an existing engine entry point, carries
-the evidence that justifies it, and waits for an explicit approval before
-anything mutates. Outcomes are verified against the same alert evidence the
-proposal came from and every state change lands in a schema-validated
-receipt.
+proposal maps a declared trigger — a firing declared alert or an audited
+drift — onto an existing engine entry point, carries the evidence that
+justifies it, and waits for an explicit approval before anything mutates.
+Outcomes are verified against the same evidence source the proposal came
+from and every state change lands in a schema-validated receipt.
 """
 
 from __future__ import annotations
@@ -15,18 +15,21 @@ import json
 import ssl
 import time
 import urllib.request
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING, Protocol, cast
 
+from cloudfall.audit import AuditStatus, audit_inventory
 from cloudfall.domain import AlertSeverity, ResourceId
 from cloudfall.lifecycle import LifecycleError, run_engine_playbook
+from cloudfall.observation import load_observations
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
     from pathlib import Path
 
+    from cloudfall.audit import AuditReport
     from cloudfall.inventory import PlatformInventory
     from cloudfall.lifecycle import EngineContext
     from cloudfall.validation import SchemaCatalog
@@ -40,6 +43,7 @@ _ERROR_PROPOSAL_MISSING = "operator_proposal_missing"
 _ERROR_PROPOSAL_NOT_OPEN = "operator_proposal_not_open"
 _ERROR_OPERATION_UNSUPPORTED = "operator_operation_unsupported"
 _ERROR_GATEWAY_UNDECLARED = "operator_gateway_undeclared"
+_SERVICE_CHECK_PREFIXES = ("services.bind[", "alerting.rules[")
 
 
 class OperatorError(RuntimeError):
@@ -65,11 +69,24 @@ class ProposalStatus(StrEnum):
     FAILED = "failed"
 
 
+class TriggerKind(StrEnum):
+    """What kind of evidence raised a proposal."""
+
+    ALERT = "alert"
+    DRIFT = "drift"
+
+
 class OperationKind(StrEnum):
     """Existing engine entry points the operator may propose."""
 
     CONVERGE_SERVICES = "converge-services"
+    CONVERGE_BASELINE = "converge-baseline"
 
+
+_OPERATION_PLAYBOOKS: Mapping[OperationKind, str] = {
+    OperationKind.CONVERGE_SERVICES: "services.yml",
+    OperationKind.CONVERGE_BASELINE: "baseline.yml",
+}
 
 _BLOCKING_STATUSES = frozenset(
     {ProposalStatus.PROPOSED, ProposalStatus.EXECUTED, ProposalStatus.FAILED}
@@ -99,7 +116,22 @@ class OperatorAlert:
             "server": self.server.value,
             "service": self.service.value,
             "activeAt": self.active_at,
-            "fingerprint": self.fingerprint,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class DriftTrigger:
+    """One server's audited drift with the checks that failed."""
+
+    server: ResourceId
+    checks: tuple[str, ...]
+    fingerprint: str
+
+    def as_dict(self) -> dict[str, object]:
+        """Serialize the drift trigger for the proposal receipt."""
+        return {
+            "server": self.server.value,
+            "checks": list(self.checks),
         }
 
 
@@ -129,29 +161,57 @@ class OperatorProposal:
     resource_id: ResourceId
     created_at: str
     status: ProposalStatus
-    alert: OperatorAlert
+    trigger_kind: TriggerKind
+    fingerprint: str
+    alert: OperatorAlert | None
+    drift: DriftTrigger | None
     diagnosis_summary: str
     evidence: tuple[str, ...]
     operation_kind: OperationKind
+    operation_server: ResourceId
+    operation_service: ResourceId | None
     command: tuple[str, ...]
     outcome: ProposalOutcome | None
 
+    def __post_init__(self) -> None:
+        """Reject proposals whose trigger payload contradicts its kind."""
+        has_alert = self.alert is not None
+        expects_alert = self.trigger_kind is TriggerKind.ALERT
+        if has_alert is not expects_alert or (self.drift is None) is not (
+            self.trigger_kind is not TriggerKind.DRIFT
+        ):
+            message = (
+                "proposal trigger payload does not match its kind: "
+                f"{self.resource_id.value}"
+            )
+            raise ValueError(message)
+
     def as_document(self) -> dict[str, object]:
         """Serialize the proposal as a schema-valid receipt document."""
+        trigger: dict[str, object] = {
+            "kind": self.trigger_kind.value,
+            "fingerprint": self.fingerprint,
+        }
+        if self.alert is not None:
+            trigger["alert"] = self.alert.as_dict()
+        if self.drift is not None:
+            trigger["drift"] = self.drift.as_dict()
+        operation: dict[str, object] = {
+            "kind": self.operation_kind.value,
+            "server": self.operation_server.value,
+            "command": list(self.command),
+        }
+        if self.operation_service is not None:
+            operation["service"] = self.operation_service.value
         spec: dict[str, object] = {
             "createdAt": self.created_at,
             "status": self.status.value,
-            "alert": self.alert.as_dict(),
+            "trigger": trigger,
             "diagnosis": {
                 "summary": self.diagnosis_summary,
                 "evidence": list(self.evidence),
             },
-            "operation": {
-                "kind": self.operation_kind.value,
-                "server": self.alert.server.value,
-                "service": self.alert.service.value,
-                "command": list(self.command),
-            },
+            "operation": operation,
         }
         if self.outcome is not None:
             spec["outcome"] = self.outcome.as_dict()
@@ -247,14 +307,16 @@ def _actionable_alert(item: Mapping[str, object]) -> OperatorAlert | None:
         server=ResourceId.from_boundary(labels["server"]),
         service=ResourceId.from_boundary(labels["service"]),
         active_at=active_at,
-        fingerprint=alert_fingerprint(cast("Mapping[str, object]", labels)),
+        fingerprint=fingerprint_of(cast("Mapping[str, object]", labels)),
     )
 
 
-def alert_fingerprint(labels: Mapping[str, object]) -> str:
-    """Return a stable short fingerprint over an alert's labels."""
+def fingerprint_of(content: Mapping[str, object]) -> str:
+    """Return a stable short fingerprint over a trigger's identity."""
     canonical = json.dumps(
-        {key: labels[key] for key in sorted(labels)}, separators=(",", ":")
+        {key: content[key] for key in sorted(content)},
+        separators=(",", ":"),
+        default=str,
     )
     digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
     return digest[:_FINGERPRINT_LENGTH]
@@ -272,7 +334,7 @@ class SkippedAlert:
         return {"name": self.name, "reason": self.reason}
 
 
-def propose(
+def propose_for_alert(
     alert: OperatorAlert,
     inventory: PlatformInventory,
     now: str,
@@ -306,26 +368,70 @@ def propose(
         f"server={alert.server.value} service={alert.service.value}",
         f"fingerprint {alert.fingerprint}",
     )
-    identifier = _proposal_identifier(alert, now)
     return OperatorProposal(
-        resource_id=identifier,
+        resource_id=_proposal_identifier(alert.fingerprint, now),
         created_at=now,
         status=ProposalStatus.PROPOSED,
+        trigger_kind=TriggerKind.ALERT,
+        fingerprint=alert.fingerprint,
         alert=alert,
+        drift=None,
         diagnosis_summary=summary,
         evidence=evidence,
         operation_kind=OperationKind.CONVERGE_SERVICES,
+        operation_server=alert.server,
+        operation_service=alert.service,
         command=("cloudfall-engine", "playbook", "services.yml"),
         outcome=None,
     )
 
 
-def _proposal_identifier(alert: OperatorAlert, now: str) -> ResourceId:
+def propose_for_drift(
+    server: ResourceId,
+    checks: tuple[str, ...],
+    operation_kind: OperationKind,
+    now: str,
+) -> OperatorProposal:
+    """Map one server's audited drift onto a convergence proposal."""
+    fingerprint = fingerprint_of(
+        {
+            "server": server.value,
+            "operation": operation_kind.value,
+            "checks": ",".join(sorted(checks)),
+        }
+    )
+    playbook = _OPERATION_PLAYBOOKS[operation_kind]
+    summary = (
+        f"Audit reports drift on server {server.value}: "
+        f"{', '.join(checks)}; converging through {playbook} restores the "
+        "declared state"
+    )
+    evidence = tuple(f"audit check drifted: {check}" for check in checks)
+    drift = DriftTrigger(server=server, checks=checks, fingerprint=fingerprint)
+    return OperatorProposal(
+        resource_id=_proposal_identifier(fingerprint, now),
+        created_at=now,
+        status=ProposalStatus.PROPOSED,
+        trigger_kind=TriggerKind.DRIFT,
+        fingerprint=fingerprint,
+        alert=None,
+        drift=drift,
+        diagnosis_summary=summary,
+        evidence=evidence,
+        operation_kind=operation_kind,
+        operation_server=server,
+        operation_service=None,
+        command=("cloudfall-engine", "playbook", playbook),
+        outcome=None,
+    )
+
+
+def _proposal_identifier(fingerprint: str, now: str) -> ResourceId:
     stamp = (
         now.replace("-", "").replace(":", "").replace("+0000", "")
         .replace("t", "").replace("T", "").split(".")[0].lower()
     )
-    return ResourceId.from_boundary(f"op-{stamp}-{alert.fingerprint}")
+    return ResourceId.from_boundary(f"op-{stamp}-{fingerprint}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -376,7 +482,7 @@ class ProposalStore:
     def blocking_fingerprints(self) -> frozenset[str]:
         """Fingerprints already covered by an open or failed proposal."""
         return frozenset(
-            proposal.alert.fingerprint
+            proposal.fingerprint
             for proposal in self.list()
             if proposal.status in _BLOCKING_STATUSES
         )
@@ -397,9 +503,31 @@ class ProposalStore:
 def _proposal_from_document(document: Mapping[str, object]) -> OperatorProposal:
     metadata = cast("Mapping[str, object]", document["metadata"])
     spec = cast("Mapping[str, object]", document["spec"])
-    raw_alert = cast("Mapping[str, object]", spec["alert"])
+    trigger = cast("Mapping[str, object]", spec["trigger"])
     diagnosis = cast("Mapping[str, object]", spec["diagnosis"])
     operation = cast("Mapping[str, object]", spec["operation"])
+    fingerprint = cast("str", trigger["fingerprint"])
+    alert = None
+    raw_alert = trigger.get("alert")
+    if isinstance(raw_alert, dict):
+        alert = OperatorAlert(
+            name=cast("str", raw_alert["name"]),
+            cloudfall_rule=ResourceId.from_boundary(raw_alert["cloudfallRule"]),
+            severity=AlertSeverity.from_boundary(raw_alert["severity"]),
+            environment=ResourceId.from_boundary(raw_alert["environment"]),
+            server=ResourceId.from_boundary(raw_alert["server"]),
+            service=ResourceId.from_boundary(raw_alert["service"]),
+            active_at=cast("str", raw_alert["activeAt"]),
+            fingerprint=fingerprint,
+        )
+    drift = None
+    raw_drift = trigger.get("drift")
+    if isinstance(raw_drift, dict):
+        drift = DriftTrigger(
+            server=ResourceId.from_boundary(raw_drift["server"]),
+            checks=tuple(cast("list[str]", raw_drift["checks"])),
+            fingerprint=fingerprint,
+        )
     raw_outcome = spec.get("outcome")
     outcome = None
     if isinstance(raw_outcome, dict):
@@ -409,23 +537,24 @@ def _proposal_from_document(document: Mapping[str, object]) -> OperatorProposal:
             result=cast("str", raw_outcome["result"]),
             detail=cast("str", raw_outcome["detail"]),
         )
+    raw_service = operation.get("service")
     return OperatorProposal(
         resource_id=ResourceId.from_boundary(metadata["id"]),
         created_at=cast("str", spec["createdAt"]),
         status=ProposalStatus(cast("str", spec["status"])),
-        alert=OperatorAlert(
-            name=cast("str", raw_alert["name"]),
-            cloudfall_rule=ResourceId.from_boundary(raw_alert["cloudfallRule"]),
-            severity=AlertSeverity.from_boundary(raw_alert["severity"]),
-            environment=ResourceId.from_boundary(raw_alert["environment"]),
-            server=ResourceId.from_boundary(raw_alert["server"]),
-            service=ResourceId.from_boundary(raw_alert["service"]),
-            active_at=cast("str", raw_alert["activeAt"]),
-            fingerprint=cast("str", raw_alert["fingerprint"]),
-        ),
+        trigger_kind=TriggerKind(cast("str", trigger["kind"])),
+        fingerprint=fingerprint,
+        alert=alert,
+        drift=drift,
         diagnosis_summary=cast("str", diagnosis["summary"]),
         evidence=tuple(cast("list[str]", diagnosis["evidence"])),
         operation_kind=OperationKind(cast("str", operation["kind"])),
+        operation_server=ResourceId.from_boundary(operation["server"]),
+        operation_service=(
+            ResourceId.from_boundary(raw_service)
+            if raw_service is not None
+            else None
+        ),
         command=tuple(cast("list[str]", operation["command"])),
         outcome=outcome,
     )
@@ -462,22 +591,74 @@ def run_once(
     for alert in feed.fetch():
         if alert.fingerprint in blocking:
             continue
-        result = propose(alert, inventory, timestamp)
+        result = propose_for_alert(alert, inventory, timestamp)
         if isinstance(result, SkippedAlert):
             skipped.append(result)
             continue
         store.save(result)
         proposed.append(result.resource_id.value)
         blocking = blocking | {alert.fingerprint}
-    open_count = sum(
-        1
-        for proposal in store.list()
-        if proposal.status is ProposalStatus.PROPOSED
-    )
     return RunReport(
         proposed=tuple(proposed),
         skipped=tuple(skipped),
-        open_proposals=open_count,
+        open_proposals=_open_count(store),
+    )
+
+
+def drift_pass(
+    auditor: Callable[[], AuditReport],
+    store: ProposalStore,
+    now: str | None = None,
+) -> RunReport:
+    """One drift pass: refresh observations, audit, propose for drift."""
+    timestamp = now if now is not None else _utc_now()
+    report = auditor()
+    blocking = store.blocking_fingerprints()
+    proposed: list[str] = []
+    for server_audit in report.servers:
+        drifted = tuple(
+            check.check
+            for check in server_audit.checks
+            if check.status is AuditStatus.DRIFT
+        )
+        if not drifted:
+            continue
+        server = ResourceId.from_boundary(server_audit.server_id)
+        service_checks = tuple(
+            check
+            for check in drifted
+            if check.startswith(_SERVICE_CHECK_PREFIXES)
+        )
+        baseline_checks = tuple(
+            check
+            for check in drifted
+            if not check.startswith(_SERVICE_CHECK_PREFIXES)
+        )
+        groups = (
+            (OperationKind.CONVERGE_SERVICES, service_checks),
+            (OperationKind.CONVERGE_BASELINE, baseline_checks),
+        )
+        for operation_kind, checks in groups:
+            if not checks:
+                continue
+            proposal = propose_for_drift(server, checks, operation_kind, timestamp)
+            if proposal.fingerprint in blocking:
+                continue
+            store.save(proposal)
+            proposed.append(proposal.resource_id.value)
+            blocking = blocking | {proposal.fingerprint}
+    return RunReport(
+        proposed=tuple(proposed),
+        skipped=(),
+        open_proposals=_open_count(store),
+    )
+
+
+def _open_count(store: ProposalStore) -> int:
+    return sum(
+        1
+        for proposal in store.list()
+        if proposal.status is ProposalStatus.PROPOSED
     )
 
 
@@ -487,51 +668,82 @@ def engine_executor(
     """Executor running the proposal's engine entry point."""
 
     def _execute(proposal: OperatorProposal) -> None:
-        if proposal.operation_kind is not OperationKind.CONVERGE_SERVICES:
+        playbook = _OPERATION_PLAYBOOKS.get(proposal.operation_kind)
+        if playbook is None:
             message = (
                 "unsupported operation kind: "
                 f"{proposal.operation_kind.value}"
             )
             raise OperatorError(_ERROR_OPERATION_UNSUPPORTED, message)
-        run_engine_playbook(context, "services.yml", {})
+        run_engine_playbook(context, playbook, {})
 
     return _execute
 
 
-def gateway_feed(
+def engine_auditor(
+    context: EngineContext,
     inventory: PlatformInventory,
-    ca_path: Path,
-    certificate_path: Path,
-    key_path: Path,
-    url_override: str | None = None,
-) -> GatewayAlertFeed:
-    """Build the alert feed from the declared logging gateway."""
-    url = url_override
-    if url is None:
-        stack = next(
+    observation_directory: Path,
+) -> Callable[[], AuditReport]:
+    """Auditor refreshing observations through the inspect playbook."""
+
+    def _audit() -> AuditReport:
+        run_engine_playbook(
+            context,
+            "inspect.yml",
+            {
+                "cloudfall_inspect_output_directory": str(
+                    observation_directory.resolve()
+                )
+            },
+        )
+        observations = load_observations(
+            observation_directory, context.schema_directory
+        )
+        return audit_inventory(inventory, observations)
+
+    return _audit
+
+
+def alert_resolution_verifier(
+    feed: AlertFeed,
+) -> Callable[[OperatorProposal], bool]:
+    """Build a verifier passing once the proposal's alert stops firing."""
+
+    def _verify(proposal: OperatorProposal) -> bool:
+        firing = {alert.fingerprint for alert in feed.fetch()}
+        return proposal.fingerprint not in firing
+
+    return _verify
+
+
+def drift_resolution_verifier(
+    auditor: Callable[[], AuditReport],
+) -> Callable[[OperatorProposal], bool]:
+    """Build a verifier passing once the drifted checks are compliant."""
+
+    def _verify(proposal: OperatorProposal) -> bool:
+        if proposal.drift is None:
+            return False
+        report = auditor()
+        server_audit = next(
             (
-                stack
-                for stack in inventory.logging_stacks
-                if stack.alerting is not None
+                candidate
+                for candidate in report.servers
+                if candidate.server_id == proposal.drift.server.value
             ),
             None,
         )
-        if stack is None:
-            message = (
-                "no LoggingStack declares alerting; pass an explicit "
-                "gateway URL or declare an alerting block"
-            )
-            raise OperatorError(_ERROR_GATEWAY_UNDECLARED, message)
-        url = (
-            f"https://{stack.gateway.server_name.value}:"
-            f"{stack.gateway.port.value}/api/v1/alerts"
-        )
-    return GatewayAlertFeed(
-        url=url,
-        ca_path=ca_path,
-        certificate_path=certificate_path,
-        key_path=key_path,
-    )
+        if server_audit is None:
+            return False
+        still_drifting = {
+            check.check
+            for check in server_audit.checks
+            if check.status is AuditStatus.DRIFT
+        }
+        return not (set(proposal.drift.checks) & still_drifting)
+
+    return _verify
 
 
 @dataclass(frozen=True, slots=True)
@@ -540,21 +752,18 @@ class ApproveOptions:
 
     verify_timeout_seconds: float = 180.0
     poll_interval_seconds: float = 10.0
-    sleep: Callable[[float], None] = time.sleep
+    sleep: Callable[[float], None] = field(default=time.sleep)
 
 
 def approve(
     store: ProposalStore,
     proposal_id: ResourceId,
     executor: Callable[[OperatorProposal], None],
-    feed: AlertFeed,
+    verifier: Callable[[OperatorProposal], bool],
     options: ApproveOptions | None = None,
 ) -> OperatorProposal:
-    """Execute an approved proposal and verify the alert resolves."""
+    """Execute an approved proposal and verify its trigger resolves."""
     resolved_options = options if options is not None else ApproveOptions()
-    verify_timeout_seconds = resolved_options.verify_timeout_seconds
-    poll_interval_seconds = resolved_options.poll_interval_seconds
-    sleep = resolved_options.sleep
     proposal = store.load(proposal_id)
     if proposal.status is not ProposalStatus.PROPOSED:
         message = (
@@ -591,8 +800,7 @@ def approve(
     store.update(executed)
     waited = 0.0
     while True:
-        firing = {alert.fingerprint for alert in feed.fetch()}
-        if proposal.alert.fingerprint not in firing:
+        if verifier(proposal):
             verified = replace(
                 executed,
                 status=ProposalStatus.VERIFIED,
@@ -601,14 +809,14 @@ def approve(
                     verified_at=_utc_now(),
                     result="verified",
                     detail=(
-                        "alert resolved after convergence; observed "
-                        "outcome matches the declared state"
+                        "trigger evidence resolved after convergence; "
+                        "observed outcome matches the declared state"
                     ),
                 ),
             )
             store.update(verified)
             return verified
-        if waited >= verify_timeout_seconds:
+        if waited >= resolved_options.verify_timeout_seconds:
             failed = replace(
                 executed,
                 status=ProposalStatus.FAILED,
@@ -617,16 +825,52 @@ def approve(
                     verified_at=_utc_now(),
                     result="failed",
                     detail=(
-                        "alert still firing after "
-                        f"{int(verify_timeout_seconds)}s; remediation did "
-                        "not restore the declared state"
+                        "trigger evidence unresolved after "
+                        f"{int(resolved_options.verify_timeout_seconds)}s; "
+                        "remediation did not restore the declared state"
                     ),
                 ),
             )
             store.update(failed)
             return failed
-        sleep(poll_interval_seconds)
-        waited += poll_interval_seconds
+        resolved_options.sleep(resolved_options.poll_interval_seconds)
+        waited += resolved_options.poll_interval_seconds
+
+
+def gateway_feed(
+    inventory: PlatformInventory,
+    ca_path: Path,
+    certificate_path: Path,
+    key_path: Path,
+    url_override: str | None = None,
+) -> GatewayAlertFeed:
+    """Build the alert feed from the declared logging gateway."""
+    url = url_override
+    if url is None:
+        stack = next(
+            (
+                stack
+                for stack in inventory.logging_stacks
+                if stack.alerting is not None
+            ),
+            None,
+        )
+        if stack is None:
+            message = (
+                "no LoggingStack declares alerting; pass an explicit "
+                "gateway URL or declare an alerting block"
+            )
+            raise OperatorError(_ERROR_GATEWAY_UNDECLARED, message)
+        url = (
+            f"https://{stack.gateway.server_name.value}:"
+            f"{stack.gateway.port.value}/api/v1/alerts"
+        )
+    return GatewayAlertFeed(
+        url=url,
+        ca_path=ca_path,
+        certificate_path=certificate_path,
+        key_path=key_path,
+    )
 
 
 def _utc_now() -> str:

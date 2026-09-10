@@ -35,6 +35,25 @@ from cloudfall.lifecycle import (
 from cloudfall.migrate import MigrateError, MigrateOptions, execute_migration
 from cloudfall.observation import load_observations
 from cloudfall.operations import UtcTimestamp, build_operations_view
+from cloudfall.operator import (
+    ApproveOptions,
+    OperatorError,
+    ProposalStatus,
+    ProposalStore,
+    TriggerKind,
+    alert_resolution_verifier,
+    drift_pass,
+    drift_resolution_verifier,
+    engine_auditor,
+    engine_executor,
+    gateway_feed,
+)
+from cloudfall.operator import (
+    approve as operator_approve_proposal,
+)
+from cloudfall.operator import (
+    run_once as operator_run_once,
+)
 from cloudfall.service_evidence import (
     DeploymentReceiptSet,
     DomainObservationSet,
@@ -44,9 +63,10 @@ from cloudfall.service_evidence import (
     load_deployment_receipts,
     load_domain_observations,
 )
-from cloudfall.validation import StateValidationError, validate_state
+from cloudfall.validation import SchemaCatalog, StateValidationError, validate_state
 
 if TYPE_CHECKING:
+    from cloudfall.operator import AlertFeed
     from cloudfall.validation import ValidatedState
 
 _CODE_INVALID_ARGUMENT = "invalid_argument"
@@ -66,6 +86,10 @@ class AgentConfig:
     releases_directory: Path
     artifacts_directory: Path
     data_migrations_directory: Path = Path("tmp/data-migrations")
+    proposals_directory: Path = Path("tmp/operator/proposals")
+    gateway_ca_path: Path | None = None
+    gateway_certificate_path: Path | None = None
+    gateway_key_path: Path | None = None
 
     def context(self) -> EngineContext:
         """Return the engine execution context shared by mutating tools."""
@@ -443,6 +467,120 @@ class AgentToolset:
                 "to execute it; interrupted runs resume automatically"
             )
         return result
+
+    def operator_proposals(self) -> dict[str, object]:
+        """List every operator proposal receipt with its status."""
+        try:
+            proposals = [
+                proposal.as_document()
+                for proposal in self._proposal_store().list()
+            ]
+        except OperatorError as error:
+            return {"status": "error", "error": error.as_dict()}
+        return {"status": "ok", "proposals": proposals}
+
+    def operator_watch(self, *, drift: bool = False) -> dict[str, object]:
+        """Run one watch pass: fetch alerts, optionally audit for drift."""
+        try:
+            state = self._state()
+        except StateValidationError as error:
+            return error.as_dict()
+        inventory = PlatformInventory.from_state(state)
+        try:
+            store = self._proposal_store()
+            feed = self._alert_feed(inventory)
+            report = operator_run_once(feed, inventory, store)
+            passes: dict[str, object] = {"alerts": report.as_dict()}
+            if drift:
+                auditor = engine_auditor(
+                    self._config.context(),
+                    inventory,
+                    self._config.observed_directory,
+                )
+                passes["drift"] = drift_pass(auditor, store).as_dict()
+        except (OperatorError, LifecycleError) as error:
+            return {"status": "error", "error": error.as_dict()}
+        return {"status": "ok", **passes}
+
+    def operator_approve(
+        self, proposal: str, *, confirm: bool = False
+    ) -> dict[str, object]:
+        """Execute one proposal after confirmation and verify its trigger."""
+        try:
+            state = self._state()
+        except StateValidationError as error:
+            return error.as_dict()
+        inventory = PlatformInventory.from_state(state)
+        try:
+            store = self._proposal_store()
+            proposal_id = ResourceId.from_boundary(proposal)
+            pending = store.load(proposal_id)
+        except (OperatorError, ValueError) as error:
+            return _invalid_argument(error)
+        gate = _confirmation_gate(
+            confirm,
+            "operator-approve",
+            f"execute {' '.join(pending.command)} because "
+            f"{pending.diagnosis_summary}",
+        )
+        if gate is not None:
+            return gate
+        try:
+            if pending.trigger_kind is TriggerKind.ALERT:
+                verifier = alert_resolution_verifier(
+                    self._alert_feed(inventory)
+                )
+            else:
+                verifier = drift_resolution_verifier(
+                    engine_auditor(
+                        self._config.context(),
+                        inventory,
+                        self._config.observed_directory,
+                    )
+                )
+            result = operator_approve_proposal(
+                store,
+                proposal_id,
+                engine_executor(self._config.context()),
+                verifier,
+                ApproveOptions(),
+            )
+        except (OperatorError, LifecycleError) as error:
+            return {"status": "error", "error": error.as_dict()}
+        return {
+            "status": (
+                "ok"
+                if result.status is ProposalStatus.VERIFIED
+                else "failed"
+            ),
+            "proposal": result.as_document(),
+        }
+
+    def _proposal_store(self) -> ProposalStore:
+        return ProposalStore(
+            directory=self._config.proposals_directory,
+            catalog=SchemaCatalog(self._config.schema_directory),
+        )
+
+    def _alert_feed(self, inventory: PlatformInventory) -> AlertFeed:
+        config = self._config
+        if (
+            config.gateway_ca_path is None
+            or config.gateway_certificate_path is None
+            or config.gateway_key_path is None
+        ):
+            code = "operator_gateway_material_missing"
+            message = (
+                "the server was started without gateway TLS material; "
+                "pass --gateway-ca, --gateway-cert, and --gateway-key"
+            )
+            raise OperatorError(code, message)
+        return gateway_feed(
+            inventory,
+            ca_path=config.gateway_ca_path,
+            certificate_path=config.gateway_certificate_path,
+            key_path=config.gateway_key_path,
+        )
 
     def _converge(
         self,

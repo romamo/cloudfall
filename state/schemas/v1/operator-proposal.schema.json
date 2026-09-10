@@ -28,51 +28,100 @@
             "failed"
           ]
         },
-        "alert": {
+        "trigger": {
           "type": "object",
           "properties": {
-            "name": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 200
-            },
-            "cloudfallRule": {
-              "$ref": "common.schema.json#/$defs/resourceId"
-            },
-            "severity": {
+            "kind": {
               "enum": [
-                "warning",
-                "critical"
+                "alert",
+                "drift"
               ]
-            },
-            "environment": {
-              "$ref": "common.schema.json#/$defs/resourceId"
-            },
-            "server": {
-              "$ref": "common.schema.json#/$defs/resourceId"
-            },
-            "service": {
-              "$ref": "common.schema.json#/$defs/resourceId"
-            },
-            "activeAt": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 64
             },
             "fingerprint": {
               "type": "string",
               "pattern": "^[a-f0-9]{16}$"
+            },
+            "alert": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "cloudfallRule": {
+                  "$ref": "common.schema.json#/$defs/resourceId"
+                },
+                "severity": {
+                  "enum": [
+                    "warning",
+                    "critical"
+                  ]
+                },
+                "environment": {
+                  "$ref": "common.schema.json#/$defs/resourceId"
+                },
+                "server": {
+                  "$ref": "common.schema.json#/$defs/resourceId"
+                },
+                "service": {
+                  "$ref": "common.schema.json#/$defs/resourceId"
+                },
+                "activeAt": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                }
+              },
+              "required": [
+                "name",
+                "cloudfallRule",
+                "severity",
+                "environment",
+                "server",
+                "service",
+                "activeAt"
+              ],
+              "additionalProperties": false
+            },
+            "drift": {
+              "type": "object",
+              "properties": {
+                "server": {
+                  "$ref": "common.schema.json#/$defs/resourceId"
+                },
+                "checks": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "minItems": 1
+                }
+              },
+              "required": [
+                "server",
+                "checks"
+              ],
+              "additionalProperties": false
             }
           },
           "required": [
-            "name",
-            "cloudfallRule",
-            "severity",
-            "environment",
-            "server",
-            "service",
-            "activeAt",
+            "kind",
             "fingerprint"
+          ],
+          "oneOf": [
+            {
+              "required": [
+                "alert"
+              ]
+            },
+            {
+              "required": [
+                "drift"
+              ]
+            }
           ],
           "additionalProperties": false
         },
@@ -105,7 +154,8 @@
           "properties": {
             "kind": {
               "enum": [
-                "converge-services"
+                "converge-services",
+                "converge-baseline"
               ]
             },
             "server": {
@@ -127,7 +177,6 @@
           "required": [
             "kind",
             "server",
-            "service",
             "command"
           ],
           "additionalProperties": false
@@ -169,7 +218,7 @@
       "required": [
         "createdAt",
         "status",
-        "alert",
+        "trigger",
         "diagnosis",
         "operation"
       ],

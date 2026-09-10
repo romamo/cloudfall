@@ -50,6 +50,11 @@ from cloudfall.operator import (
     OperatorError,
     ProposalStatus,
     ProposalStore,
+    TriggerKind,
+    alert_resolution_verifier,
+    drift_pass,
+    drift_resolution_verifier,
+    engine_auditor,
     engine_executor,
     gateway_feed,
 )
@@ -546,15 +551,34 @@ def _add_operator_parsers(
         dest="operator_command", required=True
     )
     operator_run_parser = operator_commands.add_parser(
-        "run", help="watch declared alerts and write proposals"
+        "run", help="watch declared alerts and drift, write proposals"
     )
     _add_operator_arguments(operator_run_parser)
-    _add_operator_feed_arguments(operator_run_parser)
+    _add_operator_feed_arguments(operator_run_parser, required=True)
+    _add_operator_engine_arguments(operator_run_parser)
     operator_run_parser.add_argument(
         "--interval",
         type=float,
         default=None,
         help="seconds between watch passes (default: one pass, then exit)",
+    )
+    operator_run_parser.add_argument(
+        "--drift-interval",
+        type=float,
+        default=None,
+        help=(
+            "seconds between audited drift checks (default: no drift "
+            "checks; a single pass runs one when set)"
+        ),
+    )
+    operator_run_parser.add_argument(
+        "--observed",
+        type=Path,
+        default=Path("tmp/operator/observed"),
+        help=(
+            "observation directory for drift checks "
+            "(default: tmp/operator/observed)"
+        ),
     )
     operator_list_parser = operator_commands.add_parser(
         "list", help="list proposal receipts"
@@ -566,28 +590,26 @@ def _add_operator_parsers(
     _add_operator_arguments(operator_show_parser)
     operator_show_parser.add_argument("proposal")
     operator_approve_parser = operator_commands.add_parser(
-        "approve", help="execute a proposal and verify the alert resolves"
+        "approve", help="execute a proposal and verify its trigger resolves"
     )
     _add_operator_arguments(operator_approve_parser)
-    _add_operator_feed_arguments(operator_approve_parser)
+    _add_operator_feed_arguments(operator_approve_parser, required=False)
+    _add_operator_engine_arguments(operator_approve_parser)
     operator_approve_parser.add_argument("proposal")
     operator_approve_parser.add_argument(
-        "--engine",
+        "--observed",
         type=Path,
-        default=Path("engine"),
-        help="engine directory containing ansible contracts (default: engine)",
-    )
-    operator_approve_parser.add_argument(
-        "--inventory-file",
-        type=Path,
-        default=Path("tmp/ansible-inventory.json"),
-        help="rendered inventory path (default: tmp/ansible-inventory.json)",
+        default=Path("tmp/operator/observed"),
+        help=(
+            "observation directory for drift verification "
+            "(default: tmp/operator/observed)"
+        ),
     )
     operator_approve_parser.add_argument(
         "--verify-timeout",
         type=float,
         default=180.0,
-        help="seconds to wait for the alert to resolve (default: 180)",
+        help="seconds to wait for the trigger to resolve (default: 180)",
     )
 
 
@@ -607,7 +629,9 @@ def _add_operator_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def _add_operator_feed_arguments(parser: argparse.ArgumentParser) -> None:
+def _add_operator_feed_arguments(
+    parser: argparse.ArgumentParser, *, required: bool
+) -> None:
     parser.add_argument(
         "--gateway-url",
         default=None,
@@ -616,9 +640,24 @@ def _add_operator_feed_arguments(parser: argparse.ArgumentParser) -> None:
             "gateway)"
         ),
     )
-    parser.add_argument("--gateway-ca", type=Path, required=True)
-    parser.add_argument("--gateway-cert", type=Path, required=True)
-    parser.add_argument("--gateway-key", type=Path, required=True)
+    parser.add_argument("--gateway-ca", type=Path, required=required)
+    parser.add_argument("--gateway-cert", type=Path, required=required)
+    parser.add_argument("--gateway-key", type=Path, required=required)
+
+
+def _add_operator_engine_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--engine",
+        type=Path,
+        default=Path("engine"),
+        help="engine directory containing ansible contracts (default: engine)",
+    )
+    parser.add_argument(
+        "--inventory-file",
+        type=Path,
+        default=Path("tmp/ansible-inventory.json"),
+        help="rendered inventory path (default: tmp/ansible-inventory.json)",
+    )
 
 
 def _add_lifecycle_arguments(parser: argparse.ArgumentParser) -> None:
@@ -769,6 +808,20 @@ def _operator_feed(
     )
 
 
+def _require_gateway_material(arguments: Namespace) -> None:
+    if (
+        arguments.gateway_ca is None
+        or arguments.gateway_cert is None
+        or arguments.gateway_key is None
+    ):
+        code = "operator_gateway_material_missing"
+        message = (
+            "approving an alert-triggered proposal requires --gateway-ca, "
+            "--gateway-cert, and --gateway-key"
+        )
+        raise OperatorError(code, message)
+
+
 def _operator_exit(error: OperatorError) -> int:
     sys.stderr.write(f"{json.dumps(error.as_dict(), sort_keys=True)}\n")
     return 2
@@ -781,9 +834,29 @@ def _run_operator_run(
     try:
         store = _operator_store(arguments, schema_directory)
         feed = _operator_feed(arguments, inventory)
+        auditor = None
+        if arguments.drift_interval is not None:
+            auditor = engine_auditor(
+                _engine_context(arguments, schema_directory),
+                inventory,
+                Path(arguments.observed),
+            )
+        drift_due = 0.0
         while True:
             report = operator_run_once(feed, inventory, store)
-            _write_json({"status": "ok", **report.as_dict()})
+            _write_json(
+                {"status": "ok", "pass": "alerts", **report.as_dict()}
+            )
+            if auditor is not None and time.monotonic() >= drift_due:
+                drift_report = drift_pass(auditor, store)
+                _write_json(
+                    {
+                        "status": "ok",
+                        "pass": "drift",
+                        **drift_report.as_dict(),
+                    }
+                )
+                drift_due = time.monotonic() + arguments.drift_interval
             if arguments.interval is None:
                 return 0
             time.sleep(arguments.interval)
@@ -821,13 +894,23 @@ def _run_operator_approve(
     inventory = PlatformInventory.from_state(state)
     try:
         store = _operator_store(arguments, schema_directory)
-        feed = _operator_feed(arguments, inventory)
-        executor = engine_executor(_engine_context(arguments, schema_directory))
+        proposal_id = ResourceId.from_boundary(arguments.proposal)
+        pending = store.load(proposal_id)
+        context = _engine_context(arguments, schema_directory)
+        if pending.trigger_kind is TriggerKind.ALERT:
+            _require_gateway_material(arguments)
+            verifier = alert_resolution_verifier(
+                _operator_feed(arguments, inventory)
+            )
+        else:
+            verifier = drift_resolution_verifier(
+                engine_auditor(context, inventory, Path(arguments.observed))
+            )
         proposal = operator_approve(
             store,
-            ResourceId.from_boundary(arguments.proposal),
-            executor,
-            feed,
+            proposal_id,
+            engine_executor(context),
+            verifier,
             ApproveOptions(verify_timeout_seconds=arguments.verify_timeout),
         )
     except OperatorError as error:

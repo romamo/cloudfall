@@ -35,6 +35,7 @@ def _config(tmp_path: Path, observed: Path | None = None) -> AgentConfig:
         deployments_directory=tmp_path / "deployments",
         releases_directory=tmp_path / "releases",
         artifacts_directory=tmp_path / "artifacts",
+        proposals_directory=tmp_path / "proposals",
     )
 
 
@@ -165,3 +166,48 @@ def test_mcp_server_registers_annotated_tools(tmp_path: Path) -> None:
     assert tools["deploy_component"].annotations is not None
     assert tools["deploy_component"].annotations.destructive_hint is True
     assert "confirm" in str(tools["deploy_component"].input_schema)
+
+
+def test_operator_tools_list_gate_and_report_missing_material(
+    tmp_path: Path,
+) -> None:
+    toolset = AgentToolset(_config(tmp_path))
+
+    proposals = toolset.operator_proposals()
+    gate = toolset.operator_approve("op-nonexistent")
+    watch = toolset.operator_watch()
+
+    assert proposals == {"status": "ok", "proposals": []}
+    assert gate["status"] == "error"
+    assert watch["status"] == "error"
+    error = watch["error"]
+    assert isinstance(error, dict)
+    assert error["code"] == "operator_gateway_material_missing"
+
+
+def test_operator_approve_gates_before_executing(tmp_path: Path) -> None:
+    from cloudfall.domain import ResourceId  # noqa: PLC0415 - test-local.
+    from cloudfall.operator import (  # noqa: PLC0415 - test-local.
+        OperationKind,
+        ProposalStore,
+        propose_for_drift,
+    )
+    from cloudfall.validation import SchemaCatalog  # noqa: PLC0415
+
+    config = _config(tmp_path)
+    store = ProposalStore(
+        directory=config.proposals_directory, catalog=SchemaCatalog(SCHEMAS)
+    )
+    proposal = propose_for_drift(
+        ResourceId.from_boundary("h1"),
+        ("packages.required[curl]",),
+        OperationKind.CONVERGE_BASELINE,
+        "2026-09-10T15:00:00+00:00",
+    )
+    store.save(proposal)
+    toolset = AgentToolset(config)
+
+    gate = toolset.operator_approve(proposal.resource_id.value)
+
+    assert gate["status"] == "confirmation-required"
+    assert "baseline.yml" in str(gate["wouldRun"])

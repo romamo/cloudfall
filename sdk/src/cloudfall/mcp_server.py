@@ -41,6 +41,7 @@ def create_server(config: AgentConfig) -> MCPServer:
         *_evidence_registrations(toolset),
         *_build_registrations(toolset),
         *_mutation_registrations(toolset),
+        *_operator_registrations(toolset),
     )
     for handler, name, description, tool_annotations in registrations:
         server.add_tool(
@@ -312,6 +313,52 @@ def _mutation_registrations(
     )
 
 
+def _operator_registrations(
+    toolset: AgentToolset,
+) -> tuple[_Registration, ...]:
+    read_only = ToolAnnotations(read_only_hint=True)
+    destructive = ToolAnnotations(read_only_hint=False, destructive_hint=True)
+
+    def operator_proposals() -> str:
+        return _dump(toolset.operator_proposals())
+
+    def operator_watch(
+        drift: bool = False,  # noqa: FBT001, FBT002 - explicit agent flag.
+    ) -> str:
+        return _dump(toolset.operator_watch(drift=drift))
+
+    def operator_approve(
+        proposal: str,
+        confirm: bool = False,  # noqa: FBT001, FBT002 - explicit agent gate.
+    ) -> str:
+        return _dump(toolset.operator_approve(proposal, confirm=confirm))
+
+    return (
+        (
+            operator_proposals,
+            "operator_proposals",
+            "List every operator proposal receipt: trigger evidence, "
+            "diagnosis, proposed operation, and outcome",
+            read_only,
+        ),
+        (
+            operator_watch,
+            "operator_watch",
+            "Run one operator watch pass: fetch firing declared alerts "
+            "through the mTLS gateway (and audit for drift when "
+            "drift=true) and write proposals for anything new",
+            read_only,
+        ),
+        (
+            operator_approve,
+            "operator_approve",
+            "Execute one operator proposal's declared remediation and "
+            "verify its trigger evidence resolves; requires confirm=true",
+            destructive,
+        ),
+    )
+
+
 def _dump(payload: dict[str, object]) -> str:
     return json.dumps(payload, sort_keys=True)
 
@@ -394,6 +441,31 @@ def _parser() -> argparse.ArgumentParser:
         help="directory holding data-migration receipts (default:"
         " %(default)s)",
     )
+    parser.add_argument(
+        "--proposals",
+        type=Path,
+        default=Path("tmp/operator/proposals"),
+        help="directory holding operator proposal receipts (default:"
+        " %(default)s)",
+    )
+    parser.add_argument(
+        "--gateway-ca",
+        type=Path,
+        default=None,
+        help="CA bundle for the logging gateway's alerts route",
+    )
+    parser.add_argument(
+        "--gateway-cert",
+        type=Path,
+        default=None,
+        help="client certificate for the logging gateway's alerts route",
+    )
+    parser.add_argument(
+        "--gateway-key",
+        type=Path,
+        default=None,
+        help="client key for the logging gateway's alerts route",
+    )
     return parser
 
 
@@ -411,6 +483,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         releases_directory=Path(arguments.releases),
         artifacts_directory=Path(arguments.artifacts),
         data_migrations_directory=Path(arguments.data_migrations),
+        proposals_directory=Path(arguments.proposals),
+        gateway_ca_path=arguments.gateway_ca,
+        gateway_certificate_path=arguments.gateway_cert,
+        gateway_key_path=arguments.gateway_key,
     )
     create_server(config).run(transport="stdio")
     return 0
