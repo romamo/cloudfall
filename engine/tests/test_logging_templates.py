@@ -89,6 +89,7 @@ def test_backend_metrics_templates_render_loopback_prometheus() -> None:
     )
 
     assert prometheus["global"]["scrape_interval"] == "60s"
+    assert prometheus["global"]["evaluation_interval"] == "60s"
     scrape_targets = prometheus["scrape_configs"][0]["static_configs"][0]
     assert scrape_targets["targets"] == ["127.0.0.1:9090"]
     assert "--web.listen-address=127.0.0.1:9090" in defaults

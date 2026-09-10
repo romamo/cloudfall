@@ -192,7 +192,15 @@ Loki/Grafana/Alloy stack.
 
 Exit: an induced service failure on a proving host raises a declared alert
 with evidence within one minute, and `cloudfall audit` reports alert-rule
-compliance alongside everything else.
+compliance alongside everything else. **Met on 2026-09-10** on a disposable
+Hetzner Cloud Debian 13 server: stopping PostgreSQL raised the declared
+alert as pending in 28 seconds and firing at 86 seconds per its declared
+`for: 1m` dampening, the declared webhook received the payload, the
+mid-failure audit separated drift (dead listener) from status (firing rule,
+compliant), and recovery returned the host to 20/20 compliant — see the
+[M7 proving-run report](docs/proving-runs/2026-09-10-hetzner-m7.md). The run
+found and fixed one real latency bug (Prometheus `evaluation_interval` was
+stuck at its 1-minute default), which is the point of proving runs.
 
 ## M8 — Operator runtime: the always-on agent, propose mode
 

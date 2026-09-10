@@ -1,6 +1,7 @@
 # Managed by Cloudfall. Local changes will be overwritten.
 global:
   scrape_interval: {{ cloudfall_logging_backend_stack.metrics.collection.intervalSeconds }}s
+  evaluation_interval: {{ cloudfall_logging_backend_stack.metrics.collection.intervalSeconds }}s
 
 rule_files:
   - /etc/prometheus/cloudfall-rules.yaml
