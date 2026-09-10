@@ -14,10 +14,13 @@ from cloudfall.inventory import firewall_rules_for_server
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
 
+    from cloudfall.domain import ResourceId
     from cloudfall.inventory import (
+        AlertRuleInventory,
         ConfigurationFileRequirement,
         FirewallRequirement,
         HostProfileInventory,
+        LoggingStackInventory,
         PlatformInventory,
         RaidRequirement,
         ServerInventory,
@@ -122,6 +125,9 @@ def audit_inventory(
     inventory: PlatformInventory, observations: ObservationSet
 ) -> AuditReport:
     """Audit every desired server against its validated observation."""
+    stacks_by_backend = {
+        stack.backend.server_id: stack for stack in inventory.logging_stacks
+    }
     audits = tuple(
         _audit_server(
             server,
@@ -131,6 +137,7 @@ def audit_inventory(
                 for service in inventory.services
                 if service.server_id == server.resource_id
             ),
+            _alert_rules_for_backend(server, stacks_by_backend, inventory),
             observations.for_server(server.resource_id),
         )
         for server in inventory.servers
@@ -154,6 +161,7 @@ def _audit_server(
     server: ServerInventory,
     profile: HostProfileInventory,
     services: tuple[ServiceInventory, ...],
+    alert_rules: tuple[AlertRuleInventory, ...],
     snapshot: ObservedServerSnapshot | None,
 ) -> ServerAudit:
     if snapshot is None:
@@ -191,6 +199,7 @@ def _audit_server(
     if profile.firewall is not None:
         checks.extend(_audit_firewall(server, profile.firewall, snapshot))
     checks.extend(_audit_service_binds(services, snapshot))
+    checks.extend(_audit_alert_rules(alert_rules, snapshot))
     checks.extend(_audit_configuration(profile, snapshot))
     return ServerAudit(
         server_id=server.resource_id.value,
@@ -602,6 +611,86 @@ def _parse_listening_sockets(raw: str) -> tuple[_SocketListener, ...]:
             )
         )
     return tuple(listeners)
+
+
+def _alert_rules_for_backend(
+    server: ServerInventory,
+    stacks_by_backend: Mapping[ResourceId, LoggingStackInventory],
+    inventory: PlatformInventory,
+) -> tuple[AlertRuleInventory, ...]:
+    stack = stacks_by_backend.get(server.resource_id)
+    if stack is None:
+        return ()
+    return tuple(
+        rule
+        for rule in inventory.alert_rules
+        if rule.environment == stack.environment
+    )
+
+
+def _audit_alert_rules(
+    alert_rules: tuple[AlertRuleInventory, ...],
+    snapshot: ObservedServerSnapshot,
+) -> tuple[AuditCheck, ...]:
+    if not alert_rules:
+        return ()
+    raw_alerting = _optional_mapping(snapshot.spec.get("alerting"))
+    observed_rules = (
+        _observed_alert_rules(raw_alerting)
+        if raw_alerting is not None
+        and raw_alerting.get("prometheusAvailable") is True
+        else None
+    )
+    checks: list[AuditCheck] = []
+    for rule in alert_rules:
+        rule_name = rule.resource_id.value.replace("-", "_")
+        desired = {"name": rule_name, "health": "ok", "loaded": True}
+        observed = (
+            observed_rules.get(rule_name) if observed_rules is not None else None
+        )
+        checks.append(
+            _comparison(
+                f"alerting.rules[{rule.resource_id.value}]",
+                desired,
+                observed,
+                matches=(
+                    observed is not None and observed.get("health") == "ok"
+                ),
+            )
+        )
+    return tuple(checks)
+
+
+def _observed_alert_rules(
+    alerting: Mapping[str, object],
+) -> dict[str, dict[str, object]]:
+    raw_rules_json = alerting.get("rulesJson")
+    if not isinstance(raw_rules_json, str):
+        return {}
+    try:
+        payload = cast("object", json.loads(raw_rules_json))
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    data = payload.get("data")
+    if not isinstance(data, dict):
+        return {}
+    observed: dict[str, dict[str, object]] = {}
+    for group in _mapping_values_sequence(data.get("groups")):
+        for raw_rule in _mapping_values_sequence(group.get("rules")):
+            if raw_rule.get("type") != "alerting":
+                continue
+            name = raw_rule.get("name")
+            if not isinstance(name, str):
+                continue
+            observed[name] = {
+                "name": name,
+                "health": raw_rule.get("health"),
+                "state": raw_rule.get("state"),
+                "loaded": True,
+            }
+    return observed
 
 
 def _audit_configuration(

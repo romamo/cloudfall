@@ -133,6 +133,11 @@
         "size": 3223,
         "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
       }
-    ]
+    ],
+    "alerting": {
+      "prometheusAvailable": true,
+      "rulesJson": "{\"status\": \"success\", \"data\": {\"groups\": [{\"name\": \"cloudfall\", \"file\": \"/etc/prometheus/cloudfall-rules.yaml\", \"rules\": [{\"name\": \"postgresql_down\", \"type\": \"alerting\", \"state\": \"inactive\", \"health\": \"ok\", \"query\": \"pg_up{service=\\\"postgresql-main\\\"} == 0\", \"duration\": 60}]}]}}",
+      "alertsJson": "{\"status\": \"success\", \"data\": {\"alerts\": []}}"
+    }
   }
 }

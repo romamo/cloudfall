@@ -529,6 +529,65 @@
             }}
         configuration: "{{ cloudfall_inspect_configuration }}"
 
+- name: Collect Prometheus alert rule evidence
+  ansible.builtin.uri:
+    url: >-
+      http://{{
+        cloudfall_inspect_logging_backend.metrics.backend.listenAddress
+      }}:{{
+        cloudfall_inspect_logging_backend.metrics.backend.port
+      }}/api/v1/rules?type=alert
+    return_content: true
+  register: cloudfall_inspect_prometheus_rules
+  failed_when: false
+  when: cloudfall_inspect_logging_backend | length > 0
+
+- name: Collect Prometheus active alert evidence
+  ansible.builtin.uri:
+    url: >-
+      http://{{
+        cloudfall_inspect_logging_backend.metrics.backend.listenAddress
+      }}:{{
+        cloudfall_inspect_logging_backend.metrics.backend.port
+      }}/api/v1/alerts
+    return_content: true
+  register: cloudfall_inspect_prometheus_alerts
+  failed_when: false
+  when: cloudfall_inspect_logging_backend | length > 0
+
+- name: Attach alerting evidence for the logging backend
+  ansible.builtin.set_fact:
+    cloudfall_inspect_snapshot: >-
+      {{
+        cloudfall_inspect_snapshot | combine(
+          {
+            'spec': {
+              'alerting': {
+                'prometheusAvailable': (
+                  cloudfall_inspect_prometheus_rules.status | default(0) == 200
+                  and cloudfall_inspect_prometheus_alerts.status
+                  | default(0) == 200
+                ),
+                'rulesJson': (
+                  cloudfall_inspect_prometheus_rules.content
+                  if cloudfall_inspect_prometheus_rules.status
+                  | default(0) == 200
+                  else none
+                ),
+                'alertsJson': (
+                  cloudfall_inspect_prometheus_alerts.content
+                  if cloudfall_inspect_prometheus_alerts.status
+                  | default(0) == 200
+                  else none
+                ),
+              }
+            }
+          },
+          recursive=true
+        )
+      }}
+  when: cloudfall_inspect_logging_backend | length > 0
+
 - name: Create controller observation directory
   ansible.builtin.file:
     path: "{{ cloudfall_inspect_output_directory }}"

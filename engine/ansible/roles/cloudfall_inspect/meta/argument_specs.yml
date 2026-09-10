@@ -15,3 +15,6 @@ argument_specs:
       cloudfall_inspect_server_id:
         type: str
         required: true
+      cloudfall_inspect_logging_backend:
+        type: dict
+        default: {}

@@ -175,6 +175,129 @@ def test_audit_reports_missing_firewall_table_as_drift(tmp_path: Path) -> None:
     } <= drift_checks
 
 
+def test_audit_reports_missing_alert_evidence_as_drift(tmp_path: Path) -> None:
+    observations = tmp_path / "observed"
+    shutil.copytree(COMPLIANT, observations)
+    h1 = observations / "h1.json"
+    content = json.loads(h1.read_text(encoding="utf-8"))
+    del content["spec"]["alerting"]
+    h1.write_text(json.dumps(content), encoding="utf-8")
+
+    report = _audit(observations)
+    h1_report = next(server for server in report.servers if server.server_id == "h1")
+    check = next(
+        check
+        for check in h1_report.checks
+        if check.check == "alerting.rules[postgresql-down]"
+    )
+
+    assert check.status is AuditStatus.DRIFT
+    assert check.observed is None
+
+
+def test_audit_reports_unloaded_alert_rule_as_drift(tmp_path: Path) -> None:
+    observations = tmp_path / "observed"
+    shutil.copytree(COMPLIANT, observations)
+    h1 = observations / "h1.json"
+    content = json.loads(h1.read_text(encoding="utf-8"))
+    content["spec"]["alerting"]["rulesJson"] = json.dumps(
+        {"status": "success", "data": {"groups": []}}
+    )
+    h1.write_text(json.dumps(content), encoding="utf-8")
+
+    report = _audit(observations)
+    h1_report = next(server for server in report.servers if server.server_id == "h1")
+    check = next(
+        check
+        for check in h1_report.checks
+        if check.check == "alerting.rules[postgresql-down]"
+    )
+
+    assert check.status is AuditStatus.DRIFT
+
+
+def test_audit_reports_unhealthy_alert_rule_as_drift(tmp_path: Path) -> None:
+    observations = tmp_path / "observed"
+    shutil.copytree(COMPLIANT, observations)
+    h1 = observations / "h1.json"
+    content = json.loads(h1.read_text(encoding="utf-8"))
+    content["spec"]["alerting"]["rulesJson"] = json.dumps(
+        {
+            "status": "success",
+            "data": {
+                "groups": [
+                    {
+                        "name": "cloudfall",
+                        "rules": [
+                            {
+                                "name": "postgresql_down",
+                                "type": "alerting",
+                                "state": "inactive",
+                                "health": "err",
+                            }
+                        ],
+                    }
+                ]
+            },
+        }
+    )
+    h1.write_text(json.dumps(content), encoding="utf-8")
+
+    report = _audit(observations)
+    h1_report = next(server for server in report.servers if server.server_id == "h1")
+    check = next(
+        check
+        for check in h1_report.checks
+        if check.check == "alerting.rules[postgresql-down]"
+    )
+
+    assert check.status is AuditStatus.DRIFT
+    assert isinstance(check.observed, dict)
+    assert check.observed["health"] == "err"
+
+
+def test_audit_accepts_firing_declared_alert_as_compliant(
+    tmp_path: Path,
+) -> None:
+    observations = tmp_path / "observed"
+    shutil.copytree(COMPLIANT, observations)
+    h1 = observations / "h1.json"
+    content = json.loads(h1.read_text(encoding="utf-8"))
+    content["spec"]["alerting"]["rulesJson"] = json.dumps(
+        {
+            "status": "success",
+            "data": {
+                "groups": [
+                    {
+                        "name": "cloudfall",
+                        "rules": [
+                            {
+                                "name": "postgresql_down",
+                                "type": "alerting",
+                                "state": "firing",
+                                "health": "ok",
+                            }
+                        ],
+                    }
+                ]
+            },
+        }
+    )
+    h1.write_text(json.dumps(content), encoding="utf-8")
+
+    report = _audit(observations)
+    h1_report = next(server for server in report.servers if server.server_id == "h1")
+    check = next(
+        check
+        for check in h1_report.checks
+        if check.check == "alerting.rules[postgresql-down]"
+    )
+
+    assert check.status is AuditStatus.COMPLIANT
+    assert isinstance(check.observed, dict)
+    assert check.observed["state"] == "firing"
+
+
 def test_audit_reports_wildcard_service_exposure_as_drift(
     tmp_path: Path,
 ) -> None:

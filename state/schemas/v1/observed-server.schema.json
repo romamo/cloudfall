@@ -494,6 +494,26 @@
           ],
           "additionalProperties": false
         },
+        "alerting": {
+          "type": "object",
+          "properties": {
+            "prometheusAvailable": {
+              "type": "boolean"
+            },
+            "rulesJson": {
+              "$ref": "#/$defs/nullableString"
+            },
+            "alertsJson": {
+              "$ref": "#/$defs/nullableString"
+            }
+          },
+          "required": [
+            "prometheusAvailable",
+            "rulesJson",
+            "alertsJson"
+          ],
+          "additionalProperties": false
+        },
         "configuration": {
           "type": "array",
           "items": {
