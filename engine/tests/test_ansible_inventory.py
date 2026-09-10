@@ -122,6 +122,7 @@ def test_inventory_renders_ansible_host_variables() -> None:
                     "onCalendar": "*-*-* 02:00:00 UTC",
                     "retentionDays": 14,
                 },
+                "metrics": {"enabled": True},
             }
         ],
         "cloudfall_domains": [],

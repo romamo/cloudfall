@@ -111,3 +111,10 @@ argument_specs:
                 type: list
                 elements: dict
                 required: true
+      cloudfall_services:
+        type: list
+        elements: dict
+        default: []
+      cloudfall_logging_collector_metrics_role:
+        type: str
+        default: alloy

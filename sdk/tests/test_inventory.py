@@ -129,6 +129,7 @@ def test_inventory_serialization_excludes_secret_references() -> None:
         {"name": "crm", "project": "crm", "owner": "crm"}
     ]
     assert "packageVersion" not in services[0]["postgresql"]
+    assert services[0]["metrics"] == {"enabled": True}
     assert len(ssh_public_keys) == 1
     assert ssh_public_keys[0]["id"] == "example-admin"
     assert ssh_public_keys[0]["algorithm"] == "ssh-rsa"

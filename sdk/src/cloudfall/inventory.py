@@ -633,6 +633,7 @@ class ServiceInventory:
     bind: ServiceBind
     postgresql: PostgresqlService
     backup: ServiceBackup
+    metrics_enabled: bool
 
     def as_dict(self) -> dict[str, object]:
         """Serialize the service without secret material."""
@@ -644,7 +645,7 @@ class ServiceInventory:
         }
         if self.postgresql.package_version is not None:
             postgresql["packageVersion"] = self.postgresql.package_version.value
-        return {
+        result: dict[str, object] = {
             "id": self.resource_id.value,
             "serviceKind": self.service_kind.value,
             "environment": self.environment.value,
@@ -660,6 +661,9 @@ class ServiceInventory:
                 "retentionDays": self.backup.retention_days.value,
             },
         }
+        if self.metrics_enabled:
+            result["metrics"] = {"enabled": True}
+        return result
 
 
 @dataclass(frozen=True, slots=True)
@@ -1321,7 +1325,24 @@ def _service_inventory(
                 backup.get("retentionDays")
             ),
         ),
+        metrics_enabled=_service_metrics_enabled(spec, document),
     )
+
+
+def _service_metrics_enabled(
+    spec: Mapping[str, object], document: ResourceDocument
+) -> bool:
+    raw_metrics = spec.get("metrics")
+    if raw_metrics is None:
+        return False
+    metrics = _mapping(spec, "metrics")
+    if metrics.get("enabled") is not True:
+        message = (
+            "validated service metrics block must declare enabled: true "
+            f"({document.source.display()})"
+        )
+        raise ValueError(message)
+    return True
 
 
 def _postgres_database(

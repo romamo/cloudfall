@@ -20,3 +20,5 @@ spec:
     directory: /var/backups/cloudfall/postgresql-main
     onCalendar: "*-*-* 02:00:00 UTC"
     retentionDays: 14
+  metrics:
+    enabled: true

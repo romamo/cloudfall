@@ -1,4 +1,5 @@
 ---
+cloudfall_postgresql_metrics_role: alloy
 cloudfall_postgresql_repository_key_url: >-
   https://www.postgresql.org/media/keys/ACCC4CF8.asc
 cloudfall_postgresql_repository_key_path: /etc/apt/keyrings/postgresql.asc

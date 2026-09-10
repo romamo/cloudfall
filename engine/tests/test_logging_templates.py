@@ -26,6 +26,12 @@ def _logging_stack() -> dict[str, object]:
     return inventory.logging_stacks[0].as_dict()
 
 
+def _services() -> list[dict[str, object]]:
+    inventory = PlatformInventory.from_state(validate_state(EXAMPLES, SCHEMAS))
+    assert len(inventory.services) == 1
+    return [service.as_dict() for service in inventory.services]
+
+
 def _render(directory: Path, name: str, **context: object) -> str:
     environment = Environment(
         loader=FileSystemLoader(directory),
@@ -116,3 +122,48 @@ def test_collector_template_renders_mtls_and_bounded_labels() -> None:
     assert "request_id" not in rendered
     assert "/etc/alloy/cloudfall.alloy" in override
     assert "--storage.path=/var/lib/alloy/data" in override
+
+
+def test_collector_template_renders_postgres_exporter_for_declared_metrics() -> None:
+    stack = _logging_stack()
+    services = _services()
+    rendered = _render(
+        COLLECTOR_TEMPLATES,
+        "config.alloy.j2",
+        cloudfall_logging_collector_stack=stack,
+        cloudfall_server_id="h1",
+        cloudfall_services=services,
+        cloudfall_logging_collector_metrics_role="alloy",
+    )
+
+    assert 'prometheus.exporter.postgres "postgresql_main"' in rendered
+    assert (
+        '"postgresql://alloy@:5432/postgres'
+        '?host=/var/run/postgresql&sslmode=disable"' in rendered
+    )
+    assert 'prometheus.scrape "postgresql_main"' in rendered
+    assert (
+        "forward_to      = [prometheus.relabel.postgresql_main.receiver]"
+        in rendered
+    )
+    assert 'replacement  = "postgresql-main"' in rendered
+    assert "password" not in rendered
+
+
+def test_collector_template_skips_postgres_exporter_without_metrics() -> None:
+    stack = _logging_stack()
+    services = _services()
+    undeclared = [
+        {key: value for key, value in service.items() if key != "metrics"}
+        for service in services
+    ]
+    rendered = _render(
+        COLLECTOR_TEMPLATES,
+        "config.alloy.j2",
+        cloudfall_logging_collector_stack=stack,
+        cloudfall_server_id="h1",
+        cloudfall_services=undeclared,
+        cloudfall_logging_collector_metrics_role="alloy",
+    )
+
+    assert "prometheus.exporter.postgres" not in rendered

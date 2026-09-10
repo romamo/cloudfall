@@ -154,6 +154,39 @@
     - item not in cloudfall_postgresql_existing_roles.stdout_lines
   changed_when: true
 
+- name: Create the metrics monitoring role
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/psql
+      - --port
+      - "{{ cloudfall_postgresql_service.bind.port }}"
+      - --command
+      - CREATE ROLE "{{ cloudfall_postgresql_metrics_role }}" LOGIN
+  become: true
+  become_user: postgres
+  when:
+    - not ansible_check_mode
+    - "'metrics' in cloudfall_postgresql_service"
+    - >-
+      cloudfall_postgresql_metrics_role
+      not in cloudfall_postgresql_existing_roles.stdout_lines
+  changed_when: true
+
+- name: Grant pg_monitor to the metrics monitoring role
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/psql
+      - --port
+      - "{{ cloudfall_postgresql_service.bind.port }}"
+      - --command
+      - GRANT pg_monitor TO "{{ cloudfall_postgresql_metrics_role }}"
+  become: true
+  become_user: postgres
+  when:
+    - not ansible_check_mode
+    - "'metrics' in cloudfall_postgresql_service"
+  changed_when: false
+
 - name: Read existing PostgreSQL databases
   ansible.builtin.command:
     argv:
