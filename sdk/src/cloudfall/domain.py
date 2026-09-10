@@ -74,6 +74,7 @@ class ResourceKind(StrEnum):
     SSH_PUBLIC_KEY = "SshPublicKey"
     LOGGING_STACK = "LoggingStack"
     SERVICE = "Service"
+    ALERT_RULE = "AlertRule"
 
     @classmethod
     def from_boundary(cls, value: object) -> ResourceKind:
@@ -725,6 +726,72 @@ class SystemdCalendar:
     def from_boundary(cls, value: object) -> SystemdCalendar:
         """Coerce a boundary value into a calendar expression."""
         return cls(_required_string(value, "systemd calendar expression"))
+
+
+class AlertSeverity(StrEnum):
+    """Severity level attached to a declared alert rule."""
+
+    WARNING = "warning"
+    CRITICAL = "critical"
+
+    @classmethod
+    def from_boundary(cls, value: object) -> AlertSeverity:
+        """Coerce a boundary value into an alert severity."""
+        return cls(_required_string(value, "alert severity"))
+
+
+@dataclass(frozen=True, slots=True)
+class PromqlExpression:
+    """Validated single-line PromQL expression safe for rule rendering."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        """Reject control characters and unbounded expressions."""
+        if not re.fullmatch(r"[^\x00-\x1f\x7f]{1,1000}", self.value):
+            message = f"invalid promql expression: {self.value!r}"
+            raise ValueError(message)
+
+    @classmethod
+    def from_boundary(cls, value: object) -> PromqlExpression:
+        """Coerce a boundary value into a PromQL expression."""
+        return cls(_required_string(value, "promql expression"))
+
+
+@dataclass(frozen=True, slots=True)
+class AlertDuration:
+    """Validated Prometheus for-duration guarding alert flappiness."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        """Reject durations outside the simple seconds/minutes/hours form."""
+        if not re.fullmatch(r"[0-9]{1,5}[smh]", self.value):
+            message = f"invalid alert duration: {self.value!r}"
+            raise ValueError(message)
+
+    @classmethod
+    def from_boundary(cls, value: object) -> AlertDuration:
+        """Coerce a boundary value into an alert duration."""
+        return cls(_required_string(value, "alert duration"))
+
+
+@dataclass(frozen=True, slots=True)
+class AlertSummary:
+    """Validated single-line human summary rendered into annotations."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        """Reject control characters and unbounded summaries."""
+        if not re.fullmatch(r"[^\x00-\x1f\x7f]{1,200}", self.value):
+            message = f"invalid alert summary: {self.value!r}"
+            raise ValueError(message)
+
+    @classmethod
+    def from_boundary(cls, value: object) -> AlertSummary:
+        """Coerce a boundary value into an alert summary."""
+        return cls(_required_string(value, "alert summary"))
 
 
 @dataclass(frozen=True, slots=True)

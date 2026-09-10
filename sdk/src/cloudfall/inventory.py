@@ -7,6 +7,9 @@ from typing import TYPE_CHECKING, cast
 
 from cloudfall.domain import (
     AbsolutePath,
+    AlertDuration,
+    AlertSeverity,
+    AlertSummary,
     ByteSize,
     ConfigCapture,
     ConnectionAddress,
@@ -35,6 +38,7 @@ from cloudfall.domain import (
     PositiveCount,
     PostgresDatabaseName,
     PostgresMajorVersion,
+    PromqlExpression,
     ProviderServerId,
     RaidLevel,
     RepositoryUrl,
@@ -667,6 +671,29 @@ class ServiceInventory:
 
 
 @dataclass(frozen=True, slots=True)
+class AlertRuleInventory:
+    """Typed desired state for one declared alert rule."""
+
+    resource_id: ResourceId
+    environment: ResourceId
+    expr: PromqlExpression
+    for_duration: AlertDuration
+    severity: AlertSeverity
+    summary: AlertSummary
+
+    def as_dict(self) -> dict[str, object]:
+        """Serialize the alert rule for rendering and evidence."""
+        return {
+            "id": self.resource_id.value,
+            "environment": self.environment.value,
+            "expr": self.expr.value,
+            "for": self.for_duration.value,
+            "severity": self.severity.value,
+            "summary": self.summary.value,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class SshPublicKeyInventory:
     """Validated public key scoped to one Cloudfall environment."""
 
@@ -928,6 +955,7 @@ class PlatformInventory:
     services: tuple[ServiceInventory, ...]
     ssh_public_keys: tuple[SshPublicKeyInventory, ...]
     logging_stacks: tuple[LoggingStackInventory, ...]
+    alert_rules: tuple[AlertRuleInventory, ...]
 
     @classmethod
     def from_state(cls, state: ValidatedState) -> PlatformInventory:
@@ -965,6 +993,10 @@ class PlatformInventory:
             _logging_stack_inventory(document)
             for document in state.resources(ResourceKind.LOGGING_STACK)
         )
+        alert_rules = tuple(
+            _alert_rule_inventory(document)
+            for document in state.resources(ResourceKind.ALERT_RULE)
+        )
         return cls(
             servers=servers,
             profiles=profiles,
@@ -974,6 +1006,7 @@ class PlatformInventory:
             services=services,
             ssh_public_keys=ssh_public_keys,
             logging_stacks=logging_stacks,
+            alert_rules=alert_rules,
         )
 
     def profile(self, profile_id: ResourceId) -> HostProfileInventory:
@@ -1035,6 +1068,7 @@ class PlatformInventory:
             "services": [service.as_dict() for service in self.services],
             "sshPublicKeys": [key.as_dict() for key in self.ssh_public_keys],
             "loggingStacks": [stack.as_dict() for stack in self.logging_stacks],
+            "alertRules": [rule.as_dict() for rule in self.alert_rules],
         }
 
 
@@ -1326,6 +1360,18 @@ def _service_inventory(
             ),
         ),
         metrics_enabled=_service_metrics_enabled(spec, document),
+    )
+
+
+def _alert_rule_inventory(document: ResourceDocument) -> AlertRuleInventory:
+    spec = _mapping(document.content, "spec")
+    return AlertRuleInventory(
+        resource_id=document.key.resource_id,
+        environment=ResourceId.from_boundary(spec.get("environment")),
+        expr=PromqlExpression.from_boundary(spec.get("expr")),
+        for_duration=AlertDuration.from_boundary(spec.get("for")),
+        severity=AlertSeverity.from_boundary(spec.get("severity")),
+        summary=AlertSummary.from_boundary(spec.get("summary")),
     )
 
 

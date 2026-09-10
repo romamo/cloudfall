@@ -11,6 +11,7 @@ if TYPE_CHECKING:
 
     from cloudfall.domain import ResourceId
     from cloudfall.inventory import (
+        AlertRuleInventory,
         ComponentInventory,
         HostProfileInventory,
         LoggingStackInventory,
@@ -110,7 +111,7 @@ def _host_variables(inventory: PlatformInventory) -> dict[str, object]:
             ],
             **_host_infrastructure(server),
             **_host_firewall(server, profiles_by_id[server.profile_id]),
-            **_host_logging(server, inventory.logging_stacks),
+            **_host_logging(server, inventory.logging_stacks, inventory.alert_rules),
             "cloudfall_host_profile": profiles_by_id[server.profile_id].as_dict(),
             "cloudfall_projects": [
                 _host_project(project)
@@ -168,6 +169,7 @@ def _host_firewall(
 def _host_logging(
     server: ServerInventory,
     logging_stacks: tuple[LoggingStackInventory, ...],
+    alert_rules: tuple[AlertRuleInventory, ...],
 ) -> dict[str, object]:
     variables: dict[str, object] = {}
     backend = next(
@@ -188,6 +190,13 @@ def _host_logging(
     )
     if backend is not None:
         variables["cloudfall_logging_backend"] = backend.as_dict()
+        variables["cloudfall_alert_rules"] = [
+            rule.as_dict()
+            for rule in sorted(
+                alert_rules, key=lambda rule: rule.resource_id.value
+            )
+            if rule.environment == backend.environment
+        ]
     if collector is not None:
         variables["cloudfall_logging_collector"] = collector.as_dict()
     return variables

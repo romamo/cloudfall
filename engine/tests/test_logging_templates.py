@@ -32,6 +32,12 @@ def _services() -> list[dict[str, object]]:
     return [service.as_dict() for service in inventory.services]
 
 
+def _alert_rules() -> list[dict[str, object]]:
+    inventory = PlatformInventory.from_state(validate_state(EXAMPLES, SCHEMAS))
+    assert len(inventory.alert_rules) == 1
+    return [rule.as_dict() for rule in inventory.alert_rules]
+
+
 def _render(directory: Path, name: str, **context: object) -> str:
     environment = Environment(
         loader=FileSystemLoader(directory),
@@ -122,6 +128,58 @@ def test_collector_template_renders_mtls_and_bounded_labels() -> None:
     assert "request_id" not in rendered
     assert "/etc/alloy/cloudfall.alloy" in override
     assert "--storage.path=/var/lib/alloy/data" in override
+
+
+def test_backend_rules_template_renders_declared_alerts() -> None:
+    rules = yaml.safe_load(
+        _render(
+            BACKEND_TEMPLATES,
+            "prometheus-rules.yaml.j2",
+            cloudfall_alert_rules=_alert_rules(),
+        )
+    )
+
+    assert len(rules["groups"]) == 1
+    group = rules["groups"][0]
+    assert group["name"] == "cloudfall"
+    assert len(group["rules"]) == 1
+    rule = group["rules"][0]
+    assert rule["alert"] == "postgresql_down"
+    assert rule["expr"] == 'pg_up{service="postgresql-main"} == 0'
+    assert rule["for"] == "1m"
+    assert rule["labels"] == {
+        "severity": "critical",
+        "environment": "production",
+        "cloudfall_rule": "postgresql-down",
+    }
+    assert rule["annotations"]["summary"] == (
+        "PostgreSQL postgresql-main is not answering its exporter"
+    )
+
+
+def test_backend_rules_template_renders_empty_groups_without_rules() -> None:
+    rules = yaml.safe_load(
+        _render(
+            BACKEND_TEMPLATES,
+            "prometheus-rules.yaml.j2",
+            cloudfall_alert_rules=[],
+        )
+    )
+
+    assert rules == {"groups": []}
+
+
+def test_backend_prometheus_config_references_the_rules_file() -> None:
+    stack = _logging_stack()
+    prometheus = yaml.safe_load(
+        _render(
+            BACKEND_TEMPLATES,
+            "prometheus.yaml.j2",
+            cloudfall_logging_backend_stack=stack,
+        )
+    )
+
+    assert prometheus["rule_files"] == ["/etc/prometheus/cloudfall-rules.yaml"]
 
 
 def test_collector_template_renders_postgres_exporter_for_declared_metrics() -> None:

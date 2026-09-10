@@ -46,7 +46,7 @@ def test_read_only_tools_return_structured_evidence(tmp_path: Path) -> None:
     audit = toolset.audit()
 
     assert validated["status"] == "ok"
-    assert validated["resources"] == 9
+    assert validated["resources"] == 10
     assert inventory["status"] == "ok"
     assert audit["status"] == "compliant"
 

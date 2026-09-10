@@ -1,0 +1,20 @@
+# Managed by Cloudfall. Local changes will be overwritten.
+{% set cloudfall_rules = cloudfall_alert_rules | default([]) %}
+{% if cloudfall_rules %}
+groups:
+  - name: cloudfall
+    rules:
+{% for rule in cloudfall_rules %}
+      - alert: {{ rule.id | replace('-', '_') }}
+        expr: {{ rule.expr | tojson }}
+        for: {{ rule['for'] }}
+        labels:
+          severity: {{ rule.severity }}
+          environment: {{ rule.environment }}
+          cloudfall_rule: {{ rule.id }}
+        annotations:
+          summary: {{ rule.summary | tojson }}
+{% endfor %}
+{% else %}
+groups: []
+{% endif %}

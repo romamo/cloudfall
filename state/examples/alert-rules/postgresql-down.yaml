@@ -1,0 +1,12 @@
+---
+apiVersion: cloudfall/v1
+kind: AlertRule
+metadata:
+  id: postgresql-down
+  description: Example alert firing when the PostgreSQL exporter loses its database
+spec:
+  environment: production
+  expr: pg_up{service="postgresql-main"} == 0
+  for: 1m
+  severity: critical
+  summary: PostgreSQL postgresql-main is not answering its exporter

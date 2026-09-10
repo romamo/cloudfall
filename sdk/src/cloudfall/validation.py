@@ -36,6 +36,7 @@ _SCHEMA_FILES: Mapping[ResourceKind, str] = {
     ResourceKind.SSH_PUBLIC_KEY: "ssh-public-key.schema.json",
     ResourceKind.LOGGING_STACK: "logging-stack.schema.json",
     ResourceKind.SERVICE: "service.schema.json",
+    ResourceKind.ALERT_RULE: "alert-rule.schema.json",
 }
 _YAML_SUFFIXES = frozenset({".yaml", ".yml"})
 
@@ -1199,6 +1200,33 @@ def _validate_install_root(
         raise StateValidationError(issue)
 
 
+def _validate_alert_rule_references(
+    document: ResourceDocument,
+    spec: Mapping[str, object],
+    index: Mapping[ResourceKey, ResourceDocument],
+) -> None:
+    environment = _resource_id_value(spec, "environment", document.source)
+    stack_environments = set()
+    for key, stack in index.items():
+        if key.kind is not ResourceKind.LOGGING_STACK:
+            continue
+        stack_spec = _required_mapping(stack.content, "spec", stack.source)
+        stack_environments.add(
+            _resource_id_value(stack_spec, "environment", stack.source)
+        )
+    if environment not in stack_environments:
+        issue = ValidationIssue(
+            code="alert_rule_environment_unmonitored",
+            message=(
+                f"no LoggingStack monitors environment {environment}; "
+                "an alert rule without a metrics backend can never fire"
+            ),
+            source=document.source,
+            field_path=("spec", "environment"),
+        )
+        raise StateValidationError(issue)
+
+
 def validate_state(state_directory: Path, schema_directory: Path) -> ValidatedState:
     """Load and validate a directory of Cloudfall YAML resources."""
     catalog = SchemaCatalog(schema_directory)
@@ -1223,4 +1251,5 @@ _REFERENCE_VALIDATORS: Mapping[
     ResourceKind.LOGGING_STACK: _validate_logging_references,
     ResourceKind.SSH_PUBLIC_KEY: _validate_ssh_public_key_references,
     ResourceKind.SERVICE: _validate_service_references,
+    ResourceKind.ALERT_RULE: _validate_alert_rule_references,
 }

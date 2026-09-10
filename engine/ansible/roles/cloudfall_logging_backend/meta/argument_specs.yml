@@ -178,3 +178,29 @@ argument_specs:
                 type: list
                 elements: dict
                 required: true
+      cloudfall_alert_rules:
+        type: list
+        elements: dict
+        default: []
+        options:
+          id:
+            type: str
+            required: true
+          environment:
+            type: str
+            required: true
+          expr:
+            type: str
+            required: true
+          for:
+            type: str
+            required: true
+          severity:
+            type: str
+            choices:
+              - warning
+              - critical
+            required: true
+          summary:
+            type: str
+            required: true

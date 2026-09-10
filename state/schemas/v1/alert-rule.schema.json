@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cloudfall.internal/schemas/v1/alert-rule.schema.json",
+  "title": "Cloudfall alert rule",
+  "x-cloudfall-kind": "AlertRule",
+  "type": "object",
+  "properties": {
+    "apiVersion": {
+      "$ref": "common.schema.json#/$defs/apiVersion"
+    },
+    "kind": {
+      "const": "AlertRule"
+    },
+    "metadata": {
+      "$ref": "common.schema.json#/$defs/metadata"
+    },
+    "spec": {
+      "type": "object",
+      "properties": {
+        "environment": {
+          "$ref": "common.schema.json#/$defs/resourceId"
+        },
+        "expr": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000,
+          "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+        },
+        "for": {
+          "type": "string",
+          "pattern": "^[0-9]{1,5}[smh]$"
+        },
+        "severity": {
+          "enum": [
+            "warning",
+            "critical"
+          ]
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+        }
+      },
+      "required": [
+        "environment",
+        "expr",
+        "for",
+        "severity",
+        "summary"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "apiVersion",
+    "kind",
+    "metadata",
+    "spec"
+  ],
+  "additionalProperties": false
+}

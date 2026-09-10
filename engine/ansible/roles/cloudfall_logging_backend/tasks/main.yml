@@ -205,6 +205,15 @@
     mode: "0640"
   notify: Restart Prometheus
 
+- name: Install declared Prometheus alert rules before package configuration
+  ansible.builtin.template:
+    src: prometheus-rules.yaml.j2
+    dest: /etc/prometheus/cloudfall-rules.yaml
+    owner: root
+    group: prometheus
+    mode: "0640"
+  notify: Restart Prometheus
+
 - name: Install managed Prometheus arguments before package configuration
   ansible.builtin.template:
     src: prometheus-defaults.j2

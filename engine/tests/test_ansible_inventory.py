@@ -44,10 +44,24 @@ def test_inventory_renders_ansible_host_variables() -> None:
     logging_collector = _mapping_entry(h1, "cloudfall_logging_collector")
     ssh_public_keys = h1["cloudfall_ssh_public_keys"]
     origin_domains = h1["cloudfall_origin_domains"]
+    alert_rules = h1["cloudfall_alert_rules"]
     del h1["cloudfall_logging_backend"]
     del h1["cloudfall_logging_collector"]
     del h1["cloudfall_ssh_public_keys"]
     del h1["cloudfall_origin_domains"]
+    del h1["cloudfall_alert_rules"]
+
+    assert isinstance(alert_rules, list)
+    assert len(alert_rules) == 1
+    assert isinstance(alert_rules[0], dict)
+    assert alert_rules[0] == {
+        "id": "postgresql-down",
+        "environment": "production",
+        "expr": 'pg_up{service="postgresql-main"} == 0',
+        "for": "1m",
+        "severity": "critical",
+        "summary": "PostgreSQL postgresql-main is not answering its exporter",
+    }
 
     assert isinstance(origin_domains, list)
     assert len(origin_domains) == 1
