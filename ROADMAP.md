@@ -171,8 +171,64 @@ routine and widen what it can carry, in rough priority order:
   the server model still unexercised live
 - **Backup and restore as first-class operations** — declared backup
   policies with restore-proof commands on the CLI and MCP surface
-- **Fleet observability** — per-service exporters and alerting layered on
-  the existing Loki/Grafana/Alloy stack
 
 Exit: a second real application migrated by someone other than the author,
 using only the public documentation.
+
+## M7 — Full observability: metrics and alerting
+
+The prerequisite for everything after it: an operator acts on signals, and
+without alerting there are no signals. Layered on the existing
+Loki/Grafana/Alloy stack.
+
+- **Per-service metrics** — exporters for each catalog service (PostgreSQL
+  first) declared in config and audited like any other unit, flowing through
+  the same mTLS gateway as host metrics
+- **Alert rules from declared config** — thresholds and conditions as typed
+  resources, rendered into the stack; an alert fires as evidence, not just a
+  notification
+- **Notification channels** — declared delivery (email/webhook to start),
+  with alert delivery itself audited
+
+Exit: an induced service failure on a proving host raises a declared alert
+with evidence within one minute, and `cloudfall audit` reports alert-rule
+compliance alongside everything else.
+
+## M8 — Operator runtime: the always-on agent, propose mode
+
+A persistent agent process that watches the alert stream and drift reports,
+diagnoses, and proposes — the human confirms through the existing MCP
+handshake. No autonomy yet: this milestone is the loop, not the license.
+
+- **Operator daemon** — long-running process subscribed to alerts and
+  scheduled drift checks, maintaining the fleet's observed state
+- **Diagnose-and-propose** — for each incident, an evidence-backed diagnosis
+  and a concrete proposed operation (existing CLI/MCP verbs only), delivered
+  with the receipts that justify it
+- **Every proposal receipted** — proposals, confirmations, executions, and
+  outcomes all land in the same evidence pipeline as manual operations
+
+Exit: an induced failure is detected, diagnosed, and remediated end to end
+with the human contributing only a confirmation — no human diagnosis, no
+shell access.
+
+## M9 — Graduated autonomy
+
+Autonomy is granted per operation class, earned by evidence, never global.
+The order is fixed by the dependency chain: M7 provides the signals, M8 the
+loop, M9 the license.
+
+- **Level 2: autonomous for provenly reversible operations** — failed-deploy
+  rollback, service restart, certificate renewal; executed without asking,
+  receipt delivered after the fact, reversibility backed by the operation
+  class's receipt history
+- **Level 3: autonomy within declared policy** — bounds live in the same
+  typed state as everything else (which operations, which components, quiet
+  hours, rate limits); the operator refuses outside them
+- **Confirm forever** — DNS cutover, data deletion, and database promotion
+  remain behind explicit confirmation regardless of level
+
+Exit: on a proving host, a deliberately broken release is rolled back
+autonomously within declared policy — alert to healthy service with zero
+human involvement — and the receipt trail shows detection, decision, action,
+and verified outcome.
