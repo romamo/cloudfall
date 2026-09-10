@@ -1,0 +1,18 @@
+---
+apiVersion: cloudfall/v1
+kind: OperatorPolicy
+metadata:
+  id: production-operator
+  description: Example autonomy bounds for the production operator
+spec:
+  environment: production
+  autonomy:
+    operations:
+      - kind: converge-services
+        requiredVerifiedRuns: 1
+      - kind: converge-baseline
+        requiredVerifiedRuns: 2
+    maxAutonomousPerHour: 4
+    quietHours:
+      start: "01:00"
+      end: "05:00"

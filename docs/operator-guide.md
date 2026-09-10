@@ -90,6 +90,52 @@ reports success it cannot prove. Gateway TLS flags are only needed when
 approving alert-triggered proposals; drift approvals verify through the
 audit.
 
+## Graduated autonomy
+
+Declaring an `OperatorPolicy` licenses the daemon to execute routine
+proposals without asking — that declaration *is* the consent, and its
+absence means propose-only forever:
+
+```yaml
+apiVersion: cloudfall/v1
+kind: OperatorPolicy
+metadata:
+  id: production-operator
+spec:
+  environment: production
+  autonomy:
+    operations:
+      - kind: converge-services
+        requiredVerifiedRuns: 3
+      - kind: converge-baseline
+        requiredVerifiedRuns: 5
+    maxAutonomousPerHour: 4
+    quietHours:
+      start: "01:00"
+      end: "05:00"
+```
+
+Autonomy is earned, bounded, and revocable:
+
+- **Earned by receipts**: an operation kind executes autonomously only after
+  `requiredVerifiedRuns` verified receipts for that kind exist in the
+  proposal store — human-approved runs build the trust history
+- **Suspended on failure**: if the most recent receipt for a kind failed,
+  autonomy for that kind is withheld until a human-approved run verifies
+  again
+- **Rate-limited and time-bounded**: at most `maxAutonomousPerHour`
+  autonomous executions, and none during declared quiet hours; withheld
+  proposals stay open for normal human approval
+- **Structurally confined**: the policy schema can only grant the
+  convergence operations. DNS cutover, data deletion, and database
+  promotion are not grantable — confirm forever, by construction
+
+Every autonomous execution is receipted with `approval.mode: autonomous`
+and the licensing policy's id, verified exactly like a human-approved run,
+and visible in `operator list`. When a policy is declared, the running
+daemon adds an autonomy pass after each watch pass and reports which
+proposals it executed and which it withheld, with reasons.
+
 ## Through an agent
 
 `cloudfall-mcp` exposes the same surface with the standard confirmation

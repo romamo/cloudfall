@@ -30,7 +30,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from cloudfall.audit import AuditReport
-    from cloudfall.inventory import PlatformInventory
+    from cloudfall.inventory import OperatorPolicyInventory, PlatformInventory
     from cloudfall.lifecycle import EngineContext
     from cloudfall.validation import SchemaCatalog
 
@@ -136,6 +136,21 @@ class DriftTrigger:
 
 
 @dataclass(frozen=True, slots=True)
+class ApprovalRecord:
+    """Who licensed an execution: a human confirm or a declared policy."""
+
+    mode: str
+    policy: ResourceId | None
+
+    def as_dict(self) -> dict[str, object]:
+        """Serialize the approval for the proposal receipt."""
+        result: dict[str, object] = {"mode": self.mode}
+        if self.policy is not None:
+            result["policy"] = self.policy.value
+        return result
+
+
+@dataclass(frozen=True, slots=True)
 class ProposalOutcome:
     """What actually happened after an approval."""
 
@@ -171,6 +186,7 @@ class OperatorProposal:
     operation_server: ResourceId
     operation_service: ResourceId | None
     command: tuple[str, ...]
+    approval: ApprovalRecord | None
     outcome: ProposalOutcome | None
 
     def __post_init__(self) -> None:
@@ -213,6 +229,8 @@ class OperatorProposal:
             },
             "operation": operation,
         }
+        if self.approval is not None:
+            spec["approval"] = self.approval.as_dict()
         if self.outcome is not None:
             spec["outcome"] = self.outcome.as_dict()
         return {
@@ -382,6 +400,7 @@ def propose_for_alert(
         operation_server=alert.server,
         operation_service=alert.service,
         command=("cloudfall-engine", "playbook", "services.yml"),
+        approval=None,
         outcome=None,
     )
 
@@ -422,6 +441,7 @@ def propose_for_drift(
         operation_server=server,
         operation_service=None,
         command=("cloudfall-engine", "playbook", playbook),
+        approval=None,
         outcome=None,
     )
 
@@ -528,6 +548,18 @@ def _proposal_from_document(document: Mapping[str, object]) -> OperatorProposal:
             checks=tuple(cast("list[str]", raw_drift["checks"])),
             fingerprint=fingerprint,
         )
+    raw_approval = spec.get("approval")
+    approval = None
+    if isinstance(raw_approval, dict):
+        raw_policy = raw_approval.get("policy")
+        approval = ApprovalRecord(
+            mode=cast("str", raw_approval["mode"]),
+            policy=(
+                ResourceId.from_boundary(raw_policy)
+                if raw_policy is not None
+                else None
+            ),
+        )
     raw_outcome = spec.get("outcome")
     outcome = None
     if isinstance(raw_outcome, dict):
@@ -556,6 +588,7 @@ def _proposal_from_document(document: Mapping[str, object]) -> OperatorProposal:
             else None
         ),
         command=tuple(cast("list[str]", operation["command"])),
+        approval=approval,
         outcome=outcome,
     )
 
@@ -762,8 +795,7 @@ def approve(
     verifier: Callable[[OperatorProposal], bool],
     options: ApproveOptions | None = None,
 ) -> OperatorProposal:
-    """Execute an approved proposal and verify its trigger resolves."""
-    resolved_options = options if options is not None else ApproveOptions()
+    """Execute a human-approved proposal and verify its trigger resolves."""
     proposal = store.load(proposal_id)
     if proposal.status is not ProposalStatus.PROPOSED:
         message = (
@@ -771,6 +803,25 @@ def approve(
             "only proposed proposals can be approved"
         )
         raise OperatorError(_ERROR_PROPOSAL_NOT_OPEN, message)
+    return _execute_and_verify(
+        store,
+        proposal,
+        executor,
+        verifier,
+        ApprovalRecord(mode="human", policy=None),
+        options,
+    )
+
+
+def _execute_and_verify(  # noqa: PLR0913 - internal execution contract.
+    store: ProposalStore,
+    proposal: OperatorProposal,
+    executor: Callable[[OperatorProposal], None],
+    verifier: Callable[[OperatorProposal], bool],
+    approval: ApprovalRecord,
+    options: ApproveOptions | None = None,
+) -> OperatorProposal:
+    resolved_options = options if options is not None else ApproveOptions()
     executed_at = _utc_now()
     try:
         executor(proposal)
@@ -778,6 +829,7 @@ def approve(
         failed = replace(
             proposal,
             status=ProposalStatus.FAILED,
+            approval=approval,
             outcome=ProposalOutcome(
                 executed_at=executed_at,
                 verified_at=None,
@@ -790,6 +842,7 @@ def approve(
     executed = replace(
         proposal,
         status=ProposalStatus.EXECUTED,
+        approval=approval,
         outcome=ProposalOutcome(
             executed_at=executed_at,
             verified_at=None,
@@ -835,6 +888,166 @@ def approve(
             return failed
         resolved_options.sleep(resolved_options.poll_interval_seconds)
         waited += resolved_options.poll_interval_seconds
+
+
+@dataclass(frozen=True, slots=True)
+class AutonomyDecision:
+    """Whether a declared policy licenses one execution, and why."""
+
+    granted: bool
+    reason: str
+
+    def as_dict(self) -> dict[str, object]:
+        """Serialize for structured run output."""
+        return {"granted": self.granted, "reason": self.reason}
+
+
+def autonomy_decision(
+    proposal: OperatorProposal,
+    policy: OperatorPolicyInventory,
+    store: ProposalStore,
+    now: datetime,
+) -> AutonomyDecision:
+    """Decide whether the declared policy licenses this execution now."""
+    grant = policy.grant_for(proposal.operation_kind.value)
+    if grant is None:
+        reason = (
+            f"policy {policy.resource_id.value} does not grant autonomy "
+            f"for {proposal.operation_kind.value}"
+        )
+        return AutonomyDecision(granted=False, reason=reason)
+    history = [
+        receipt
+        for receipt in store.list()
+        if receipt.operation_kind is proposal.operation_kind
+        and receipt.resource_id != proposal.resource_id
+        and receipt.status
+        in (ProposalStatus.VERIFIED, ProposalStatus.FAILED)
+    ]
+    verified = sum(
+        1
+        for receipt in history
+        if receipt.status is ProposalStatus.VERIFIED
+    )
+    if verified < grant.required_verified_runs.value:
+        reason = (
+            f"insufficient verified history for "
+            f"{proposal.operation_kind.value}: {verified} of "
+            f"{grant.required_verified_runs.value} required"
+        )
+        return AutonomyDecision(granted=False, reason=reason)
+    if history and history[-1].status is ProposalStatus.FAILED:
+        reason = (
+            f"most recent {proposal.operation_kind.value} receipt failed; "
+            "autonomy suspended until a human-approved run verifies"
+        )
+        return AutonomyDecision(granted=False, reason=reason)
+    if policy.quiet_hours is not None and policy.quiet_hours.contains(
+        now.hour * 60 + now.minute
+    ):
+        reason = (
+            "quiet hours "
+            f"{policy.quiet_hours.start.value}-"
+            f"{policy.quiet_hours.end.value} are in effect"
+        )
+        return AutonomyDecision(granted=False, reason=reason)
+    hour_ago = now.timestamp() - 3600
+    recent_autonomous = sum(
+        1
+        for receipt in store.list()
+        if receipt.approval is not None
+        and receipt.approval.mode == "autonomous"
+        and receipt.outcome is not None
+        and datetime.fromisoformat(receipt.outcome.executed_at).timestamp()
+        > hour_ago
+    )
+    if recent_autonomous >= policy.max_autonomous_per_hour.value:
+        reason = (
+            "rate limit reached: "
+            f"{recent_autonomous} autonomous executions in the last hour "
+            f"(policy allows {policy.max_autonomous_per_hour.value})"
+        )
+        return AutonomyDecision(granted=False, reason=reason)
+    reason = (
+        f"policy {policy.resource_id.value} grants "
+        f"{proposal.operation_kind.value}: {verified} verified runs, "
+        "rate limit and quiet hours clear"
+    )
+    return AutonomyDecision(granted=True, reason=reason)
+
+
+@dataclass(frozen=True, slots=True)
+class AutonomyReport:
+    """Structured result of one autonomous execution pass."""
+
+    executed: tuple[tuple[str, str], ...]
+    withheld: tuple[tuple[str, str], ...]
+
+    def as_dict(self) -> dict[str, object]:
+        """Serialize for structured run output."""
+        return {
+            "executed": [
+                {"proposal": proposal_id, "status": status}
+                for proposal_id, status in self.executed
+            ],
+            "withheld": [
+                {"proposal": proposal_id, "reason": reason}
+                for proposal_id, reason in self.withheld
+            ],
+        }
+
+
+def autonomous_pass(  # noqa: PLR0913 - boundary mirrors approve().
+    store: ProposalStore,
+    inventory: PlatformInventory,
+    executor: Callable[[OperatorProposal], None],
+    verifier_for: Callable[
+        [OperatorProposal], Callable[[OperatorProposal], bool]
+    ],
+    options: ApproveOptions | None = None,
+    now: datetime | None = None,
+) -> AutonomyReport:
+    """Execute open proposals the declared policy licenses, receipted."""
+    moment = now if now is not None else datetime.now(UTC)
+    policies_by_environment = {
+        policy.environment: policy for policy in inventory.operator_policies
+    }
+    environments_by_server = {
+        server.resource_id: server.environment for server in inventory.servers
+    }
+    executed: list[tuple[str, str]] = []
+    withheld: list[tuple[str, str]] = []
+    for proposal in store.list():
+        if proposal.status is not ProposalStatus.PROPOSED:
+            continue
+        environment = environments_by_server.get(proposal.operation_server)
+        policy = (
+            policies_by_environment.get(environment)
+            if environment is not None
+            else None
+        )
+        if policy is None:
+            withheld.append(
+                (
+                    proposal.resource_id.value,
+                    "no operator policy declared for this environment",
+                )
+            )
+            continue
+        decision = autonomy_decision(proposal, policy, store, moment)
+        if not decision.granted:
+            withheld.append((proposal.resource_id.value, decision.reason))
+            continue
+        result = _execute_and_verify(
+            store,
+            proposal,
+            executor,
+            verifier_for(proposal),
+            ApprovalRecord(mode="autonomous", policy=policy.resource_id),
+            options,
+        )
+        executed.append((result.resource_id.value, result.status.value))
+    return AutonomyReport(executed=tuple(executed), withheld=tuple(withheld))
 
 
 def gateway_feed(

@@ -14,6 +14,7 @@ from cloudfall.domain import (
     ConfigCapture,
     ConnectionAddress,
     DatacenterCode,
+    DayTime,
     DeploymentApproval,
     DnsMode,
     EmailAddress,
@@ -698,6 +699,77 @@ class AlertRuleInventory:
 
 
 @dataclass(frozen=True, slots=True)
+class AutonomyGrant:
+    """Autonomy earned per operation kind after enough verified runs."""
+
+    operation_kind: str
+    required_verified_runs: PositiveCount
+
+    def as_dict(self) -> dict[str, object]:
+        """Serialize the grant for policy consumers."""
+        return {
+            "kind": self.operation_kind,
+            "requiredVerifiedRuns": self.required_verified_runs.value,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class QuietHours:
+    """Wall-clock window during which autonomy is suspended."""
+
+    start: DayTime
+    end: DayTime
+
+    def contains(self, minutes_since_midnight: int) -> bool:
+        """Return whether the window covers the given wall-clock minute."""
+        start = self.start.minutes
+        end = self.end.minutes
+        if start <= end:
+            return start <= minutes_since_midnight < end
+        return minutes_since_midnight >= start or minutes_since_midnight < end
+
+    def as_dict(self) -> dict[str, object]:
+        """Serialize the window for policy consumers."""
+        return {"start": self.start.value, "end": self.end.value}
+
+
+@dataclass(frozen=True, slots=True)
+class OperatorPolicyInventory:
+    """Declared autonomy bounds for one environment's operator."""
+
+    resource_id: ResourceId
+    environment: ResourceId
+    grants: tuple[AutonomyGrant, ...]
+    max_autonomous_per_hour: PositiveCount
+    quiet_hours: QuietHours | None
+
+    def grant_for(self, operation_kind: str) -> AutonomyGrant | None:
+        """Return the declared grant for one operation kind, if any."""
+        return next(
+            (
+                grant
+                for grant in self.grants
+                if grant.operation_kind == operation_kind
+            ),
+            None,
+        )
+
+    def as_dict(self) -> dict[str, object]:
+        """Serialize the policy without secret material."""
+        autonomy: dict[str, object] = {
+            "operations": [grant.as_dict() for grant in self.grants],
+            "maxAutonomousPerHour": self.max_autonomous_per_hour.value,
+        }
+        if self.quiet_hours is not None:
+            autonomy["quietHours"] = self.quiet_hours.as_dict()
+        return {
+            "id": self.resource_id.value,
+            "environment": self.environment.value,
+            "autonomy": autonomy,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class SshPublicKeyInventory:
     """Validated public key scoped to one Cloudfall environment."""
 
@@ -1047,6 +1119,7 @@ class PlatformInventory:
     ssh_public_keys: tuple[SshPublicKeyInventory, ...]
     logging_stacks: tuple[LoggingStackInventory, ...]
     alert_rules: tuple[AlertRuleInventory, ...]
+    operator_policies: tuple[OperatorPolicyInventory, ...]
 
     @classmethod
     def from_state(cls, state: ValidatedState) -> PlatformInventory:
@@ -1088,6 +1161,10 @@ class PlatformInventory:
             _alert_rule_inventory(document)
             for document in state.resources(ResourceKind.ALERT_RULE)
         )
+        operator_policies = tuple(
+            _operator_policy_inventory(document)
+            for document in state.resources(ResourceKind.OPERATOR_POLICY)
+        )
         return cls(
             servers=servers,
             profiles=profiles,
@@ -1098,6 +1175,7 @@ class PlatformInventory:
             ssh_public_keys=ssh_public_keys,
             logging_stacks=logging_stacks,
             alert_rules=alert_rules,
+            operator_policies=operator_policies,
         )
 
     def profile(self, profile_id: ResourceId) -> HostProfileInventory:
@@ -1160,6 +1238,9 @@ class PlatformInventory:
             "sshPublicKeys": [key.as_dict() for key in self.ssh_public_keys],
             "loggingStacks": [stack.as_dict() for stack in self.logging_stacks],
             "alertRules": [rule.as_dict() for rule in self.alert_rules],
+            "operatorPolicies": [
+                policy.as_dict() for policy in self.operator_policies
+            ],
         }
 
 
@@ -1463,6 +1544,40 @@ def _alert_rule_inventory(document: ResourceDocument) -> AlertRuleInventory:
         for_duration=AlertDuration.from_boundary(spec.get("for")),
         severity=AlertSeverity.from_boundary(spec.get("severity")),
         summary=AlertSummary.from_boundary(spec.get("summary")),
+    )
+
+
+def _operator_policy_inventory(
+    document: ResourceDocument,
+) -> OperatorPolicyInventory:
+    spec = _mapping(document.content, "spec")
+    autonomy = _mapping(spec, "autonomy")
+    raw_quiet = autonomy.get("quietHours")
+    quiet_hours = None
+    if raw_quiet is not None:
+        quiet = _mapping(autonomy, "quietHours")
+        quiet_hours = QuietHours(
+            start=DayTime.from_boundary(quiet.get("start")),
+            end=DayTime.from_boundary(quiet.get("end")),
+        )
+    return OperatorPolicyInventory(
+        resource_id=document.key.resource_id,
+        environment=ResourceId.from_boundary(spec.get("environment")),
+        grants=tuple(
+            AutonomyGrant(
+                operation_kind=_string(item, "kind"),
+                required_verified_runs=PositiveCount.from_boundary(
+                    item.get("requiredVerifiedRuns")
+                ),
+            )
+            for item in _mapping_list(
+                autonomy.get("operations"), "autonomy operations"
+            )
+        ),
+        max_autonomous_per_hour=PositiveCount.from_boundary(
+            autonomy.get("maxAutonomousPerHour")
+        ),
+        quiet_hours=quiet_hours,
     )
 
 

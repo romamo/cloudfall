@@ -75,6 +75,7 @@ class ResourceKind(StrEnum):
     LOGGING_STACK = "LoggingStack"
     SERVICE = "Service"
     ALERT_RULE = "AlertRule"
+    OPERATOR_POLICY = "OperatorPolicy"
 
     @classmethod
     def from_boundary(cls, value: object) -> ResourceKind:
@@ -792,6 +793,30 @@ class AlertSummary:
     def from_boundary(cls, value: object) -> AlertSummary:
         """Coerce a boundary value into an alert summary."""
         return cls(_required_string(value, "alert summary"))
+
+
+@dataclass(frozen=True, slots=True)
+class DayTime:
+    """Validated HH:MM wall-clock time for policy windows."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        """Reject values outside the strict 24-hour HH:MM form."""
+        if not re.fullmatch(r"([01][0-9]|2[0-3]):[0-5][0-9]", self.value):
+            message = f"invalid day time: {self.value!r}"
+            raise ValueError(message)
+
+    @property
+    def minutes(self) -> int:
+        """Return the minutes since midnight this time represents."""
+        hours, minutes = self.value.split(":")
+        return int(hours) * 60 + int(minutes)
+
+    @classmethod
+    def from_boundary(cls, value: object) -> DayTime:
+        """Coerce a boundary value into a wall-clock time."""
+        return cls(_required_string(value, "day time"))
 
 
 @dataclass(frozen=True, slots=True)

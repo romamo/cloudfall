@@ -401,3 +401,218 @@ def test_cli_operator_list_emits_structured_output(
     captured = capsys.readouterr()
     assert exit_code == 0
     assert json.loads(captured.out) == {"status": "ok", "proposals": []}
+
+
+def _policied_inventory() -> PlatformInventory:
+    inventory = _inventory()
+    assert len(inventory.operator_policies) == 1
+    return inventory
+
+
+def _seed_verified_drift(
+    store: ProposalStore, check: str, kind: str = "converge-baseline"
+) -> None:
+    from cloudfall.operator import (  # noqa: PLC0415 - test-local.
+        OperationKind,
+        propose_for_drift,
+    )
+
+    proposal = propose_for_drift(
+        ResourceId.from_boundary("h1"),
+        (check,),
+        OperationKind(kind),
+        "2026-09-10T10:00:00+00:00",
+    )
+    store.save(proposal)
+    approve(
+        store,
+        proposal.resource_id,
+        lambda _proposal: None,
+        lambda _proposal: True,
+        _FAST_APPROVE,
+    )
+
+
+def test_autonomy_withheld_without_verified_history(tmp_path: Path) -> None:
+    from datetime import UTC, datetime  # noqa: PLC0415 - test-local.
+
+    from cloudfall.operator import autonomous_pass  # noqa: PLC0415
+
+    store = _store(tmp_path)
+    drift_pass(
+        lambda: _audit_report(("packages.required[curl]", AuditStatus.DRIFT)),
+        store,
+    )
+
+    report = autonomous_pass(
+        store,
+        _policied_inventory(),
+        lambda _proposal: None,
+        lambda _proposal: lambda _p: True,
+        _FAST_APPROVE,
+        now=datetime(2026, 9, 10, 12, 0, tzinfo=UTC),
+    )
+
+    assert report.executed == ()
+    assert len(report.withheld) == 1
+    assert "insufficient verified history" in report.withheld[0][1]
+
+
+def test_autonomy_executes_once_history_is_earned(tmp_path: Path) -> None:
+    from datetime import UTC, datetime  # noqa: PLC0415 - test-local.
+
+    from cloudfall.operator import autonomous_pass  # noqa: PLC0415
+
+    store = _store(tmp_path)
+    _seed_verified_drift(store, "packages.required[git]")
+    _seed_verified_drift(store, "packages.required[rsync]")
+    drift_pass(
+        lambda: _audit_report(("packages.required[curl]", AuditStatus.DRIFT)),
+        store,
+    )
+    executed: list[str] = []
+
+    report = autonomous_pass(
+        store,
+        _policied_inventory(),
+        lambda proposal: executed.append(proposal.operation_kind.value),
+        lambda _proposal: lambda _p: True,
+        _FAST_APPROVE,
+        now=datetime(2026, 9, 10, 12, 0, tzinfo=UTC),
+    )
+
+    assert executed == ["converge-baseline"]
+    assert len(report.executed) == 1
+    proposal_id, status = report.executed[0]
+    assert status == "verified"
+    receipt = store.load(ResourceId.from_boundary(proposal_id))
+    assert receipt.approval is not None
+    assert receipt.approval.mode == "autonomous"
+    assert receipt.approval.policy is not None
+    assert receipt.approval.policy.value == "production-operator"
+
+
+def test_autonomy_respects_quiet_hours(tmp_path: Path) -> None:
+    from datetime import UTC, datetime  # noqa: PLC0415 - test-local.
+
+    from cloudfall.operator import autonomous_pass  # noqa: PLC0415
+
+    store = _store(tmp_path)
+    _seed_verified_drift(store, "packages.required[git]")
+    _seed_verified_drift(store, "packages.required[rsync]")
+    drift_pass(
+        lambda: _audit_report(("packages.required[curl]", AuditStatus.DRIFT)),
+        store,
+    )
+
+    report = autonomous_pass(
+        store,
+        _policied_inventory(),
+        lambda _proposal: None,
+        lambda _proposal: lambda _p: True,
+        _FAST_APPROVE,
+        now=datetime(2026, 9, 10, 2, 30, tzinfo=UTC),
+    )
+
+    assert report.executed == ()
+    assert "quiet hours" in report.withheld[0][1]
+
+
+def test_autonomy_suspends_after_a_failed_receipt(tmp_path: Path) -> None:
+    from datetime import UTC, datetime  # noqa: PLC0415 - test-local.
+
+    from cloudfall.operator import (  # noqa: PLC0415 - test-local.
+        OperationKind,
+        autonomous_pass,
+        propose_for_drift,
+    )
+
+    store = _store(tmp_path)
+    _seed_verified_drift(store, "packages.required[git]")
+    _seed_verified_drift(store, "packages.required[rsync]")
+    failing = propose_for_drift(
+        ResourceId.from_boundary("h1"),
+        ("packages.required[acl]",),
+        OperationKind.CONVERGE_BASELINE,
+        "2026-09-10T11:00:00+00:00",
+    )
+    store.save(failing)
+    approve(
+        store,
+        failing.resource_id,
+        lambda _proposal: None,
+        lambda _proposal: False,
+        _FAST_APPROVE,
+    )
+    drift_pass(
+        lambda: _audit_report(("packages.required[curl]", AuditStatus.DRIFT)),
+        store,
+    )
+
+    report = autonomous_pass(
+        store,
+        _policied_inventory(),
+        lambda _proposal: None,
+        lambda _proposal: lambda _p: True,
+        _FAST_APPROVE,
+        now=datetime(2026, 9, 10, 12, 0, tzinfo=UTC),
+    )
+
+    assert report.executed == ()
+    assert "receipt failed" in report.withheld[0][1]
+
+
+def test_autonomy_enforces_the_rate_limit(tmp_path: Path) -> None:
+    from dataclasses import replace as dc_replace  # noqa: PLC0415
+    from datetime import UTC, datetime  # noqa: PLC0415 - test-local.
+
+    from cloudfall.domain import PositiveCount  # noqa: PLC0415
+    from cloudfall.inventory import (  # noqa: PLC0415 - test-local.
+        AutonomyGrant,
+    )
+    from cloudfall.operator import autonomous_pass  # noqa: PLC0415
+
+    inventory = _policied_inventory()
+    policy = dc_replace(
+        inventory.operator_policies[0],
+        grants=(
+            AutonomyGrant(
+                operation_kind="converge-baseline",
+                required_verified_runs=PositiveCount.from_boundary(1),
+            ),
+        ),
+        max_autonomous_per_hour=PositiveCount.from_boundary(1),
+        quiet_hours=None,
+    )
+    inventory = dc_replace(inventory, operator_policies=(policy,))
+    store = _store(tmp_path)
+    _seed_verified_drift(store, "packages.required[git]")
+    drift_pass(
+        lambda: _audit_report(("packages.required[curl]", AuditStatus.DRIFT)),
+        store,
+    )
+
+    first = autonomous_pass(
+        store,
+        inventory,
+        lambda _proposal: None,
+        lambda _proposal: lambda _p: True,
+        _FAST_APPROVE,
+        now=datetime.now(UTC),
+    )
+    drift_pass(
+        lambda: _audit_report(("packages.required[unzip]", AuditStatus.DRIFT)),
+        store,
+    )
+    second = autonomous_pass(
+        store,
+        inventory,
+        lambda _proposal: None,
+        lambda _proposal: lambda _p: True,
+        _FAST_APPROVE,
+        now=datetime.now(UTC),
+    )
+
+    assert len(first.executed) == 1
+    assert second.executed == ()
+    assert "rate limit reached" in second.withheld[0][1]

@@ -181,6 +181,24 @@
           ],
           "additionalProperties": false
         },
+        "approval": {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "enum": [
+                "human",
+                "autonomous"
+              ]
+            },
+            "policy": {
+              "$ref": "common.schema.json#/$defs/resourceId"
+            }
+          },
+          "required": [
+            "mode"
+          ],
+          "additionalProperties": false
+        },
         "outcome": {
           "type": "object",
           "properties": {

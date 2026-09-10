@@ -148,6 +148,22 @@ def test_inventory_serialization_excludes_secret_references() -> None:
         "collection": {"intervalSeconds": 60},
     }
     assert "prometheusPackageVersion" not in logging_stacks[0]["software"]
+    operator_policies = payload["operatorPolicies"]
+    assert isinstance(operator_policies, list)
+    assert operator_policies == [
+        {
+            "id": "production-operator",
+            "environment": "production",
+            "autonomy": {
+                "operations": [
+                    {"kind": "converge-services", "requiredVerifiedRuns": 1},
+                    {"kind": "converge-baseline", "requiredVerifiedRuns": 2},
+                ],
+                "maxAutonomousPerHour": 4,
+                "quietHours": {"start": "01:00", "end": "05:00"},
+            },
+        }
+    ]
     assert logging_stacks[0]["alerting"] == {
         "alertmanager": {"listenAddress": "127.0.0.1", "port": 9093},
         "receivers": [

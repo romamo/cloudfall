@@ -18,9 +18,10 @@ SCHEMAS = ROOT / "state" / "schemas" / "v1"
 def test_example_state_validates_and_builds_typed_index() -> None:
     state = validate_state(ROOT / "state" / "examples", SCHEMAS)
 
-    assert state.resource_count == 10
+    assert state.resource_count == 11
     assert state.counts_by_kind() == {
         "AlertRule": 1,
+        "OperatorPolicy": 1,
         "Component": 1,
         "Domain": 1,
         "HostProfile": 1,
@@ -268,9 +269,10 @@ def test_cli_emits_structured_success(
     assert exit_code == 0
     assert json.loads(captured.out) == {
         "status": "ok",
-        "resources": 10,
+        "resources": 11,
         "byKind": {
             "AlertRule": 1,
+            "OperatorPolicy": 1,
             "Component": 1,
             "Domain": 1,
             "HostProfile": 1,

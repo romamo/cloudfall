@@ -37,6 +37,7 @@ _SCHEMA_FILES: Mapping[ResourceKind, str] = {
     ResourceKind.LOGGING_STACK: "logging-stack.schema.json",
     ResourceKind.SERVICE: "service.schema.json",
     ResourceKind.ALERT_RULE: "alert-rule.schema.json",
+    ResourceKind.OPERATOR_POLICY: "operator-policy.schema.json",
 }
 _YAML_SUFFIXES = frozenset({".yaml", ".yml"})
 
@@ -1227,6 +1228,59 @@ def _validate_alert_rule_references(
         raise StateValidationError(issue)
 
 
+def _validate_operator_policy_references(
+    document: ResourceDocument,
+    spec: Mapping[str, object],
+    index: Mapping[ResourceKey, ResourceDocument],
+) -> None:
+    environment = _resource_id_value(spec, "environment", document.source)
+    stack_environments = set()
+    for key, stack in index.items():
+        if key.kind is not ResourceKind.LOGGING_STACK:
+            continue
+        stack_spec = _required_mapping(stack.content, "spec", stack.source)
+        stack_environments.add(
+            _resource_id_value(stack_spec, "environment", stack.source)
+        )
+    if environment not in stack_environments:
+        issue = ValidationIssue(
+            code="operator_policy_environment_unmonitored",
+            message=(
+                f"no LoggingStack monitors environment {environment}; "
+                "autonomy without alert evidence is not grantable"
+            ),
+            source=document.source,
+            field_path=("spec", "environment"),
+        )
+        raise StateValidationError(issue)
+    duplicate = next(
+        (
+            other
+            for key, other in index.items()
+            if key.kind is ResourceKind.OPERATOR_POLICY
+            and other is not document
+            and _resource_id_value(
+                _required_mapping(other.content, "spec", other.source),
+                "environment",
+                other.source,
+            )
+            == environment
+        ),
+        None,
+    )
+    if duplicate is not None:
+        issue = ValidationIssue(
+            code="operator_policy_environment_duplicate",
+            message=(
+                f"environment {environment} already has an operator policy "
+                f"at {duplicate.source.display()}"
+            ),
+            source=document.source,
+            field_path=("spec", "environment"),
+        )
+        raise StateValidationError(issue)
+
+
 def validate_state(state_directory: Path, schema_directory: Path) -> ValidatedState:
     """Load and validate a directory of Cloudfall YAML resources."""
     catalog = SchemaCatalog(schema_directory)
@@ -1252,4 +1306,5 @@ _REFERENCE_VALIDATORS: Mapping[
     ResourceKind.SSH_PUBLIC_KEY: _validate_ssh_public_key_references,
     ResourceKind.SERVICE: _validate_service_references,
     ResourceKind.ALERT_RULE: _validate_alert_rule_references,
+    ResourceKind.OPERATOR_POLICY: _validate_operator_policy_references,
 }

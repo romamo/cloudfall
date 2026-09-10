@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
     from cloudfall.operations import FleetOperations
-    from cloudfall.operator import AlertFeed
+    from cloudfall.operator import AlertFeed, OperatorProposal
     from cloudfall.validation import ValidatedState
 
 from cloudfall.agent_tools import AgentConfig
@@ -52,6 +52,7 @@ from cloudfall.operator import (
     ProposalStore,
     TriggerKind,
     alert_resolution_verifier,
+    autonomous_pass,
     drift_pass,
     drift_resolution_verifier,
     engine_auditor,
@@ -841,6 +842,17 @@ def _run_operator_run(
                 inventory,
                 Path(arguments.observed),
             )
+        context = _engine_context(arguments, schema_directory)
+
+        def _verifier_for(
+            proposal: OperatorProposal,
+        ) -> Callable[[OperatorProposal], bool]:
+            if proposal.trigger_kind is TriggerKind.ALERT:
+                return alert_resolution_verifier(feed)
+            return drift_resolution_verifier(
+                engine_auditor(context, inventory, Path(arguments.observed))
+            )
+
         drift_due = 0.0
         while True:
             report = operator_run_once(feed, inventory, store)
@@ -857,6 +869,20 @@ def _run_operator_run(
                     }
                 )
                 drift_due = time.monotonic() + arguments.drift_interval
+            if inventory.operator_policies:
+                autonomy_report = autonomous_pass(
+                    store,
+                    inventory,
+                    engine_executor(context),
+                    _verifier_for,
+                )
+                _write_json(
+                    {
+                        "status": "ok",
+                        "pass": "autonomy",
+                        **autonomy_report.as_dict(),
+                    }
+                )
             if arguments.interval is None:
                 return 0
             time.sleep(arguments.interval)
