@@ -1,0 +1,2 @@
+# Managed by Cloudfall. Local changes will be overwritten.
+ARGS="--config.file=/etc/prometheus/cloudfall-alertmanager.yaml --web.listen-address={{ cloudfall_logging_backend_stack.alerting.alertmanager.listenAddress }}:{{ cloudfall_logging_backend_stack.alerting.alertmanager.port }} --cluster.listen-address="

@@ -223,6 +223,69 @@
     mode: "0644"
   notify: Restart Prometheus
 
+- name: Inspect pre-provisioned SMTP credential files
+  ansible.builtin.stat:
+    path: "{{ item.email.authPasswordFile }}"
+    follow: true
+  loop: >-
+    {{
+      cloudfall_logging_backend_stack.alerting.receivers
+      | selectattr('email', 'defined')
+      | selectattr('email.authPasswordFile', 'defined')
+      | list
+      if 'alerting' in cloudfall_logging_backend_stack
+      else []
+    }}
+  loop_control:
+    label: "{{ item.id }}"
+  register: cloudfall_logging_backend_smtp_files
+
+- name: Require SMTP credential files before mutation
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+      - item.stat.isreg
+    fail_msg: "Required SMTP credential file is missing: {{ item.item.id }}"
+  loop: "{{ cloudfall_logging_backend_smtp_files.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.id }}"
+
+- name: Install declared Alertmanager configuration before package configuration
+  ansible.builtin.template:
+    src: alertmanager.yaml.j2
+    dest: /etc/prometheus/cloudfall-alertmanager.yaml
+    owner: root
+    group: prometheus
+    mode: "0640"
+  when: "'alerting' in cloudfall_logging_backend_stack"
+  notify: Restart Alertmanager
+
+- name: Install declared Alertmanager arguments before package configuration
+  ansible.builtin.template:
+    src: alertmanager-defaults.j2
+    dest: /etc/default/prometheus-alertmanager
+    owner: root
+    group: root
+    mode: "0644"
+  when: "'alerting' in cloudfall_logging_backend_stack"
+  notify: Restart Alertmanager
+
+- name: Install the pinned Alertmanager package
+  ansible.builtin.apt:
+    name: >-
+      {{
+        'prometheus-alertmanager=' ~
+        cloudfall_logging_backend_stack.alerting.alertmanager.packageVersion
+        if 'packageVersion'
+        in cloudfall_logging_backend_stack.alerting.alertmanager
+        else 'prometheus-alertmanager'
+      }}
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+    policy_rc_d: 101
+  when: "'alerting' in cloudfall_logging_backend_stack"
+
 - name: Install pinned logging backend packages
   ansible.builtin.apt:
     name:
@@ -364,11 +427,13 @@
     enabled: true
     state: started
     daemon_reload: true
-  loop:
-    - loki.service
-    - prometheus.service
-    - nginx.service
-    - grafana-server.service
+  loop: >-
+    {{
+      ['loki.service', 'prometheus.service', 'nginx.service',
+       'grafana-server.service']
+      + (['prometheus-alertmanager.service']
+         if 'alerting' in cloudfall_logging_backend_stack else [])
+    }}
 
 - name: Wait for Loki readiness
   ansible.builtin.uri:
@@ -391,6 +456,24 @@
   delay: 5
   until: cloudfall_logging_backend_prometheus_readiness.status == 200
   when: not ansible_check_mode
+
+- name: Wait for Alertmanager readiness
+  ansible.builtin.uri:
+    url: >-
+      http://{{
+        cloudfall_logging_backend_stack.alerting.alertmanager.listenAddress
+      }}:{{
+        cloudfall_logging_backend_stack.alerting.alertmanager.port
+      }}/-/ready
+    status_code: 200
+    return_content: false
+  register: cloudfall_logging_backend_alertmanager_readiness
+  retries: 12
+  delay: 5
+  until: cloudfall_logging_backend_alertmanager_readiness.status == 200
+  when:
+    - not ansible_check_mode
+    - "'alerting' in cloudfall_logging_backend_stack"
 
 - name: Wait for Grafana readiness
   ansible.builtin.uri:

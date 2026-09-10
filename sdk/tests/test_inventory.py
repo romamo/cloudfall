@@ -148,6 +148,25 @@ def test_inventory_serialization_excludes_secret_references() -> None:
         "collection": {"intervalSeconds": 60},
     }
     assert "prometheusPackageVersion" not in logging_stacks[0]["software"]
+    assert logging_stacks[0]["alerting"] == {
+        "alertmanager": {"listenAddress": "127.0.0.1", "port": 9093},
+        "receivers": [
+            {
+                "id": "operations-webhook",
+                "webhook": {"url": "https://hooks.example.internal/cloudfall"},
+            },
+            {
+                "id": "operations-email",
+                "email": {
+                    "smarthost": "smtp.example.internal:587",
+                    "from": "alerts@example.internal",
+                    "to": "oncall@example.internal",
+                    "authUsername": "alerts@example.internal",
+                    "authPasswordFile": "/etc/cloudfall/logging/smtp-password",
+                },
+            },
+        ],
+    }
     assert profiles[0]["id"] == "debian-application"
     serialized = json.dumps(payload).lower()
     assert "private key" not in serialized

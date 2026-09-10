@@ -76,6 +76,8 @@ argument_specs:
           grafana:
             type: dict
             required: true
+          alerting:
+            type: dict
           collectors:
             type: dict
             required: true

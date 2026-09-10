@@ -4,6 +4,14 @@ global:
 
 rule_files:
   - /etc/prometheus/cloudfall-rules.yaml
+{% if cloudfall_logging_backend_stack.alerting is defined %}
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - "{{ cloudfall_logging_backend_stack.alerting.alertmanager.listenAddress }}:{{ cloudfall_logging_backend_stack.alerting.alertmanager.port }}"
+{% endif %}
 
 scrape_configs:
   - job_name: prometheus

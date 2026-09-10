@@ -1,0 +1,33 @@
+# Managed by Cloudfall. Local changes will be overwritten.
+{% set alerting = cloudfall_logging_backend_stack.alerting %}
+route:
+  receiver: cloudfall
+  group_by:
+    - alertname
+    - environment
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+receivers:
+  - name: cloudfall
+{% set webhooks = alerting.receivers | selectattr('webhook', 'defined') | list %}
+{% set emails = alerting.receivers | selectattr('email', 'defined') | list %}
+{% if webhooks %}
+    webhook_configs:
+{% for receiver in webhooks %}
+      - url: {{ receiver.webhook.url | tojson }}
+{% endfor %}
+{% endif %}
+{% if emails %}
+    email_configs:
+{% for receiver in emails %}
+      - to: {{ receiver.email.to | tojson }}
+        from: {{ receiver.email['from'] | tojson }}
+        smarthost: {{ receiver.email.smarthost | tojson }}
+{% if receiver.email.authUsername is defined %}
+        auth_username: {{ receiver.email.authUsername | tojson }}
+        auth_password_file: {{ receiver.email.authPasswordFile | tojson }}
+{% endif %}
+{% endfor %}
+{% endif %}

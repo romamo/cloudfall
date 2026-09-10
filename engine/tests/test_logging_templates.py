@@ -182,6 +182,68 @@ def test_backend_prometheus_config_references_the_rules_file() -> None:
     assert prometheus["rule_files"] == ["/etc/prometheus/cloudfall-rules.yaml"]
 
 
+def test_backend_alertmanager_template_renders_declared_receivers() -> None:
+    stack = _logging_stack()
+    context = {"cloudfall_logging_backend_stack": stack}
+
+    alertmanager = yaml.safe_load(
+        _render(BACKEND_TEMPLATES, "alertmanager.yaml.j2", **context)
+    )
+    defaults = _render(BACKEND_TEMPLATES, "alertmanager-defaults.j2", **context)
+
+    assert alertmanager["route"]["receiver"] == "cloudfall"
+    assert alertmanager["route"]["group_by"] == ["alertname", "environment"]
+    assert len(alertmanager["receivers"]) == 1
+    receiver = alertmanager["receivers"][0]
+    assert receiver["name"] == "cloudfall"
+    assert receiver["webhook_configs"] == [
+        {"url": "https://hooks.example.internal/cloudfall"}
+    ]
+    assert receiver["email_configs"] == [
+        {
+            "to": "oncall@example.internal",
+            "from": "alerts@example.internal",
+            "smarthost": "smtp.example.internal:587",
+            "auth_username": "alerts@example.internal",
+            "auth_password_file": "/etc/cloudfall/logging/smtp-password",
+        }
+    ]
+    assert "--web.listen-address=127.0.0.1:9093" in defaults
+    assert "--cluster.listen-address=" in defaults
+    assert "--config.file=/etc/prometheus/cloudfall-alertmanager.yaml" in defaults
+
+
+def test_backend_prometheus_config_targets_declared_alertmanager() -> None:
+    stack = _logging_stack()
+    prometheus = yaml.safe_load(
+        _render(
+            BACKEND_TEMPLATES,
+            "prometheus.yaml.j2",
+            cloudfall_logging_backend_stack=stack,
+        )
+    )
+
+    alertmanagers = prometheus["alerting"]["alertmanagers"]
+    assert alertmanagers == [
+        {"static_configs": [{"targets": ["127.0.0.1:9093"]}]}
+    ]
+
+
+def test_backend_prometheus_config_omits_alerting_when_undeclared() -> None:
+    stack = {
+        key: value for key, value in _logging_stack().items() if key != "alerting"
+    }
+    prometheus = yaml.safe_load(
+        _render(
+            BACKEND_TEMPLATES,
+            "prometheus.yaml.j2",
+            cloudfall_logging_backend_stack=stack,
+        )
+    )
+
+    assert "alerting" not in prometheus
+
+
 def test_collector_template_renders_postgres_exporter_for_declared_metrics() -> None:
     stack = _logging_stack()
     services = _services()

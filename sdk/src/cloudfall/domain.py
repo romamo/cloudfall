@@ -795,6 +795,80 @@ class AlertSummary:
 
 
 @dataclass(frozen=True, slots=True)
+class WebhookUrl:
+    """Validated HTTP(S) webhook destination for alert delivery."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        """Reject non-HTTP schemes, spaces, and control characters."""
+        if not re.fullmatch(
+            r"https?://[^\x00-\x1f\x7f ]{1,490}", self.value
+        ):
+            message = f"invalid webhook url: {self.value!r}"
+            raise ValueError(message)
+
+    @classmethod
+    def from_boundary(cls, value: object) -> WebhookUrl:
+        """Coerce a boundary value into a webhook URL."""
+        return cls(_required_string(value, "webhook url"))
+
+
+@dataclass(frozen=True, slots=True)
+class SmtpSmarthost:
+    """Validated host:port SMTP relay address."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        """Reject smarthosts outside the strict host:port form."""
+        if not re.fullmatch(r"[a-z0-9.-]{1,253}:[0-9]{1,5}", self.value):
+            message = f"invalid smtp smarthost: {self.value!r}"
+            raise ValueError(message)
+
+    @classmethod
+    def from_boundary(cls, value: object) -> SmtpSmarthost:
+        """Coerce a boundary value into an SMTP smarthost."""
+        return cls(_required_string(value, "smtp smarthost"))
+
+
+@dataclass(frozen=True, slots=True)
+class EmailAddress:
+    """Validated single email address for alert delivery."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        """Reject addresses without a local part and domain."""
+        if not re.fullmatch(r"[^@\s]{1,100}@[^@\s]{1,100}", self.value):
+            message = f"invalid email address: {self.value!r}"
+            raise ValueError(message)
+
+    @classmethod
+    def from_boundary(cls, value: object) -> EmailAddress:
+        """Coerce a boundary value into an email address."""
+        return cls(_required_string(value, "email address"))
+
+
+@dataclass(frozen=True, slots=True)
+class SmtpUsername:
+    """Validated SMTP authentication username."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        """Reject control characters and unbounded usernames."""
+        if not re.fullmatch(r"[^\x00-\x1f\x7f]{1,200}", self.value):
+            message = f"invalid smtp username: {self.value!r}"
+            raise ValueError(message)
+
+    @classmethod
+    def from_boundary(cls, value: object) -> SmtpUsername:
+        """Coerce a boundary value into an SMTP username."""
+        return cls(_required_string(value, "smtp username"))
+
+
+@dataclass(frozen=True, slots=True)
 class FileMode:
     """Validated four-digit POSIX file mode."""
 

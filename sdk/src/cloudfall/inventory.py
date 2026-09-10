@@ -16,6 +16,7 @@ from cloudfall.domain import (
     DatacenterCode,
     DeploymentApproval,
     DnsMode,
+    EmailAddress,
     FileMode,
     FilesystemName,
     FirewallPolicy,
@@ -56,11 +57,14 @@ from cloudfall.domain import (
     ServiceManager,
     ServiceName,
     Sha256Digest,
+    SmtpSmarthost,
+    SmtpUsername,
     SshPublicKeyLifecycle,
     SystemdCalendar,
     SystemdUnitName,
     TcpPort,
     TlsMode,
+    WebhookUrl,
 )
 
 if TYPE_CHECKING:
@@ -844,6 +848,89 @@ class LoggingFileSource:
 
 
 @dataclass(frozen=True, slots=True)
+class EmailReceiverInventory:
+    """SMTP delivery contract for one declared alert receiver."""
+
+    smarthost: SmtpSmarthost
+    sender: EmailAddress
+    recipient: EmailAddress
+    auth_username: SmtpUsername | None
+    auth_password_file: AbsolutePath | None
+
+    def as_dict(self) -> dict[str, object]:
+        """Serialize the email contract without secret material."""
+        result: dict[str, object] = {
+            "smarthost": self.smarthost.value,
+            "from": self.sender.value,
+            "to": self.recipient.value,
+        }
+        if self.auth_username is not None:
+            result["authUsername"] = self.auth_username.value
+        if self.auth_password_file is not None:
+            result["authPasswordFile"] = self.auth_password_file.value
+        return result
+
+
+@dataclass(frozen=True, slots=True)
+class AlertReceiverInventory:
+    """Exactly one declared alert delivery channel."""
+
+    resource_id: ResourceId
+    webhook: WebhookUrl | None
+    email: EmailReceiverInventory | None
+
+    def __post_init__(self) -> None:
+        """Reject receivers without exactly one channel."""
+        if (self.webhook is None) == (self.email is None):
+            message = (
+                "alert receiver must declare exactly one channel: "
+                f"{self.resource_id.value}"
+            )
+            raise ValueError(message)
+
+    def as_dict(self) -> dict[str, object]:
+        """Serialize the receiver for rendering and evidence."""
+        result: dict[str, object] = {"id": self.resource_id.value}
+        if self.webhook is not None:
+            result["webhook"] = {"url": self.webhook.value}
+        if self.email is not None:
+            result["email"] = self.email.as_dict()
+        return result
+
+
+@dataclass(frozen=True, slots=True)
+class AlertmanagerBackend:
+    """Loopback-only Alertmanager colocated with the logging backend."""
+
+    listen_address: IpAddress
+    port: TcpPort
+    package_version: PackageVersion | None
+
+
+@dataclass(frozen=True, slots=True)
+class LoggingAlerting:
+    """Declared alert delivery topology."""
+
+    alertmanager: AlertmanagerBackend
+    receivers: tuple[AlertReceiverInventory, ...]
+
+    def as_dict(self) -> dict[str, object]:
+        """Serialize the alerting topology without secret material."""
+        alertmanager: dict[str, object] = {
+            "listenAddress": self.alertmanager.listen_address.value,
+            "port": self.alertmanager.port.value,
+        }
+        if self.alertmanager.package_version is not None:
+            alertmanager["packageVersion"] = (
+                self.alertmanager.package_version.value
+            )
+        return {
+            "alertmanager": alertmanager,
+            "receivers": [receiver.as_dict() for receiver in self.receivers],
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class LoggingCollectors:
     """Fleet placement and sources for Grafana Alloy."""
 
@@ -867,6 +954,7 @@ class LoggingStackInventory:
     gateway: LoggingGateway
     grafana: LoggingGrafana
     collectors: LoggingCollectors
+    alerting: LoggingAlerting | None
 
     def as_dict(self) -> dict[str, object]:
         """Serialize the logging topology without certificate contents."""
@@ -877,7 +965,7 @@ class LoggingStackInventory:
         }
         if self.software.prometheus is not None:
             software["prometheusPackageVersion"] = self.software.prometheus.value
-        return {
+        result: dict[str, object] = {
             "id": self.resource_id.value,
             "environment": self.environment.value,
             "migration": {
@@ -941,6 +1029,9 @@ class LoggingStackInventory:
                 "files": [source.as_dict() for source in self.collectors.files],
             },
         }
+        if self.alerting is not None:
+            result["alerting"] = self.alerting.as_dict()
+        return result
 
 
 @dataclass(frozen=True, slots=True)
@@ -1438,6 +1529,11 @@ def _logging_stack_inventory(
     collectors = _mapping(spec, "collectors")
     client_tls = _mapping(collectors, "clientTls")
     journal = _mapping(collectors, "journal")
+    alerting = (
+        _logging_alerting(_mapping(spec, "alerting"))
+        if spec.get("alerting") is not None
+        else None
+    )
     return LoggingStackInventory(
         resource_id=document.key.resource_id,
         environment=ResourceId.from_boundary(spec.get("environment")),
@@ -1527,6 +1623,67 @@ def _logging_stack_inventory(
                 )
             ),
         ),
+        alerting=alerting,
+    )
+
+
+def _logging_alerting(content: Mapping[str, object]) -> LoggingAlerting:
+    alertmanager = _mapping(content, "alertmanager")
+    raw_package_version = alertmanager.get("packageVersion")
+    return LoggingAlerting(
+        alertmanager=AlertmanagerBackend(
+            listen_address=IpAddress.from_boundary(
+                alertmanager.get("listenAddress")
+            ),
+            port=TcpPort.from_boundary(alertmanager.get("port")),
+            package_version=(
+                PackageVersion.from_boundary(raw_package_version)
+                if raw_package_version is not None
+                else None
+            ),
+        ),
+        receivers=tuple(
+            _alert_receiver(item)
+            for item in _mapping_list(
+                content.get("receivers"), "alert receivers"
+            )
+        ),
+    )
+
+
+def _alert_receiver(content: Mapping[str, object]) -> AlertReceiverInventory:
+    raw_webhook = content.get("webhook")
+    raw_email = content.get("email")
+    webhook = None
+    if raw_webhook is not None:
+        webhook_mapping = _boundary_mapping(raw_webhook, "webhook receiver")
+        webhook = WebhookUrl.from_boundary(webhook_mapping.get("url"))
+    email = None
+    if raw_email is not None:
+        email_mapping = _boundary_mapping(raw_email, "email receiver")
+        raw_auth_username = email_mapping.get("authUsername")
+        raw_auth_password_file = email_mapping.get("authPasswordFile")
+        email = EmailReceiverInventory(
+            smarthost=SmtpSmarthost.from_boundary(
+                email_mapping.get("smarthost")
+            ),
+            sender=EmailAddress.from_boundary(email_mapping.get("from")),
+            recipient=EmailAddress.from_boundary(email_mapping.get("to")),
+            auth_username=(
+                SmtpUsername.from_boundary(raw_auth_username)
+                if raw_auth_username is not None
+                else None
+            ),
+            auth_password_file=(
+                AbsolutePath.from_boundary(raw_auth_password_file)
+                if raw_auth_password_file is not None
+                else None
+            ),
+        )
+    return AlertReceiverInventory(
+        resource_id=ResourceId.from_boundary(content.get("id")),
+        webhook=webhook,
+        email=email,
     )
 
 

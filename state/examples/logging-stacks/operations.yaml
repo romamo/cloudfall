@@ -41,6 +41,21 @@ spec:
     listenAddress: 127.0.0.1
     port: 3000
     adminPasswordPath: /etc/cloudfall/logging/grafana-admin-password
+  alerting:
+    alertmanager:
+      listenAddress: 127.0.0.1
+      port: 9093
+    receivers:
+      - id: operations-webhook
+        webhook:
+          url: https://hooks.example.internal/cloudfall
+      - id: operations-email
+        email:
+          smarthost: smtp.example.internal:587
+          from: alerts@example.internal
+          to: oncall@example.internal
+          authUsername: alerts@example.internal
+          authPasswordFile: /etc/cloudfall/logging/smtp-password
   collectors:
     servers:
       - h1
