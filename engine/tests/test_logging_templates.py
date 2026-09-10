@@ -68,9 +68,11 @@ def test_backend_templates_render_safe_endpoints() -> None:
     assert datasource["datasources"][0]["url"] == "http://127.0.0.1:3100"
     assert "$__file{/etc/cloudfall/logging/grafana-admin-password}" in grafana
     assert "ssl_verify_client on;" in gateway
-    assert gateway.count("proxy_pass") == 2
+    assert gateway.count("proxy_pass") == 3
     assert "location = /loki/api/v1/push" in gateway
     assert "location = /api/v1/write" in gateway
+    assert "location = /api/v1/alerts" in gateway
+    assert "limit_except GET" in gateway
     assert "proxy_pass http://127.0.0.1:9090;" in gateway
     assert "location /" in gateway
     assert "-config.file=/etc/loki/cloudfall-operations.yaml" in loki_override

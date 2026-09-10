@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -13,6 +14,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
     from cloudfall.operations import FleetOperations
+    from cloudfall.operator import AlertFeed
     from cloudfall.validation import ValidatedState
 
 from cloudfall.agent_tools import AgentConfig
@@ -43,6 +45,20 @@ from cloudfall.lifecycle import (
 from cloudfall.migrate import MigrateError, MigrateOptions, execute_migration
 from cloudfall.observation import load_observations
 from cloudfall.operations import UtcTimestamp, build_operations_view
+from cloudfall.operator import (
+    ApproveOptions,
+    OperatorError,
+    ProposalStatus,
+    ProposalStore,
+    engine_executor,
+    gateway_feed,
+)
+from cloudfall.operator import (
+    approve as operator_approve,
+)
+from cloudfall.operator import (
+    run_once as operator_run_once,
+)
 from cloudfall.service_evidence import (
     DeploymentReceiptSet,
     DomainObservationSet,
@@ -52,12 +68,16 @@ from cloudfall.service_evidence import (
     load_deployment_receipts,
     load_domain_observations,
 )
-from cloudfall.validation import StateValidationError, validate_state
+from cloudfall.validation import (
+    SchemaCatalog,
+    StateValidationError,
+    validate_state,
+)
 
 
-def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="cloudfall")
-    commands = parser.add_subparsers(dest="command", required=True)
+def _add_state_parsers(
+    commands: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
     state_parser = commands.add_parser("state", help="operate on platform state")
     state_commands = state_parser.add_subparsers(dest="state_command", required=True)
     validate_parser = state_commands.add_parser(
@@ -88,6 +108,12 @@ def _parser() -> argparse.ArgumentParser:
         help="versioned schema directory (default: state/schemas/v1)",
     )
 
+
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="cloudfall")
+    commands = parser.add_subparsers(dest="command", required=True)
+    _add_state_parsers(commands)
+
     audit_parser = commands.add_parser(
         "audit", help="compare desired state with observed server snapshots"
     )
@@ -98,6 +124,8 @@ def _parser() -> argparse.ArgumentParser:
         required=True,
         help="directory containing observed-server JSON snapshots",
     )
+
+    _add_operator_parsers(commands)
 
     services_parser = commands.add_parser(
         "services", help="inspect and report public service lifecycles"
@@ -508,6 +536,91 @@ def _add_import_parsers(
     )
 
 
+def _add_operator_parsers(
+    commands: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    operator_parser = commands.add_parser(
+        "operator", help="alert-driven propose-and-approve operation"
+    )
+    operator_commands = operator_parser.add_subparsers(
+        dest="operator_command", required=True
+    )
+    operator_run_parser = operator_commands.add_parser(
+        "run", help="watch declared alerts and write proposals"
+    )
+    _add_operator_arguments(operator_run_parser)
+    _add_operator_feed_arguments(operator_run_parser)
+    operator_run_parser.add_argument(
+        "--interval",
+        type=float,
+        default=None,
+        help="seconds between watch passes (default: one pass, then exit)",
+    )
+    operator_list_parser = operator_commands.add_parser(
+        "list", help="list proposal receipts"
+    )
+    _add_operator_arguments(operator_list_parser)
+    operator_show_parser = operator_commands.add_parser(
+        "show", help="show one proposal receipt"
+    )
+    _add_operator_arguments(operator_show_parser)
+    operator_show_parser.add_argument("proposal")
+    operator_approve_parser = operator_commands.add_parser(
+        "approve", help="execute a proposal and verify the alert resolves"
+    )
+    _add_operator_arguments(operator_approve_parser)
+    _add_operator_feed_arguments(operator_approve_parser)
+    operator_approve_parser.add_argument("proposal")
+    operator_approve_parser.add_argument(
+        "--engine",
+        type=Path,
+        default=Path("engine"),
+        help="engine directory containing ansible contracts (default: engine)",
+    )
+    operator_approve_parser.add_argument(
+        "--inventory-file",
+        type=Path,
+        default=Path("tmp/ansible-inventory.json"),
+        help="rendered inventory path (default: tmp/ansible-inventory.json)",
+    )
+    operator_approve_parser.add_argument(
+        "--verify-timeout",
+        type=float,
+        default=180.0,
+        help="seconds to wait for the alert to resolve (default: 180)",
+    )
+
+
+def _add_operator_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("state_directory", type=Path)
+    parser.add_argument(
+        "--schemas",
+        type=Path,
+        default=Path("state/schemas/v1"),
+        help="versioned schema directory (default: state/schemas/v1)",
+    )
+    parser.add_argument(
+        "--proposals",
+        type=Path,
+        default=Path("tmp/operator/proposals"),
+        help="proposal receipt directory (default: tmp/operator/proposals)",
+    )
+
+
+def _add_operator_feed_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--gateway-url",
+        default=None,
+        help=(
+            "alerts endpoint (default: derived from the declared logging "
+            "gateway)"
+        ),
+    )
+    parser.add_argument("--gateway-ca", type=Path, required=True)
+    parser.add_argument("--gateway-cert", type=Path, required=True)
+    parser.add_argument("--gateway-key", type=Path, required=True)
+
+
 def _add_lifecycle_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("state_directory", type=Path)
     parser.add_argument("component")
@@ -576,6 +689,10 @@ def _dispatch(
         "health": _run_health,
         "inventory:show": _run_inventory_show,
         "migrate": _run_migrate,
+        "operator:approve": _run_operator_approve,
+        "operator:list": _run_operator_list,
+        "operator:run": _run_operator_run,
+        "operator:show": _run_operator_show,
         "restart": _run_restart,
         "rollback": _run_rollback,
         "services:inspect": _run_services_inspect,
@@ -629,6 +746,96 @@ def _run_audit(
     if report.status is AuditStatus.DRIFT:
         return 1
     return 3
+
+
+def _operator_store(
+    arguments: Namespace, schema_directory: Path
+) -> ProposalStore:
+    return ProposalStore(
+        directory=Path(arguments.proposals),
+        catalog=SchemaCatalog(schema_directory),
+    )
+
+
+def _operator_feed(
+    arguments: Namespace, inventory: PlatformInventory
+) -> AlertFeed:
+    return gateway_feed(
+        inventory,
+        ca_path=Path(arguments.gateway_ca),
+        certificate_path=Path(arguments.gateway_cert),
+        key_path=Path(arguments.gateway_key),
+        url_override=arguments.gateway_url,
+    )
+
+
+def _operator_exit(error: OperatorError) -> int:
+    sys.stderr.write(f"{json.dumps(error.as_dict(), sort_keys=True)}\n")
+    return 2
+
+
+def _run_operator_run(
+    arguments: Namespace, state: ValidatedState, schema_directory: Path
+) -> int:
+    inventory = PlatformInventory.from_state(state)
+    try:
+        store = _operator_store(arguments, schema_directory)
+        feed = _operator_feed(arguments, inventory)
+        while True:
+            report = operator_run_once(feed, inventory, store)
+            _write_json({"status": "ok", **report.as_dict()})
+            if arguments.interval is None:
+                return 0
+            time.sleep(arguments.interval)
+    except OperatorError as error:
+        return _operator_exit(error)
+
+
+def _run_operator_list(
+    arguments: Namespace, _state: ValidatedState, schema_directory: Path
+) -> int:
+    try:
+        store = _operator_store(arguments, schema_directory)
+        proposals = [proposal.as_document() for proposal in store.list()]
+    except OperatorError as error:
+        return _operator_exit(error)
+    _write_json({"status": "ok", "proposals": proposals})
+    return 0
+
+
+def _run_operator_show(
+    arguments: Namespace, _state: ValidatedState, schema_directory: Path
+) -> int:
+    try:
+        store = _operator_store(arguments, schema_directory)
+        proposal = store.load(ResourceId.from_boundary(arguments.proposal))
+    except OperatorError as error:
+        return _operator_exit(error)
+    _write_json(proposal.as_document())
+    return 0
+
+
+def _run_operator_approve(
+    arguments: Namespace, state: ValidatedState, schema_directory: Path
+) -> int:
+    inventory = PlatformInventory.from_state(state)
+    try:
+        store = _operator_store(arguments, schema_directory)
+        feed = _operator_feed(arguments, inventory)
+        executor = engine_executor(_engine_context(arguments, schema_directory))
+        proposal = operator_approve(
+            store,
+            ResourceId.from_boundary(arguments.proposal),
+            executor,
+            feed,
+            ApproveOptions(verify_timeout_seconds=arguments.verify_timeout),
+        )
+    except OperatorError as error:
+        return _operator_exit(error)
+    except LifecycleError as error:
+        return _lifecycle_exit(error)
+    _write_json(proposal.as_document())
+    return 0 if proposal.status is ProposalStatus.VERIFIED else 1
 
 
 def _run_services_inspect(

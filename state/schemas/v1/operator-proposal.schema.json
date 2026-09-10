@@ -1,0 +1,186 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cloudfall.internal/schemas/v1/operator-proposal.schema.json",
+  "title": "Cloudfall operator proposal receipt",
+  "type": "object",
+  "properties": {
+    "apiVersion": {
+      "$ref": "common.schema.json#/$defs/apiVersion"
+    },
+    "kind": {
+      "const": "OperatorProposal"
+    },
+    "metadata": {
+      "$ref": "common.schema.json#/$defs/metadata"
+    },
+    "spec": {
+      "type": "object",
+      "properties": {
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "status": {
+          "enum": [
+            "proposed",
+            "executed",
+            "verified",
+            "failed"
+          ]
+        },
+        "alert": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "cloudfallRule": {
+              "$ref": "common.schema.json#/$defs/resourceId"
+            },
+            "severity": {
+              "enum": [
+                "warning",
+                "critical"
+              ]
+            },
+            "environment": {
+              "$ref": "common.schema.json#/$defs/resourceId"
+            },
+            "server": {
+              "$ref": "common.schema.json#/$defs/resourceId"
+            },
+            "service": {
+              "$ref": "common.schema.json#/$defs/resourceId"
+            },
+            "activeAt": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "fingerprint": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{16}$"
+            }
+          },
+          "required": [
+            "name",
+            "cloudfallRule",
+            "severity",
+            "environment",
+            "server",
+            "service",
+            "activeAt",
+            "fingerprint"
+          ],
+          "additionalProperties": false
+        },
+        "diagnosis": {
+          "type": "object",
+          "properties": {
+            "summary": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            },
+            "evidence": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "minItems": 1
+            }
+          },
+          "required": [
+            "summary",
+            "evidence"
+          ],
+          "additionalProperties": false
+        },
+        "operation": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "enum": [
+                "converge-services"
+              ]
+            },
+            "server": {
+              "$ref": "common.schema.json#/$defs/resourceId"
+            },
+            "service": {
+              "$ref": "common.schema.json#/$defs/resourceId"
+            },
+            "command": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "minItems": 1
+            }
+          },
+          "required": [
+            "kind",
+            "server",
+            "service",
+            "command"
+          ],
+          "additionalProperties": false
+        },
+        "outcome": {
+          "type": "object",
+          "properties": {
+            "executedAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "verifiedAt": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "result": {
+              "enum": [
+                "verified",
+                "failed"
+              ]
+            },
+            "detail": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            }
+          },
+          "required": [
+            "executedAt",
+            "verifiedAt",
+            "result",
+            "detail"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "createdAt",
+        "status",
+        "alert",
+        "diagnosis",
+        "operation"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "apiVersion",
+    "kind",
+    "metadata",
+    "spec"
+  ],
+  "additionalProperties": false
+}
