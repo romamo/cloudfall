@@ -218,7 +218,15 @@ handshake. No autonomy yet: this milestone is the loop, not the license.
 
 Exit: an induced failure is detected, diagnosed, and remediated end to end
 with the human contributing only a confirmation — no human diagnosis, no
-shell access.
+shell access. **Met on 2026-09-10** on a disposable Hetzner Cloud Debian 13
+server, for both trigger kinds: a stopped PostgreSQL went from failure to
+receipted, verified remediation in about 2.5 minutes with one approval
+command, and induced package drift was detected by the scheduled audit,
+proposed, approved through the agent confirmation handshake, and verified
+compliant in 53 seconds — see the
+[M8 proving-run report](docs/proving-runs/2026-09-10-hetzner-m8.md). The
+operator watched remotely over the gateway's new read-only mTLS alerts
+route with no shell access during detection, diagnosis, or verification.
 
 ## M9 — Graduated autonomy
 
