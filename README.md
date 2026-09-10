@@ -9,7 +9,8 @@ baseline, firewall, monitoring, logging, your infrastructure services, and
 your application deployed with health checks and rollback. Then cut DNS and
 stop paying PaaS margins. See the [roadmap](ROADMAP.md) for the milestone
 plan; the wedge use case is a migration from Render onto a Hetzner-class
-server.
+server. The principles behind the project are in the
+[manifesto](MANIFESTO.md).
 
 > **Every layer proven live.** On 2026-09-08 all five milestones ran on
 > disposable Hetzner Cloud Debian 13 servers: idempotent baseline, compliant
