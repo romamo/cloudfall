@@ -247,4 +247,13 @@ loop, M9 the license.
 Exit: on a proving host, a deliberately broken release is rolled back
 autonomously within declared policy — alert to healthy service with zero
 human involvement — and the receipt trail shows detection, decision, action,
-and verified outcome.
+and verified outcome. **Met on 2026-09-10** on a disposable Hetzner Cloud
+Debian 13 server: the first induced PostgreSQL failure was withheld from
+autonomy with a recorded reason (insufficient verified history) and needed
+one human approval — the receipt that earned the trust — and the second
+identical failure went from stopped service to receipted, verified,
+policy-licensed autonomous remediation in 2 minutes 6 seconds with zero
+human involvement; see the
+[M9 proving-run report](docs/proving-runs/2026-09-10-hetzner-m9.md). An
+externally killed execution also demonstrated crash consistency: the
+receipt stayed truthfully open and the next autonomy pass completed it.
