@@ -28,6 +28,7 @@ def _service() -> dict[str, object]:
         "backup": {
             "directory": "/var/backups/cloudfall/postgresql-main",
             "onCalendar": "*-*-* 02:00:00 UTC",
+            "restoreCheckOnCalendar": "*-*-* 05:00:00 UTC",
             "retentionDays": 14,
         },
     }
@@ -82,4 +83,19 @@ def test_backup_units_run_as_postgres_on_the_declared_calendar() -> None:
     assert "ExecStart=/usr/local/sbin/cloudfall-postgresql-backup" in service
     assert "After=postgresql@17-main.service" in service
     assert "OnCalendar=*-*-* 02:00:00 UTC" in timer
+    assert "Persistent=true" in timer
+
+
+def test_restore_drill_units_run_on_the_declared_calendar() -> None:
+    service = _render("restore-check.service.j2")
+    timer = _render("restore-check.timer.j2")
+
+    assert "Type=oneshot" in service
+    assert "User=postgres" in service
+    assert (
+        "ExecStart=/usr/local/sbin/cloudfall-postgresql-restore-check"
+        in service
+    )
+    assert "After=postgresql@17-main.service" in service
+    assert "OnCalendar=*-*-* 05:00:00 UTC" in timer
     assert "Persistent=true" in timer

@@ -55,6 +55,8 @@ argument_specs:
               onCalendar:
                 type: str
                 required: true
+              restoreCheckOnCalendar:
+                type: str
               retentionDays:
                 type: int
                 required: true

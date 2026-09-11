@@ -267,3 +267,29 @@
     enabled: true
     state: started
     daemon_reload: true
+
+- name: Install the restore-drill service unit
+  ansible.builtin.template:
+    src: restore-check.service.j2
+    dest: /etc/systemd/system/cloudfall-postgresql-restore-check.service
+    owner: root
+    group: root
+    mode: "0644"
+  when: cloudfall_postgresql_service.backup.restoreCheckOnCalendar is defined
+
+- name: Install the restore-drill timer unit
+  ansible.builtin.template:
+    src: restore-check.timer.j2
+    dest: /etc/systemd/system/cloudfall-postgresql-restore-check.timer
+    owner: root
+    group: root
+    mode: "0644"
+  when: cloudfall_postgresql_service.backup.restoreCheckOnCalendar is defined
+
+- name: Enable the restore-drill timer
+  ansible.builtin.systemd_service:
+    name: cloudfall-postgresql-restore-check.timer
+    enabled: true
+    state: started
+    daemon_reload: true
+  when: cloudfall_postgresql_service.backup.restoreCheckOnCalendar is defined

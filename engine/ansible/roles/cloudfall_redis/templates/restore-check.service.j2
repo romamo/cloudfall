@@ -1,0 +1,11 @@
+# Managed by Cloudfall. Local changes will be overwritten.
+[Unit]
+Description=Cloudfall Redis restore drill for {{ cloudfall_redis_service.id }}
+After=redis-server.service
+Requires=redis-server.service
+
+[Service]
+Type=oneshot
+User=redis
+Group=redis
+ExecStart=/usr/local/sbin/cloudfall-redis-restore-check

@@ -110,6 +110,9 @@
             "onCalendar": {
               "$ref": "#/$defs/systemdCalendar"
             },
+            "restoreCheckOnCalendar": {
+              "$ref": "#/$defs/systemdCalendar"
+            },
             "retentionDays": {
               "type": "integer",
               "minimum": 1,
