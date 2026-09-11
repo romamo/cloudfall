@@ -84,7 +84,7 @@ role's webroot flow; see the
   any retained release included)
 - Secrets v1: environment files generated from secret references (a local
   environment file per component is supported today; reference-driven
-  generation pending)
+  generation shipped as M6's secrets v2)
 
 Exit: the example backend component deploys end to end on a fresh host, and a
 bad release rolls back automatically. **Met on 2026-09-08** on the same
@@ -168,8 +168,12 @@ routine and widen what it can carry, in rough priority order:
   `parallel-run` (the origin must serve every domain before DNS changes),
   the existing `dns-verify` switch pause, and `rollback-window` (pre-switch
   answers recorded with an exact 24h revert recipe)
-- **Secrets v2** — environment files generated from secret references in a
-  central secrets manager, replacing locally maintained per-component files
+- **Secrets v2** ✔ — `cloudfall secrets render` (and the
+  `render_secrets` MCP tool) resolves declared secret references from a
+  sops/age-encrypted secrets directory into per-component 0600 environment
+  files, merging platform → project → component scopes; envelopes carry key
+  names and hashes, never values, and the provider boundary admits managed
+  backends later — see the [secrets guide](docs/secrets-guide.md)
 - **Bare-metal provisioning** — software RAID and storage layout for
   dedicated servers per the
   [hybrid storage design](docs/hybrid-storage-design.md), the one part of

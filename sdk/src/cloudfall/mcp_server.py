@@ -161,6 +161,9 @@ def _build_registrations(toolset: AgentToolset) -> tuple[_Registration, ...]:
             )
         )
 
+    def render_secrets(component: str) -> str:
+        return _dump(toolset.render_secrets(component))
+
     def build_artifact(component: str, git_ref: str) -> str:
         return _dump(toolset.build_artifact(component, git_ref))
 
@@ -178,6 +181,14 @@ def _build_registrations(toolset: AgentToolset) -> tuple[_Registration, ...]:
             "Map a live Render workspace onto Cloudfall state fragments "
             "through the Render API; the api_key_file is a controller-side "
             "file containing only the API key",
+            None,
+        ),
+        (
+            render_secrets,
+            "render_secrets",
+            "Resolve a component's declared secret references from the "
+            "sops-encrypted secrets directory into its 0600 environment "
+            "file; the envelope carries key names and a hash, never values",
             None,
         ),
         (
@@ -504,6 +515,18 @@ def _parser() -> argparse.ArgumentParser:
         " %(default)s)",
     )
     parser.add_argument(
+        "--secrets-dir",
+        type=Path,
+        default=Path("secrets"),
+        help="sops-encrypted secrets directory (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--env-dir",
+        type=Path,
+        default=Path("tmp/env"),
+        help="rendered environment file directory (default: %(default)s)",
+    )
+    parser.add_argument(
         "--backups",
         type=Path,
         default=Path("tmp/backups"),
@@ -553,6 +576,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         artifacts_directory=Path(arguments.artifacts),
         data_migrations_directory=Path(arguments.data_migrations),
         backups_directory=Path(arguments.backups),
+        secrets_directory=Path(arguments.secrets_dir),
+        environment_directory=Path(arguments.env_dir),
         proposals_directory=Path(arguments.proposals),
         gateway_ca_path=arguments.gateway_ca,
         gateway_certificate_path=arguments.gateway_cert,

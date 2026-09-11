@@ -730,6 +730,19 @@ class SystemdCalendar:
         return cls(_required_string(value, "systemd calendar expression"))
 
 
+class SecretScope(StrEnum):
+    """Ownership scope of one declared secret reference."""
+
+    PLATFORM = "platform"
+    PROJECT = "project"
+    COMPONENT = "component"
+
+    @classmethod
+    def from_boundary(cls, value: object) -> SecretScope:
+        """Coerce a boundary value into a secret scope."""
+        return cls(_required_string(value, "secret scope"))
+
+
 class AlertSeverity(StrEnum):
     """Severity level attached to a declared alert rule."""
 

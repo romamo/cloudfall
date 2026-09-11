@@ -60,6 +60,11 @@ from cloudfall.render_api import HttpRenderApiClient, read_api_key
 from cloudfall.render_api import (
     import_render_api as render_api_import,
 )
+from cloudfall.secrets import (
+    SecretsError,
+    SopsSecretProvider,
+    render_environment,
+)
 from cloudfall.service_evidence import (
     DeploymentReceiptSet,
     DomainObservationSet,
@@ -95,6 +100,8 @@ class AgentConfig:
     artifacts_directory: Path
     data_migrations_directory: Path = Path("tmp/data-migrations")
     backups_directory: Path = Path("tmp/backups")
+    secrets_directory: Path = Path("secrets")
+    environment_directory: Path = Path("tmp/env")
     proposals_directory: Path = Path("tmp/operator/proposals")
     gateway_ca_path: Path | None = None
     gateway_certificate_path: Path | None = None
@@ -505,6 +512,25 @@ class AgentToolset:
                 "to execute it; interrupted runs resume automatically"
             )
         return result
+
+    def render_secrets(self, component: str) -> dict[str, object]:
+        """Render one component's secret references into its env file."""
+        try:
+            component_id = ResourceId.from_boundary(component)
+        except (TypeError, ValueError) as error:
+            return _invalid_argument(error)
+        try:
+            return render_environment(
+                self._config.context(),
+                component_id,
+                SopsSecretProvider(
+                    secrets_directory=self._config.secrets_directory
+                ),
+                self._config.environment_directory
+                / f"{component_id.value}.env",
+            )
+        except (SecretsError, StateValidationError) as error:
+            return error.as_dict()
 
     def backup_service(
         self, service: str, *, confirm: bool = False

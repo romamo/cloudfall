@@ -72,6 +72,11 @@ from cloudfall.render_api import (
     import_render_api,
     read_api_key,
 )
+from cloudfall.secrets import (
+    SecretsError,
+    SopsSecretProvider,
+    render_environment,
+)
 from cloudfall.service_evidence import (
     DeploymentReceiptSet,
     DomainObservationSet,
@@ -140,6 +145,7 @@ def _parser() -> argparse.ArgumentParser:
 
     _add_operator_parsers(commands)
     _add_backup_parsers(commands)
+    _add_secrets_parsers(commands)
 
     services_parser = commands.add_parser(
         "services", help="inspect and report public service lifecycles"
@@ -665,6 +671,56 @@ def _add_operator_parsers(
     )
 
 
+def _add_secrets_parsers(
+    commands: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    secrets_parser = commands.add_parser(
+        "secrets", help="resolve declared secret references"
+    )
+    secrets_commands = secrets_parser.add_subparsers(
+        dest="secrets_command", required=True
+    )
+    render_parser = secrets_commands.add_parser(
+        "render",
+        help="render one component's references into its environment file",
+    )
+    render_parser.add_argument("state_directory", type=Path)
+    render_parser.add_argument("component")
+    render_parser.add_argument(
+        "--schemas",
+        type=Path,
+        default=Path("state/schemas/v1"),
+        help="versioned schema directory (default: state/schemas/v1)",
+    )
+    render_parser.add_argument(
+        "--secrets-dir",
+        type=Path,
+        default=Path("secrets"),
+        help="sops-encrypted secrets directory (default: secrets)",
+    )
+    render_parser.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help=(
+            "environment file to write (default: "
+            "tmp/env/<component>.env)"
+        ),
+    )
+    render_parser.add_argument(
+        "--engine",
+        type=Path,
+        default=Path("engine"),
+        help="engine directory containing ansible contracts (default: engine)",
+    )
+    render_parser.add_argument(
+        "--inventory-file",
+        type=Path,
+        default=Path("tmp/ansible-inventory.json"),
+        help="rendered inventory path (default: tmp/ansible-inventory.json)",
+    )
+
+
 def _add_backup_parsers(
     commands: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
@@ -817,6 +873,7 @@ def _dispatch(
         "audit": _run_audit,
         "backup:run": _run_backup_run,
         "backup:verify": _run_backup_verify,
+        "secrets:render": _run_secrets_render,
         "data:migrate": _run_data_migrate,
         "dashboard:build": _run_dashboard_build,
         "dashboard:serve": _run_dashboard_serve,
@@ -881,6 +938,28 @@ def _run_audit(
     if report.status is AuditStatus.DRIFT:
         return 1
     return 3
+
+
+def _run_secrets_render(
+    arguments: Namespace, _state: ValidatedState, schema_directory: Path
+) -> int:
+    output = (
+        Path(arguments.output)
+        if arguments.output is not None
+        else Path("tmp/env") / f"{arguments.component}.env"
+    )
+    try:
+        result = render_environment(
+            _engine_context(arguments, schema_directory),
+            ResourceId.from_boundary(arguments.component),
+            SopsSecretProvider(secrets_directory=Path(arguments.secrets_dir)),
+            output,
+        )
+    except SecretsError as error:
+        sys.stderr.write(f"{json.dumps(error.as_dict(), sort_keys=True)}\n")
+        return 2
+    _write_json(result)
+    return 0
 
 
 def _run_backup_run(

@@ -52,6 +52,7 @@ from cloudfall.domain import (
     RuntimePackageManager,
     RuntimeType,
     RuntimeVersion,
+    SecretScope,
     ServerLifecycle,
     ServiceCommand,
     ServiceKind,
@@ -350,6 +351,23 @@ class HostProfileInventory:
 
 
 @dataclass(frozen=True, slots=True)
+class SecretReference:
+    """Typed pointer to one secret source; never carries a value."""
+
+    scope: SecretScope
+    environment: ResourceId
+    path: AbsolutePath
+
+    def as_dict(self) -> dict[str, object]:
+        """Serialize the reference itself (references are not secret)."""
+        return {
+            "scope": self.scope.value,
+            "environment": self.environment.value,
+            "path": self.path.value,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class ProjectInventory:
     """Composition and ownership data for one SaaS project."""
 
@@ -357,6 +375,7 @@ class ProjectInventory:
     linux_user: LinuxUser
     approval: DeploymentApproval
     component_ids: tuple[ResourceId, ...]
+    secret_refs: tuple[SecretReference, ...] = ()
 
     def as_dict(self) -> dict[str, object]:
         """Serialize project composition for inventory consumers."""
@@ -474,6 +493,7 @@ class ComponentInventory:
     runtime: ComponentRuntime
     service: ComponentService
     health_check: ComponentHealthCheck
+    secret_refs: tuple[SecretReference, ...] = ()
 
     def as_dict(self) -> dict[str, object]:
         """Serialize the component for inventory consumers."""
@@ -1392,6 +1412,7 @@ def _project_inventory(document: ResourceDocument) -> ProjectInventory:
         linux_user=LinuxUser.from_boundary(spec.get("linuxUser")),
         approval=DeploymentApproval.from_boundary(spec.get("approval")),
         component_ids=_resource_ids(spec.get("components"), "project components"),
+        secret_refs=_secret_references(spec.get("secretRefs")),
     )
 
 
@@ -1431,6 +1452,20 @@ def _component_inventory(document: ResourceDocument) -> ComponentInventory:
             command=ServiceCommand.from_boundary(service.get("command")),
         ),
         health_check=_component_health_check(health),
+        secret_refs=_secret_references(spec.get("secretRefs")),
+    )
+
+
+def _secret_references(value: object) -> tuple[SecretReference, ...]:
+    if value is None:
+        return ()
+    return tuple(
+        SecretReference(
+            scope=SecretScope.from_boundary(item.get("scope")),
+            environment=ResourceId.from_boundary(item.get("environment")),
+            path=AbsolutePath.from_boundary(item.get("path")),
+        )
+        for item in _mapping_list(value, "secret references")
     )
 
 
