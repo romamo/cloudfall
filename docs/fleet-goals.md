@@ -95,16 +95,19 @@ on shared nodes fails in practice:
 In value order for the roadmap, after M10 (proven restores and real
 alerting — the floor everything above stands on):
 
-1. Requirement 8, resource declarations and enforcement — the first thing
-   that fails at density, and the cheapest of the missing items
-2. Requirement 9 completed, then 10 — together they make requirement 4
-   true, which is what "ready to scale" means here
-3. Requirement 11, drain — needed the first time a node ages out, and the
-   h3-class hardware in any real fleet guarantees that day comes
-4. Requirement 6 implementation (the formation) — demand-gated: built when
-   a service's revenue justifies a standby, not before. The schema and the
-   expansion-ready-at-one-node prerequisites land earlier because they are
-   cheap and make the formation purchasable later
+1. Requirement 8, resource declarations and enforcement (roadmap M11) —
+   the first thing that fails at density, and the cheapest of the missing
+   items
+2. Requirements 9 and 10, then 11 (M12) — data movement and routing make
+   requirement 4 true, which is what "ready to scale" means here, and
+   drain is needed the first time a node ages out; any real fleet's aging
+   hardware guarantees that day comes
+3. PostgreSQL point-in-time recovery, the availability schema, and the
+   expansion-ready-at-one-node prerequisites (M13) — the schema and
+   prerequisites land here because they are cheap and make the formation
+   purchasable later
+4. Requirement 6 implementation, the formation (M14) — demand-gated:
+   built when a service's revenue justifies a standby, not before
 5. Bare-metal provisioning closes the last gap in requirement 7
 
 ## Non-goals

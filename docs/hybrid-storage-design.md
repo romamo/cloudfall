@@ -140,7 +140,7 @@ Apply these rules:
    exists only in someone's memory.
 9. Keep data for services without working cross-server replication on the
    mirrored system area, not on a tail. PostgreSQL qualifies today: until the
-   high-availability formation ships (M11 on the roadmap), its only recovery
+   high-availability formation ships (M14 on the roadmap), its only recovery
    path is scheduled dumps, so a tail placement sets the loss window to the
    dump interval on a single drive. Reassess per service as replication
    becomes available.

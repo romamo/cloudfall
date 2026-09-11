@@ -1,8 +1,9 @@
 # Availability design: declared failover for every service kind
 
-Status: proposed design. The schema block is not implemented yet; it is
-planned to land with the M11 PostgreSQL high-availability formation so that
-the first implementation already fits all service kinds.
+Status: proposed design. The schema block is not implemented yet; it lands
+with M13 (PostgreSQL data safety and scale readiness), ahead of the
+demand-gated M14 formation, so that the first implementation already fits
+all service kinds.
 
 This document defines how failover is declared in Cloudfall config. It
 extends the [architecture](../ARCHITECTURE.md) stance that failover is
@@ -68,7 +69,7 @@ Allowed modes per kind:
 
 | Kind | single | rebuildable | formation | clustered |
 | --- | --- | --- | --- | --- |
-| postgresql | yes | no | yes (M11) | no |
+| postgresql | yes | no | yes (M14) | no |
 | redis | yes | yes | future | no |
 | mysql (future) | yes | no | yes | no |
 | elasticsearch (future) | yes | no | no | yes |
@@ -170,8 +171,9 @@ history and `OperatorPolicy` bounds.
 
 ## Rollout
 
-- The schema block lands with M11, implemented first for PostgreSQL
-  (`single` and `formation`)
+- The schema block lands with M13 for PostgreSQL `single`, together with
+  the expansion-ready prerequisites; `formation` is implemented by the
+  demand-gated M14
 - Existing configs need no migration: an absent block means `mode: single`,
   and the expansion prerequisites become part of the PostgreSQL and Redis
   role baselines when their roles next converge

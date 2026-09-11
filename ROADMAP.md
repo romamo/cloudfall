@@ -294,16 +294,77 @@ timer-driven drill with a schema-valid `BackupReceipt`, and an induced
 failure produces an alert that arrives at a real external destination —
 both trails visible in `cloudfall audit` alongside everything else.
 
-## M11 — PostgreSQL high availability: replication, failover, PITR
+## M11 — Fleet density: enforced resource sharing
 
-The first infrastructure service graduates from single-host to a declared
-formation: one primary, one hot standby, one witness. This amends the
-architecture stance that failover is manual — at the database layer only,
-and below the operator: the formation may promote automatically, but the
-operator still never initiates a promotion without explicit confirmation.
-The declaration surface is the `availability` block specified in the
-[availability design](docs/availability-design.md), which covers every
-service kind and lands with this milestone.
+The [fleet goals](docs/fleet-goals.md) raise the ambition to 10–100
+applications on shared nodes, and the first thing that fails at that
+density is unenforced sharing: one leaking application takes down its
+neighbors. This milestone makes fleet requirement 8 real.
+
+- **Per-component resource envelopes** — memory, CPU, task, and I/O
+  limits declared in config and validated against the node's declared
+  capacity; placement that oversubscribes a node fails validation
+- **systemd enforcement** — the deploy role renders the envelope into the
+  unit (`MemoryMax`, `CPUQuota`, `TasksMax`, `IOWeight`), and the audit
+  proves the running unit carries the declared limits
+- **Capacity accounting** — declared reservations against node capacity
+  become fleet headroom evidence in the operations dashboard, so
+  placement decisions are computed from config, not guessed
+
+Exit: on a shared proving host, a deliberately leaking component hits its
+declared envelope and is contained — its neighbors' health checks stay
+green — and `cloudfall audit` reports envelope compliance alongside
+everything else.
+
+## M12 — Application mobility: data, routing, drain
+
+Makes "applications and components are movable" true for stateful
+applications (fleet requirements 9–11). Moving a component is already a
+config edit; this milestone makes its data and routing follow.
+
+- **Data movement as a verb** — moving an application moves its databases
+  (the existing verified dump-and-restore path) and its file storage,
+  with receipts for both
+- **Routing follows placement** — domain routes re-render and reconverge
+  as a consequence of a placement change, never by hand-editing the proxy
+- **Node drain and decommission** — evacuate every component, dataset,
+  and route from a node by config change, prove the fleet healthy without
+  it, then retire it
+
+Exit: on a two-node proving fleet, an application with a database and
+uploaded files moves between nodes by config edit and convergence,
+serving byte-identical responses afterward; a drained node is then
+removed with the fleet audit staying compliant.
+
+## M13 — PostgreSQL data safety and scale readiness
+
+The severable single-host half of high availability: near-zero data loss
+and formation-ready installs, without paying for a standby.
+
+- **Continuous archiving** — `pgBackRest` WAL archiving to object
+  storage, upgrading recovery from last-dump to point-in-time; the M10
+  restore drill extends to a receipted PITR drill
+- **Availability schema** — the `availability` block from the
+  [availability design](docs/availability-design.md) lands, with per-kind
+  mode validation; declaring intent becomes possible fleet-wide before
+  any formation exists
+- **Expansion-ready single** — formation prerequisites installed dormant
+  at one node (`wal_level`, replication role, TLS-ready binds, fixed
+  identities) and audited, so a future standby is a config edit, not a
+  reinstall
+
+Exit: a PITR drill restores a proving database to a declared point in
+time with a schema-valid `BackupReceipt`, and a fresh single-node
+PostgreSQL passes an audit proving every formation prerequisite.
+
+## M14 — PostgreSQL failover formation (demand-gated)
+
+Built when a service's revenue justifies a standby, not before (fleet
+requirement 6). One primary, one hot standby, one witness. This amends
+the architecture stance that failover is manual — at the database layer
+only, and below the operator: the formation may promote automatically,
+but the operator still never initiates a promotion without explicit
+confirmation.
 
 - **Streaming replication** — a declared two-node formation with native
   WAL streaming over a private network with TLS, replacing the
@@ -314,17 +375,12 @@ service kind and lands with this milestone.
 - **Connection routing** — PgBouncer on each data node with multi-host
   client connection strings (`target_session_attrs=read-write`), so
   applications follow the primary with no extra routing layer
-- **Continuous archiving** — `pgBackRest` with WAL archiving to object
-  storage, upgrading recovery from last-dump to point-in-time; backups
-  taken from the standby, and the M10 restore drill extended to a
-  receipted PITR drill
 - **Multi-host alerting exercised** — replication lag, formation
   degradation, and archiving failure become declared alert rules, the
-  forcing function for alerting across more than one host
+  forcing function for alerting across more than one host; backups move
+  to the standby
 
 Exit: on a three-host proving formation, killing the primary promotes the
-standby and the application recovers with zero human involvement, the
-receipt trail shows detection, promotion, and verified recovery, and a
-PITR drill restores the database to a declared point in time with a
-schema-valid `BackupReceipt` — while `cloudfall audit` reports formation
-compliance across all three hosts.
+standby and the application recovers with zero human involvement, and the
+receipt trail shows detection, promotion, and verified recovery — while
+`cloudfall audit` reports formation compliance across all three hosts.

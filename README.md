@@ -79,9 +79,12 @@ policy-bounded autonomy. All of it has been validated live on disposable
 Debian targets except two paths: the backup restore drill and alert
 delivery to an external destination, which milestone M10 exists to close
 (see the [proving-run reports](docs/proving-runs/)). Next up: the M10
-proving run, broader catalog breadth (MySQL, Elasticsearch, RabbitMQ, Node
-runtimes), bare-metal storage provisioning, and PostgreSQL high
-availability (M11). See the [roadmap](ROADMAP.md) for the milestone plan.
+proving run, then the fleet-density track — enforced resource sharing
+(M11), application mobility with node drain (M12), PostgreSQL
+point-in-time recovery and scale readiness (M13), and the demand-gated
+failover formation (M14) — alongside broader catalog breadth and
+bare-metal storage provisioning. See the [roadmap](ROADMAP.md) for the
+milestone plan.
 
 ## Quickstart
 

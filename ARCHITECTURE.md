@@ -110,7 +110,7 @@ not. Any server can run any declared service or component:
 - Application components are movable: reassigning `crm-backend` from `h1,h2`
   to `h3` is a config change followed by convergence
 - Failover is manual with easy reassignment rather than automated
-  orchestration; the planned PostgreSQL high-availability formation (M11 on
+  orchestration; the planned PostgreSQL high-availability formation (M14 on
   the roadmap) amends this at the database layer only, where a standby may
   be promoted automatically but an operator never initiates a promotion
   without explicit confirmation
@@ -158,7 +158,7 @@ must deliver and their current status:
 - **Fleet observability** — per-service exporters beyond PostgreSQL and
   Redis, and alert rules spanning more than one host
 - **PostgreSQL high availability** — a declared replication, failover, and
-  point-in-time-recovery formation (M11 on the roadmap)
+  point-in-time recovery (M13) and failover formation (M14 on the roadmap)
 
 ## Status
 
