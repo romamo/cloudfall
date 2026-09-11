@@ -269,3 +269,27 @@ human involvement; see the
 [M9 proving-run report](docs/proving-runs/2026-09-10-hetzner-m9.md). An
 externally killed execution also demonstrated crash consistency: the
 receipt stayed truthfully open and the next autonomy pass completed it.
+
+## M10 — Prove the untested promises: restore drill and real alerting
+
+Two capabilities exist in code and receipts but have never run against the
+world: the backup restore drill and alert delivery to a real destination.
+An unexercised restore path is not a tested one, and an alert that has only
+ever reached a loopback listener has not proven it can wake anyone. This
+milestone closes both gaps with the same discipline as every other claim.
+
+- **Exercised restore drill** — `cloudfall backup verify` run on a proving
+  host against a real scheduled dump: scratch-database restore, integrity
+  check, and a `BackupReceipt` proving the dump is restorable, not merely
+  present
+- **Scheduled drill** — the restore-check gains its own systemd timer so
+  restorability is verified continuously and audited like any other unit,
+  not only when someone remembers to ask
+- **Real alert channel** — a declared notification channel delivering to an
+  external destination (email end to end, or a webhook beyond loopback),
+  with the delivery itself receipted as evidence
+
+Exit: on a proving host, a scheduled backup is restore-verified by the
+timer-driven drill with a schema-valid `BackupReceipt`, and an induced
+failure produces an alert that arrives at a real external destination —
+both trails visible in `cloudfall audit` alongside everything else.
