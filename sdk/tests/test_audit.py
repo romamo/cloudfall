@@ -413,3 +413,95 @@ def test_audit_cli_emits_json_and_compliance_exit_code(
     assert exit_code == 0
     assert json.loads(captured.out)["status"] == "compliant"
     assert captured.err == ""
+
+
+def _environment_evidence(sha256: str | None, *, exists: bool = True) -> dict:
+    return {
+        "component": "crm-backend",
+        "path": "/srv/apps/crm/backend/shared/env/crm-backend.env",
+        "exists": exists,
+        "sha256": sha256,
+    }
+
+
+def _audit_with_receipts(
+    observation_directory: Path, receipts: dict[str, str]
+) -> AuditReport:
+    inventory = PlatformInventory.from_state(
+        validate_state(EXAMPLES, SCHEMAS)
+    )
+    observations = load_observations(observation_directory, SCHEMAS)
+    return audit_inventory(inventory, observations, receipts)
+
+
+def test_environment_file_matching_hash_is_compliant(tmp_path: Path) -> None:
+    expected = "a" * 64
+    observations = tmp_path / "observed"
+    shutil.copytree(COMPLIANT, observations)
+    h1 = observations / "h1.json"
+    content = json.loads(h1.read_text(encoding="utf-8"))
+    content["spec"]["componentEnvironment"] = [_environment_evidence(expected)]
+    h1.write_text(json.dumps(content), encoding="utf-8")
+
+    report = _audit_with_receipts(observations, {"crm-backend": expected})
+    h1_report = next(
+        server for server in report.servers if server.server_id == "h1"
+    )
+    check = next(
+        check
+        for check in h1_report.checks
+        if check.check == "environment.file[crm-backend]"
+    )
+
+    assert check.status is AuditStatus.COMPLIANT
+
+
+def test_environment_file_hash_mismatch_is_drift(tmp_path: Path) -> None:
+    observations = tmp_path / "observed"
+    shutil.copytree(COMPLIANT, observations)
+    h1 = observations / "h1.json"
+    content = json.loads(h1.read_text(encoding="utf-8"))
+    content["spec"]["componentEnvironment"] = [
+        _environment_evidence("b" * 64)
+    ]
+    h1.write_text(json.dumps(content), encoding="utf-8")
+
+    report = _audit_with_receipts(observations, {"crm-backend": "a" * 64})
+    h1_report = next(
+        server for server in report.servers if server.server_id == "h1"
+    )
+    check = next(
+        check
+        for check in h1_report.checks
+        if check.check == "environment.file[crm-backend]"
+    )
+
+    assert check.status is AuditStatus.DRIFT
+
+
+def test_environment_file_missing_evidence_is_drift(tmp_path: Path) -> None:
+    observations = tmp_path / "observed"
+    shutil.copytree(COMPLIANT, observations)
+
+    report = _audit_with_receipts(observations, {"crm-backend": "a" * 64})
+    h1_report = next(
+        server for server in report.servers if server.server_id == "h1"
+    )
+    check = next(
+        check
+        for check in h1_report.checks
+        if check.check == "environment.file[crm-backend]"
+    )
+
+    assert check.status is AuditStatus.DRIFT
+    assert check.observed is None
+
+
+def test_no_environment_receipts_means_no_environment_checks() -> None:
+    report = _audit(COMPLIANT)
+
+    for server in report.servers:
+        assert not any(
+            check.check.startswith("environment.file")
+            for check in server.checks
+        )

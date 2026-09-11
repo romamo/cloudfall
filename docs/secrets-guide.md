@@ -99,6 +99,16 @@ with `EnvironmentFile=`.
 A missing source fails fast with the exact expected path; a malformed line
 fails with its line number; an unreadable value never half-renders a file.
 
+## Drift detection
+
+Rendering writes an `EnvironmentReceipt` (component, content hash, key
+names) alongside the file, and the inspect run captures the hash of the
+env file actually installed on each server. `cloudfall audit` compares
+them: a tampered, stale, or missing installed file surfaces as
+`environment.file[<component>]` drift, and a render that was never
+deployed shows the same way. Components without a receipt are skipped —
+nothing rendered means nothing to compare.
+
 ## Through an agent
 
 `cloudfall-mcp` exposes `render_secrets` (started with `--secrets-dir` and

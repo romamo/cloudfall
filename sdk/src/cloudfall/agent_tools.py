@@ -63,6 +63,7 @@ from cloudfall.render_api import (
 from cloudfall.secrets import (
     SecretsError,
     SopsSecretProvider,
+    load_environment_receipts,
     render_environment,
 )
 from cloudfall.service_evidence import (
@@ -102,6 +103,7 @@ class AgentConfig:
     backups_directory: Path = Path("tmp/backups")
     secrets_directory: Path = Path("secrets")
     environment_directory: Path = Path("tmp/env")
+    environment_receipts_directory: Path = Path("tmp/env-receipts")
     proposals_directory: Path = Path("tmp/operator/proposals")
     gateway_ca_path: Path | None = None
     gateway_certificate_path: Path | None = None
@@ -152,7 +154,12 @@ class AgentToolset:
         except StateValidationError as error:
             return error.as_dict()
         report = audit_inventory(
-            PlatformInventory.from_state(state), observations
+            PlatformInventory.from_state(state),
+            observations,
+            load_environment_receipts(
+                self._config.environment_receipts_directory,
+                self._config.schema_directory,
+            ),
         )
         return report.as_dict()
 
@@ -528,6 +535,9 @@ class AgentToolset:
                 ),
                 self._config.environment_directory
                 / f"{component_id.value}.env",
+                receipt_directory=(
+                    self._config.environment_receipts_directory
+                ),
             )
         except (SecretsError, StateValidationError) as error:
             return error.as_dict()

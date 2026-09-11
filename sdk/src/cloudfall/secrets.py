@@ -10,15 +10,17 @@ surface.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 import shutil
 import subprocess
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, cast
 
 from cloudfall.inventory import PlatformInventory
-from cloudfall.validation import validate_state
+from cloudfall.validation import SchemaCatalog, validate_state
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -34,6 +36,7 @@ _ERROR_SOURCE_INVALID = "secrets_source_invalid"
 _ERROR_COMPONENT_UNKNOWN = "secrets_component_unknown"
 _ERROR_DECRYPT_FAILED = "secrets_decrypt_failed"
 _ERROR_KEY_CONFLICT = "secrets_key_conflict"
+_RECEIPT_SCHEMA = "environment-receipt.schema.json"
 _KEY_PATTERN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 _FILE_MODE = 0o600
 
@@ -101,6 +104,7 @@ def render_environment(
     component_id: ResourceId,
     provider: SopsSecretProvider,
     output_path: Path,
+    receipt_directory: Path | None = None,
 ) -> dict[str, object]:
     """Resolve a component's references into one 0600 environment file."""
     state = validate_state(context.state_directory, context.schema_directory)
@@ -133,15 +137,73 @@ def render_environment(
     with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
         handle.write(content)
     output_path.chmod(_FILE_MODE)
-    return {
+    digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
+    envelope: dict[str, object] = {
         "status": "ok",
         "component": component_id.value,
         "environmentFile": str(output_path),
-        "sha256": hashlib.sha256(content.encode("utf-8")).hexdigest(),
+        "sha256": digest,
         "keys": sorted(merged),
         "declaredKeys": sorted(declared),
         "references": [reference.as_dict() for reference in references],
     }
+    if receipt_directory is not None:
+        envelope["receipt"] = str(
+            _write_receipt(
+                context, component_id, digest, sorted(merged),
+                receipt_directory,
+            )
+        )
+    return envelope
+
+
+def _write_receipt(
+    context: EngineContext,
+    component_id: ResourceId,
+    digest: str,
+    keys: list[str],
+    receipt_directory: Path,
+) -> Path:
+    document: dict[str, object] = {
+        "apiVersion": "cloudfall/v1",
+        "kind": "EnvironmentReceipt",
+        "metadata": {
+            "id": component_id.value,
+            "description": "Rendered environment receipt",
+        },
+        "spec": {
+            "component": component_id.value,
+            "sha256": digest,
+            "renderedAt": datetime.now(UTC).isoformat(timespec="seconds"),
+            "keys": keys,
+        },
+    }
+    SchemaCatalog(context.schema_directory).validate_named(
+        _RECEIPT_SCHEMA, document
+    )
+    receipt_directory.mkdir(parents=True, exist_ok=True)
+    path = receipt_directory / f"{component_id.value}.json"
+    path.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
+def load_environment_receipts(
+    receipt_directory: Path, schema_directory: Path
+) -> dict[str, str]:
+    """Load rendered-environment hashes by component id."""
+    if not receipt_directory.is_dir():
+        return {}
+    catalog = SchemaCatalog(schema_directory)
+    hashes: dict[str, str] = {}
+    for path in sorted(receipt_directory.glob("*.json")):
+        document = cast(
+            "dict[str, object]",
+            json.loads(path.read_text(encoding="utf-8")),
+        )
+        catalog.validate_named(_RECEIPT_SCHEMA, document)
+        spec = cast("dict[str, object]", document["spec"])
+        hashes[cast("str", spec["component"])] = cast("str", spec["sha256"])
+    return hashes
 
 
 def _declared_component(

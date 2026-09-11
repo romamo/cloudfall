@@ -494,6 +494,40 @@
           ],
           "additionalProperties": false
         },
+        "componentEnvironment": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "component": {
+                "$ref": "common.schema.json#/$defs/resourceId"
+              },
+              "path": {
+                "$ref": "common.schema.json#/$defs/absolutePath"
+              },
+              "exists": {
+                "type": "boolean"
+              },
+              "sha256": {
+                "anyOf": [
+                  {
+                    "$ref": "common.schema.json#/$defs/sha256"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "component",
+              "path",
+              "exists",
+              "sha256"
+            ],
+            "additionalProperties": false
+          }
+        },
         "alerting": {
           "type": "object",
           "properties": {

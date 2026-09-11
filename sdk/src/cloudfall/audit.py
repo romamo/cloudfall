@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from cloudfall.domain import ResourceId
     from cloudfall.inventory import (
         AlertRuleInventory,
+        ComponentInventory,
         ConfigurationFileRequirement,
         FirewallRequirement,
         HostProfileInventory,
@@ -122,9 +123,12 @@ class AuditReport:
 
 
 def audit_inventory(
-    inventory: PlatformInventory, observations: ObservationSet
+    inventory: PlatformInventory,
+    observations: ObservationSet,
+    environment_receipts: Mapping[str, str] | None = None,
 ) -> AuditReport:
     """Audit every desired server against its validated observation."""
+    receipts = environment_receipts if environment_receipts is not None else {}
     stacks_by_backend = {
         stack.backend.server_id: stack for stack in inventory.logging_stacks
     }
@@ -138,6 +142,12 @@ def audit_inventory(
                 if service.server_id == server.resource_id
             ),
             _alert_rules_for_backend(server, stacks_by_backend, inventory),
+            tuple(
+                component
+                for component in inventory.components
+                if server.resource_id in component.server_ids
+            ),
+            receipts,
             observations.for_server(server.resource_id),
         )
         for server in inventory.servers
@@ -157,11 +167,13 @@ def audit_inventory(
     )
 
 
-def _audit_server(
+def _audit_server(  # noqa: PLR0913 - one audit, many evidence sources.
     server: ServerInventory,
     profile: HostProfileInventory,
     services: tuple[ServiceInventory, ...],
     alert_rules: tuple[AlertRuleInventory, ...],
+    components: tuple[ComponentInventory, ...],
+    environment_receipts: Mapping[str, str],
     snapshot: ObservedServerSnapshot | None,
 ) -> ServerAudit:
     if snapshot is None:
@@ -200,6 +212,11 @@ def _audit_server(
         checks.extend(_audit_firewall(server, profile.firewall, snapshot))
     checks.extend(_audit_service_binds(services, snapshot))
     checks.extend(_audit_alert_rules(alert_rules, snapshot))
+    checks.extend(
+        _audit_component_environment(
+            components, environment_receipts, snapshot
+        )
+    )
     checks.extend(_audit_configuration(profile, snapshot))
     return ServerAudit(
         server_id=server.resource_id.value,
@@ -691,6 +708,52 @@ def _observed_alert_rules(
                 "loaded": True,
             }
     return observed
+
+
+def _audit_component_environment(
+    components: tuple[ComponentInventory, ...],
+    environment_receipts: Mapping[str, str],
+    snapshot: ObservedServerSnapshot,
+) -> tuple[AuditCheck, ...]:
+    audited = tuple(
+        component
+        for component in components
+        if component.resource_id.value in environment_receipts
+    )
+    if not audited:
+        return ()
+    observed_entries = {
+        str(entry.get("component")): entry
+        for entry in _mapping_values_sequence(
+            snapshot.spec.get("componentEnvironment")
+        )
+    }
+    checks: list[AuditCheck] = []
+    for component in audited:
+        expected = environment_receipts[component.resource_id.value]
+        entry = observed_entries.get(component.resource_id.value)
+        observed = (
+            {
+                "exists": entry.get("exists"),
+                "sha256": entry.get("sha256"),
+            }
+            if entry is not None
+            else None
+        )
+        matches = (
+            entry is not None
+            and entry.get("exists") is True
+            and entry.get("sha256") == expected
+        )
+        checks.append(
+            _comparison(
+                f"environment.file[{component.resource_id.value}]",
+                {"exists": True, "sha256": expected},
+                observed,
+                matches=matches,
+            )
+        )
+    return tuple(checks)
 
 
 def _audit_configuration(

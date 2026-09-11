@@ -527,7 +527,44 @@
               )
               else none
             }}
+        componentEnvironment: >-
+          {{ cloudfall_inspect_component_environment | default([]) }}
         configuration: "{{ cloudfall_inspect_configuration }}"
+
+- name: Capture component environment file evidence
+  ansible.builtin.stat:
+    path: >-
+      {{ cloudfall_inspect_component_item.install_root }}/shared/env/{{
+        cloudfall_inspect_component_item.id
+      }}.env
+    checksum_algorithm: sha256
+  loop: "{{ cloudfall_inspect_components }}"
+  loop_control:
+    loop_var: cloudfall_inspect_component_item
+    label: "{{ cloudfall_inspect_component_item.id }}"
+  register: cloudfall_inspect_component_env
+
+- name: Normalize component environment evidence
+  ansible.builtin.set_fact:
+    cloudfall_inspect_component_environment: >-
+      {{
+        cloudfall_inspect_component_environment | default([]) + [{
+          'component':
+            cloudfall_inspect_env_result.cloudfall_inspect_component_item.id,
+          'path':
+            cloudfall_inspect_env_result.cloudfall_inspect_component_item
+              .install_root ~ '/shared/env/'
+            ~ cloudfall_inspect_env_result.cloudfall_inspect_component_item.id
+            ~ '.env',
+          'exists': cloudfall_inspect_env_result.stat.exists,
+          'sha256': cloudfall_inspect_env_result.stat.checksum | default(none),
+        }]
+      }}
+  loop: "{{ cloudfall_inspect_component_env.results | default([]) }}"
+  loop_control:
+    loop_var: cloudfall_inspect_env_result
+    label: >-
+      {{ cloudfall_inspect_env_result.cloudfall_inspect_component_item.id }}
 
 - name: Collect Prometheus alert rule evidence
   ansible.builtin.uri:

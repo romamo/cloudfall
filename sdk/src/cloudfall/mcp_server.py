@@ -527,6 +527,12 @@ def _parser() -> argparse.ArgumentParser:
         help="rendered environment file directory (default: %(default)s)",
     )
     parser.add_argument(
+        "--env-receipts",
+        type=Path,
+        default=Path("tmp/env-receipts"),
+        help="rendered environment receipt directory (default: %(default)s)",
+    )
+    parser.add_argument(
         "--backups",
         type=Path,
         default=Path("tmp/backups"),
@@ -578,6 +584,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         backups_directory=Path(arguments.backups),
         secrets_directory=Path(arguments.secrets_dir),
         environment_directory=Path(arguments.env_dir),
+        environment_receipts_directory=Path(arguments.env_receipts),
         proposals_directory=Path(arguments.proposals),
         gateway_ca_path=arguments.gateway_ca,
         gateway_certificate_path=arguments.gateway_cert,

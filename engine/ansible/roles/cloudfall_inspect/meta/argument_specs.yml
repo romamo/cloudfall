@@ -18,3 +18,7 @@ argument_specs:
       cloudfall_inspect_logging_backend:
         type: dict
         default: {}
+      cloudfall_inspect_components:
+        type: list
+        elements: dict
+        default: []

@@ -75,6 +75,7 @@ from cloudfall.render_api import (
 from cloudfall.secrets import (
     SecretsError,
     SopsSecretProvider,
+    load_environment_receipts,
     render_environment,
 )
 from cloudfall.service_evidence import (
@@ -141,6 +142,15 @@ def _parser() -> argparse.ArgumentParser:
         type=Path,
         required=True,
         help="directory containing observed-server JSON snapshots",
+    )
+    audit_parser.add_argument(
+        "--env-receipts",
+        type=Path,
+        default=Path("tmp/env-receipts"),
+        help=(
+            "rendered environment receipt directory used for env-file "
+            "drift checks (default: tmp/env-receipts)"
+        ),
     )
 
     _add_operator_parsers(commands)
@@ -708,6 +718,14 @@ def _add_secrets_parsers(
         ),
     )
     render_parser.add_argument(
+        "--receipts",
+        type=Path,
+        default=Path("tmp/env-receipts"),
+        help=(
+            "environment receipt directory (default: tmp/env-receipts)"
+        ),
+    )
+    render_parser.add_argument(
         "--engine",
         type=Path,
         default=Path("engine"),
@@ -931,7 +949,13 @@ def _run_audit(
     arguments: Namespace, state: ValidatedState, schema_directory: Path
 ) -> int:
     observations = load_observations(Path(arguments.observed), schema_directory)
-    report = audit_inventory(PlatformInventory.from_state(state), observations)
+    report = audit_inventory(
+        PlatformInventory.from_state(state),
+        observations,
+        load_environment_receipts(
+            Path(arguments.env_receipts), schema_directory
+        ),
+    )
     _write_json(report.as_dict())
     if report.status is AuditStatus.COMPLIANT:
         return 0
@@ -954,6 +978,7 @@ def _run_secrets_render(
             ResourceId.from_boundary(arguments.component),
             SopsSecretProvider(secrets_directory=Path(arguments.secrets_dir)),
             output,
+            receipt_directory=Path(arguments.receipts),
         )
     except SecretsError as error:
         sys.stderr.write(f"{json.dumps(error.as_dict(), sort_keys=True)}\n")
