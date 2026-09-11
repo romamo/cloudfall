@@ -262,3 +262,53 @@ def test_cli_render_api_reports_missing_key_file(
     captured = capsys.readouterr()
     assert exit_code == 2
     assert "render_api_key_missing" in captured.err
+
+
+def test_import_refuses_an_empty_workspace_with_a_structured_error(
+    tmp_path: Path,
+) -> None:
+    @dataclass
+    class EmptyClient:
+        """Workspace holding only an unimportable Docker service."""
+
+        def list_services(self) -> tuple[dict[str, object], ...]:
+            """Return one suspended Docker service."""
+            return (
+                {
+                    "id": "srv-docker",
+                    "name": "legacy",
+                    "type": "web_service",
+                    "suspended": "suspended",
+                    "serviceDetails": {"env": "docker"},
+                },
+            )
+
+        def list_env_vars(
+            self, _service_id: str
+        ) -> tuple[dict[str, object], ...]:
+            """Return no environment variables."""
+            return ()
+
+        def list_postgres(self) -> tuple[dict[str, object], ...]:
+            """Return no managed databases."""
+            return ()
+
+        def postgres_connection_strings(
+            self, _postgres_id: str
+        ) -> tuple[str, ...]:
+            """Return no connection strings."""
+            return ()
+
+    targets = ImportTargets(
+        project_id=ResourceId.from_boundary("legacy"),
+        server_id=ResourceId.from_boundary("h1"),
+        state_directory=tmp_path / "state",
+        environment_directory=tmp_path / "env",
+    )
+
+    with pytest.raises(RenderImportError) as caught:
+        import_render_api(EmptyClient(), targets, SCHEMAS)
+
+    assert caught.value.code == "render_import_empty"
+    assert "container runtimes" in str(caught.value)
+    assert not (tmp_path / "state").exists()

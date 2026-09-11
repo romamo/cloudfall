@@ -182,6 +182,19 @@ def import_render_mapping(
     for raw_service in _sequence(blueprint.get("services"), "services"):
         _import_service(_mapping(raw_service, "service"), targets, groups, state)
 
+    if not state.component_documents:
+        code = "render_import_empty"
+        reasons = "; ".join(
+            f"{gap.subject}: {gap.detail}" for gap in state.gaps
+        )
+        message = (
+            "no importable services were found, so there is nothing to "
+            f"migrate; every exclusion is explained by a gap: {reasons}"
+            if reasons
+            else "no services were found to import"
+        )
+        raise RenderImportError(code, message)
+
     service_documents = _import_databases(blueprint, targets, state)
     project_document = _project_document(targets, state)
 
