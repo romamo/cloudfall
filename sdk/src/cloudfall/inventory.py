@@ -662,6 +662,7 @@ class ServiceBackup:
     directory: AbsolutePath
     on_calendar: SystemdCalendar
     retention_days: PositiveCount
+    restore_check_on_calendar: SystemdCalendar | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -692,6 +693,15 @@ class ServiceInventory:
 
     def as_dict(self) -> dict[str, object]:
         """Serialize the service without secret material."""
+        backup: dict[str, object] = {
+            "directory": self.backup.directory.value,
+            "onCalendar": self.backup.on_calendar.value,
+            "retentionDays": self.backup.retention_days.value,
+        }
+        if self.backup.restore_check_on_calendar is not None:
+            backup["restoreCheckOnCalendar"] = (
+                self.backup.restore_check_on_calendar.value
+            )
         result: dict[str, object] = {
             "id": self.resource_id.value,
             "serviceKind": self.service_kind.value,
@@ -701,11 +711,7 @@ class ServiceInventory:
                 "address": self.bind.address.value,
                 "port": self.bind.port.value,
             },
-            "backup": {
-                "directory": self.backup.directory.value,
-                "onCalendar": self.backup.on_calendar.value,
-                "retentionDays": self.backup.retention_days.value,
-            },
+            "backup": backup,
         }
         if self.postgresql is not None:
             postgresql: dict[str, object] = {
@@ -1643,6 +1649,13 @@ def _service_inventory(
             on_calendar=SystemdCalendar.from_boundary(backup.get("onCalendar")),
             retention_days=PositiveCount.from_boundary(
                 backup.get("retentionDays")
+            ),
+            restore_check_on_calendar=(
+                SystemdCalendar.from_boundary(
+                    backup["restoreCheckOnCalendar"]
+                )
+                if "restoreCheckOnCalendar" in backup
+                else None
             ),
         ),
         metrics_enabled=_service_metrics_enabled(spec, document),

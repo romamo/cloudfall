@@ -6,6 +6,14 @@ Notable changes to Cloudfall. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Timer-driven restore drill: an optional `backup.restoreCheckOnCalendar`
+  schedule installs an audited restore-check service and timer for
+  PostgreSQL and Redis, so backup restorability is verified continuously
+  (M10; proven live on 2026-09-11 together with alert delivery to an
+  external destination)
+
 ### Changed
 
 - **Breaking: common-vocabulary rename across schemas, CLI, and layout.**

@@ -278,21 +278,32 @@ An unexercised restore path is not a tested one, and an alert that has only
 ever reached a loopback listener has not proven it can wake anyone. This
 milestone closes both gaps with the same discipline as every other claim.
 
-- **Exercised restore drill** — `cloudfall backup verify` run on a proving
+- **Exercised restore drill** ✔ — `cloudfall backup verify` run on a proving
   host against a real scheduled dump: scratch-database restore, integrity
   check, and a `BackupReceipt` proving the dump is restorable, not merely
   present
-- **Scheduled drill** — the restore-check gains its own systemd timer so
-  restorability is verified continuously and audited like any other unit,
-  not only when someone remembers to ask
-- **Real alert channel** — a declared notification channel delivering to an
-  external destination (email end to end, or a webhook beyond loopback),
-  with the delivery itself receipted as evidence
+- **Scheduled drill** ✔ — the restore-check gains its own systemd timer
+  (declared as `backup.restoreCheckOnCalendar`, implemented for PostgreSQL
+  and Redis) so restorability is verified continuously and audited like any
+  other unit, not only when someone remembers to ask
+- **Real alert channel** ✔ — a declared webhook receiver delivering beyond
+  loopback, with the delivery captured as evidence; the email config path
+  stays covered by template tests only
 
 Exit: on a proving host, a scheduled backup is restore-verified by the
 timer-driven drill with a schema-valid `BackupReceipt`, and an induced
 failure produces an alert that arrives at a real external destination —
 both trails visible in `cloudfall audit` alongside everything else.
+**Met on 2026-09-11** on a disposable Hetzner Cloud Debian 13 pair: the
+drill timer's own unit restored the newest dump of a seeded database into a
+scratch database (420 catalog relations) with a schema-valid
+`BackupReceipt`, both timers audited as required units in a 21/21-compliant
+baseline, and the induced PostgreSQL failure delivered its full firing
+payload to a second machine across the public network at T0+113 s — see the
+[M10 proving-run report](docs/proving-runs/2026-09-11-hetzner-m10.md). The
+run caught and fixed a real bug (the typed inventory silently dropped the
+new drill schedule, so no timer was installed until the audit's
+required-unit check exposed it), which is the point of proving runs.
 
 ## M11 — Fleet density: enforced resource sharing
 

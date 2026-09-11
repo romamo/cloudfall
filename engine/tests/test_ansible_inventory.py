@@ -134,6 +134,7 @@ def test_inventory_renders_ansible_host_variables() -> None:
                 "backup": {
                     "directory": "/var/backups/cloudfall/postgresql-main",
                     "onCalendar": "*-*-* 02:00:00 UTC",
+                    "restoreCheckOnCalendar": "*-*-* 05:00:00 UTC",
                     "retentionDays": 14,
                 },
                 "metrics": {"enabled": True},
@@ -148,6 +149,7 @@ def test_inventory_renders_ansible_host_variables() -> None:
                 "backup": {
                     "directory": "/var/backups/cloudfall/redis-cache",
                     "onCalendar": "*-*-* 03:00:00 UTC",
+                    "restoreCheckOnCalendar": "*-*-* 05:30:00 UTC",
                     "retentionDays": 7,
                 },
                 "metrics": {"enabled": True},

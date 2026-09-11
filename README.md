@@ -23,10 +23,12 @@ server. The principles behind the project are in the
 > followed: an induced failure raised a declared alert as evidence, the
 > propose-mode operator remediated it with a single human approval, and a
 > second identical failure was remediated autonomously under declared
-> policy (see the [proving-run reports](docs/proving-runs/)). Not yet
-> exercised live: the backup restore drill, alert delivery to an external
-> destination, and bare-metal RAID/storage provisioning (see the
-> [roadmap](ROADMAP.md))
+> policy. On 2026-09-11 the untested promises followed: a timer-driven
+> restore drill proved a real backup restorable with a schema-valid
+> receipt, and an induced failure delivered its alert to a separate
+> machine across the public network (see the
+> [proving-run reports](docs/proving-runs/)). Not yet exercised live:
+> bare-metal RAID/storage provisioning (see the [roadmap](ROADMAP.md))
 
 ## Why Cloudfall
 
@@ -75,16 +77,15 @@ rollback, sops/age secret rendering, receipted backup and restore-proof
 commands, the `cloudfall-mcp` server, blueprint and live-API Render
 importers, the resumable `cloudfall migrate` orchestrator with explicit
 cutover steps, and the always-on operator with receipted proposals and
-policy-bounded autonomy. All of it has been validated live on disposable
-Debian targets except two paths: the backup restore drill and alert
-delivery to an external destination, which milestone M10 exists to close
-(see the [proving-run reports](docs/proving-runs/)). Next up: the M10
-proving run, then the fleet-density track — enforced resource sharing
-(M11), application mobility with node drain (M12), PostgreSQL
-point-in-time recovery and scale readiness (M13), and the demand-gated
-failover formation (M14) — alongside broader catalog breadth and
-bare-metal storage provisioning. See the [roadmap](ROADMAP.md) for the
-milestone plan.
+policy-bounded autonomy, and the timer-driven restore drill with external
+alert delivery. Every implemented layer has been validated live on
+disposable Debian targets except bare-metal RAID/storage provisioning
+(see the [proving-run reports](docs/proving-runs/)). Next up: the
+fleet-density track — enforced resource sharing (M11), application
+mobility with node drain (M12), PostgreSQL point-in-time recovery and
+scale readiness (M13), and the demand-gated failover formation (M14) —
+alongside broader catalog breadth and bare-metal storage provisioning.
+See the [roadmap](ROADMAP.md) for the milestone plan.
 
 ## Quickstart
 
