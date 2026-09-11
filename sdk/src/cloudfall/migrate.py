@@ -287,7 +287,7 @@ def _require_known_databases(
     declared_databases = {
         database.name.value
         for service in inventory.services
-        if service.service_kind.value == "postgresql"
+        if service.postgresql is not None
         for database in service.postgresql.databases
     }
     unknown = sorted(set(options.data_migrations) - declared_databases)
@@ -474,7 +474,7 @@ def _data_runner(
         service = next(
             service
             for service in inventory.services
-            if service.service_kind.value == "postgresql"
+            if service.postgresql is not None
             and any(
                 entry.name.value == database
                 for entry in service.postgresql.databases

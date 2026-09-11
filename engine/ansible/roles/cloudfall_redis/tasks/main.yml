@@ -1,0 +1,122 @@
+---
+- name: Validate Redis service target and declaration
+  ansible.builtin.assert:
+    that:
+      - ansible_facts["distribution"] == "Debian"
+      - ansible_facts["service_mgr"] == "systemd"
+      - cloudfall_redis_service.serviceKind == "redis"
+      - cloudfall_redis_service.server == cloudfall_server_id
+      - cloudfall_redis_service.bind.address == "127.0.0.1"
+    fail_msg: >-
+      Redis deployment requires its declared Debian server and a
+      loopback-only bind address
+
+- name: Validate the declared backup calendar expression
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/systemd-analyze
+      - calendar
+      - "{{ cloudfall_redis_service.backup.onCalendar }}"
+  changed_when: false
+
+- name: Install the pinned Redis server
+  ansible.builtin.apt:
+    name: >-
+      {{
+        'redis-server=' ~ cloudfall_redis_service.redis.packageVersion
+        if 'packageVersion' in cloudfall_redis_service.redis
+        else 'redis-server'
+      }}
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+    policy_rc_d: 101
+
+- name: Install the managed Redis configuration
+  ansible.builtin.template:
+    src: cloudfall.conf.j2
+    dest: /etc/redis/cloudfall.conf
+    owner: redis
+    group: redis
+    mode: "0640"
+  notify: Restart Redis
+
+- name: Include the managed configuration from the distribution config
+  ansible.builtin.blockinfile:
+    path: /etc/redis/redis.conf
+    marker: "# {mark} CLOUDFALL MANAGED"
+    append_newline: true
+    prepend_newline: true
+    block: include /etc/redis/cloudfall.conf
+  notify: Restart Redis
+
+- name: Enable and start the Redis server
+  ansible.builtin.systemd_service:
+    name: redis-server.service
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Apply the validated Redis configuration
+  ansible.builtin.meta: flush_handlers
+
+- name: Wait for Redis readiness
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/redis-cli
+      - -p
+      - "{{ cloudfall_redis_service.bind.port }}"
+      - ping
+  register: cloudfall_redis_readiness
+  changed_when: false
+  retries: 12
+  delay: 5
+  until: cloudfall_redis_readiness.stdout == "PONG"
+  when: not ansible_check_mode
+
+- name: Create the backup directory
+  ansible.builtin.file:
+    path: "{{ cloudfall_redis_service.backup.directory }}"
+    state: directory
+    owner: redis
+    group: redis
+    mode: "0700"
+
+- name: Install the backup script
+  ansible.builtin.template:
+    src: backup.sh.j2
+    dest: /usr/local/sbin/cloudfall-redis-backup
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the restore-check script
+  ansible.builtin.template:
+    src: restore-check.sh.j2
+    dest: /usr/local/sbin/cloudfall-redis-restore-check
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the backup service unit
+  ansible.builtin.template:
+    src: backup.service.j2
+    dest: /etc/systemd/system/cloudfall-redis-backup.service
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Install the backup timer unit
+  ansible.builtin.template:
+    src: backup.timer.j2
+    dest: /etc/systemd/system/cloudfall-redis-backup.timer
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Enable the backup timer
+  ansible.builtin.systemd_service:
+    name: cloudfall-redis-backup.timer
+    enabled: true
+    state: started
+    daemon_reload: true

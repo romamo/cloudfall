@@ -32,7 +32,10 @@
       "type": "object",
       "properties": {
         "serviceKind": {
-          "const": "postgresql"
+          "enum": [
+            "postgresql",
+            "redis"
+          ]
         },
         "environment": {
           "$ref": "common.schema.json#/$defs/resourceId"
@@ -120,6 +123,29 @@
           ],
           "additionalProperties": false
         },
+        "redis": {
+          "type": "object",
+          "properties": {
+            "packageVersion": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "maxmemoryMb": {
+              "type": "integer",
+              "minimum": 16,
+              "maximum": 1048576
+            },
+            "appendOnly": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "maxmemoryMb",
+            "appendOnly"
+          ],
+          "additionalProperties": false
+        },
         "metrics": {
           "type": "object",
           "properties": {
@@ -138,10 +164,49 @@
         "environment",
         "server",
         "bind",
-        "postgresql",
         "backup"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "serviceKind": {
+                "const": "postgresql"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "postgresql"
+            ],
+            "not": {
+              "required": [
+                "redis"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "serviceKind": {
+                "const": "redis"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "redis"
+            ],
+            "not": {
+              "required": [
+                "postgresql"
+              ]
+            }
+          }
+        }
+      ]
     }
   },
   "required": [

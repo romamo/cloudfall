@@ -1,0 +1,22 @@
+---
+apiVersion: cloudfall/v1
+kind: Service
+metadata:
+  id: redis-cache
+  description: Example loopback Redis cache with declared metrics
+spec:
+  serviceKind: redis
+  environment: production
+  server: h1
+  bind:
+    address: 127.0.0.1
+    port: 6379
+  redis:
+    maxmemoryMb: 256
+    appendOnly: true
+  backup:
+    directory: /var/backups/cloudfall/redis-cache
+    onCalendar: "*-*-* 03:00:00 UTC"
+    retentionDays: 7
+  metrics:
+    enabled: true

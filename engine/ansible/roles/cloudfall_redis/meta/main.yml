@@ -1,0 +1,13 @@
+---
+galaxy_info:
+  role_name: cloudfall_redis
+  author: cloudfall
+  description: Converge one declared loopback Redis service
+  license: AGPL-3.0-or-later
+  min_ansible_version: "2.16"
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+        - trixie
+dependencies: []

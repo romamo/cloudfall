@@ -20,3 +20,18 @@
       loop_control:
         loop_var: cloudfall_service_item
         label: "{{ cloudfall_service_item.id }}"
+
+    - name: Deploy declared Redis services
+      ansible.builtin.include_role:
+        name: cloudfall_redis
+      vars:
+        cloudfall_redis_service: "{{ cloudfall_service_item }}"
+      loop: >-
+        {{
+          cloudfall_services | default([])
+          | selectattr('serviceKind', 'equalto', 'redis')
+          | list
+        }}
+      loop_control:
+        loop_var: cloudfall_service_item
+        label: "{{ cloudfall_service_item.id }}"

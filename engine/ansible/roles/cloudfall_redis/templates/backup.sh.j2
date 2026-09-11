@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Managed by Cloudfall. Local changes will be overwritten.
+set -euo pipefail
+
+backup_directory="{{ cloudfall_redis_service.backup.directory }}"
+port="{{ cloudfall_redis_service.bind.port }}"
+retention_days="{{ cloudfall_redis_service.backup.retentionDays }}"
+timestamp="$(date --utc +%Y%m%dT%H%M%SZ)"
+
+redis-cli -p "${port}" --rdb "${backup_directory}/redis-${timestamp}.rdb" \
+  > /dev/null
+
+find "${backup_directory}" -name 'redis-*.rdb' -type f \
+  -mtime "+${retention_days}" -delete

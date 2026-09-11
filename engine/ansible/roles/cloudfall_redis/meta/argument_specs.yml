@@ -1,0 +1,66 @@
+---
+argument_specs:
+  main:
+    short_description: Converge one declared Redis service
+    options:
+      cloudfall_redis_service:
+        type: dict
+        required: true
+        options:
+          id:
+            type: str
+            required: true
+          serviceKind:
+            type: str
+            choices:
+              - redis
+            required: true
+          environment:
+            type: str
+            required: true
+          server:
+            type: str
+            required: true
+          bind:
+            type: dict
+            required: true
+            options:
+              address:
+                type: str
+                choices:
+                  - 127.0.0.1
+                required: true
+              port:
+                type: int
+                required: true
+          redis:
+            type: dict
+            required: true
+            options:
+              packageVersion:
+                type: str
+              maxmemoryMb:
+                type: int
+                required: true
+              appendOnly:
+                type: bool
+                required: true
+          backup:
+            type: dict
+            required: true
+            options:
+              directory:
+                type: path
+                required: true
+              onCalendar:
+                type: str
+                required: true
+              retentionDays:
+                type: int
+                required: true
+          metrics:
+            type: dict
+            options:
+              enabled:
+                type: bool
+                required: true

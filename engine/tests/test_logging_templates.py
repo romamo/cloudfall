@@ -28,7 +28,7 @@ def _logging_stack() -> dict[str, object]:
 
 def _services() -> list[dict[str, object]]:
     inventory = PlatformInventory.from_state(validate_state(EXAMPLES, SCHEMAS))
-    assert len(inventory.services) == 1
+    assert len(inventory.services) == 2
     return [service.as_dict() for service in inventory.services]
 
 
@@ -270,6 +270,13 @@ def test_collector_template_renders_postgres_exporter_for_declared_metrics() -> 
         in rendered
     )
     assert 'replacement  = "postgresql-main"' in rendered
+    assert 'prometheus.exporter.redis "redis_cache"' in rendered
+    assert 'redis_addr = "127.0.0.1:6379"' in rendered
+    assert (
+        "targets         = prometheus.exporter.redis.redis_cache.targets"
+        in rendered
+    )
+    assert 'replacement  = "redis-cache"' in rendered
     assert "password" not in rendered
 
 
@@ -290,3 +297,4 @@ def test_collector_template_skips_postgres_exporter_without_metrics() -> None:
     )
 
     assert "prometheus.exporter.postgres" not in rendered
+    assert "prometheus.exporter.redis" not in rendered

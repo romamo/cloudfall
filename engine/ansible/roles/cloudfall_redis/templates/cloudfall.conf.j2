@@ -1,0 +1,6 @@
+# Managed by Cloudfall. Local changes will be overwritten.
+bind {{ cloudfall_redis_service.bind.address }}
+port {{ cloudfall_redis_service.bind.port }}
+protected-mode yes
+maxmemory {{ cloudfall_redis_service.redis.maxmemoryMb }}mb
+appendonly {{ 'yes' if cloudfall_redis_service.redis.appendOnly else 'no' }}

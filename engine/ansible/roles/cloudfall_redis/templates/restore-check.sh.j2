@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Managed by Cloudfall. Local changes will be overwritten.
+# Verifies the newest RDB snapshot is structurally restorable.
+set -euo pipefail
+
+backup_directory="{{ cloudfall_redis_service.backup.directory }}"
+
+latest="$(find "${backup_directory}" -name 'redis-*.rdb' -type f \
+  | sort | tail -n 1)"
+if [ -z "${latest}" ]; then
+  echo "no backup found for {{ cloudfall_redis_service.id }}" >&2
+  exit 1
+fi
+redis-check-rdb "${latest}"
+echo "restore check passed for {{ cloudfall_redis_service.id }}: ${latest}"

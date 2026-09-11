@@ -543,9 +543,11 @@ def migrate_data(
 ) -> dict[str, object]:
     """Dump one external database and restore it into a declared service."""
     service = _postgresql_service(context, service_id)
-    declared = {
-        entry.name.value for entry in service.postgresql.databases
-    }
+    postgresql = service.postgresql
+    if postgresql is None:
+        detail = f"service {service_id} has no PostgreSQL contract"
+        raise LifecycleError(_ERROR_SERVICE_MISSING, detail)
+    declared = {entry.name.value for entry in postgresql.databases}
     if database not in declared:
         detail = (
             f"database {database!r} is not declared on service "
@@ -592,7 +594,7 @@ def _postgresql_service(
         ),
         None,
     )
-    if service is None or service.service_kind.value != "postgresql":
+    if service is None or service.postgresql is None:
         detail = (
             f"declared PostgreSQL service does not exist: {service_id}"
         )

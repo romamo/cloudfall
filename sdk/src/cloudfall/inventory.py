@@ -623,6 +623,15 @@ class PostgresqlService:
 
 
 @dataclass(frozen=True, slots=True)
+class RedisService:
+    """Redis-specific service contract."""
+
+    package_version: PackageVersion | None
+    maxmemory_mb: PositiveCount
+    append_only: bool
+
+
+@dataclass(frozen=True, slots=True)
 class ServiceBackup:
     """Scheduled dump-and-prune backup contract."""
 
@@ -640,20 +649,25 @@ class ServiceInventory:
     environment: ResourceId
     server_id: ResourceId
     bind: ServiceBind
-    postgresql: PostgresqlService
+    postgresql: PostgresqlService | None
+    redis: RedisService | None
     backup: ServiceBackup
     metrics_enabled: bool
 
+    def __post_init__(self) -> None:
+        """Reject services whose payload contradicts the declared kind."""
+        expected_postgresql = self.service_kind is ServiceKind.POSTGRESQL
+        if (self.postgresql is not None) is not expected_postgresql or (
+            self.redis is not None
+        ) is not (self.service_kind is ServiceKind.REDIS):
+            message = (
+                "service payload does not match its declared kind: "
+                f"{self.resource_id.value}"
+            )
+            raise ValueError(message)
+
     def as_dict(self) -> dict[str, object]:
         """Serialize the service without secret material."""
-        postgresql: dict[str, object] = {
-            "majorVersion": self.postgresql.major_version.value,
-            "databases": [
-                database.as_dict() for database in self.postgresql.databases
-            ],
-        }
-        if self.postgresql.package_version is not None:
-            postgresql["packageVersion"] = self.postgresql.package_version.value
         result: dict[str, object] = {
             "id": self.resource_id.value,
             "serviceKind": self.service_kind.value,
@@ -663,13 +677,33 @@ class ServiceInventory:
                 "address": self.bind.address.value,
                 "port": self.bind.port.value,
             },
-            "postgresql": postgresql,
             "backup": {
                 "directory": self.backup.directory.value,
                 "onCalendar": self.backup.on_calendar.value,
                 "retentionDays": self.backup.retention_days.value,
             },
         }
+        if self.postgresql is not None:
+            postgresql: dict[str, object] = {
+                "majorVersion": self.postgresql.major_version.value,
+                "databases": [
+                    database.as_dict()
+                    for database in self.postgresql.databases
+                ],
+            }
+            if self.postgresql.package_version is not None:
+                postgresql["packageVersion"] = (
+                    self.postgresql.package_version.value
+                )
+            result["postgresql"] = postgresql
+        if self.redis is not None:
+            redis: dict[str, object] = {
+                "maxmemoryMb": self.redis.maxmemory_mb.value,
+                "appendOnly": self.redis.append_only,
+            }
+            if self.redis.package_version is not None:
+                redis["packageVersion"] = self.redis.package_version.value
+            result["redis"] = redis
         if self.metrics_enabled:
             result["metrics"] = {"enabled": True}
         return result
@@ -1496,21 +1530,15 @@ def _service_inventory(
 ) -> ServiceInventory:
     spec = _mapping(document.content, "spec")
     bind = _mapping(spec, "bind")
-    postgresql = _mapping(spec, "postgresql")
     backup = _mapping(spec, "backup")
-    raw_package_version = postgresql.get("packageVersion")
-    return ServiceInventory(
-        resource_id=document.key.resource_id,
-        service_kind=ServiceKind.from_boundary(spec.get("serviceKind")),
-        environment=ResourceId.from_boundary(spec.get("environment")),
-        server_id=ResourceId.from_boundary(spec.get("server")),
-        bind=ServiceBind(
-            address=IpAddress.from_boundary(bind.get("address")),
-            port=TcpPort.from_boundary(bind.get("port")),
-        ),
-        postgresql=PostgresqlService(
+    service_kind = ServiceKind.from_boundary(spec.get("serviceKind"))
+    postgresql = None
+    if service_kind is ServiceKind.POSTGRESQL:
+        raw_postgresql = _mapping(spec, "postgresql")
+        raw_package_version = raw_postgresql.get("packageVersion")
+        postgresql = PostgresqlService(
             major_version=PostgresMajorVersion.from_boundary(
-                postgresql.get("majorVersion")
+                raw_postgresql.get("majorVersion")
             ),
             package_version=(
                 PackageVersion.from_boundary(raw_package_version)
@@ -1520,10 +1548,38 @@ def _service_inventory(
             databases=tuple(
                 _postgres_database(item, projects_by_id)
                 for item in _mapping_list(
-                    postgresql.get("databases"), "service databases"
+                    raw_postgresql.get("databases"), "service databases"
                 )
             ),
+        )
+    redis = None
+    if service_kind is ServiceKind.REDIS:
+        raw_redis = _mapping(spec, "redis")
+        raw_redis_package = raw_redis.get("packageVersion")
+        redis = RedisService(
+            package_version=(
+                PackageVersion.from_boundary(raw_redis_package)
+                if raw_redis_package is not None
+                else None
+            ),
+            maxmemory_mb=PositiveCount.from_boundary(
+                raw_redis.get("maxmemoryMb")
+            ),
+            append_only=_boolean(
+                raw_redis.get("appendOnly"), "redis append only"
+            ),
+        )
+    return ServiceInventory(
+        resource_id=document.key.resource_id,
+        service_kind=service_kind,
+        environment=ResourceId.from_boundary(spec.get("environment")),
+        server_id=ResourceId.from_boundary(spec.get("server")),
+        bind=ServiceBind(
+            address=IpAddress.from_boundary(bind.get("address")),
+            port=TcpPort.from_boundary(bind.get("port")),
         ),
+        postgresql=postgresql,
+        redis=redis,
         backup=ServiceBackup(
             directory=AbsolutePath.from_boundary(backup.get("directory")),
             on_calendar=SystemdCalendar.from_boundary(backup.get("onCalendar")),

@@ -120,16 +120,6 @@ def test_inventory_serialization_excludes_secret_references() -> None:
         "port": 8100,
     }
     assert domains[0]["tls"] == {"mode": "required"}
-    services = payload["services"]
-    assert isinstance(services, list)
-    assert len(services) == 1
-    assert services[0]["id"] == "postgresql-main"
-    assert services[0]["bind"] == {"address": "127.0.0.1", "port": 5432}
-    assert services[0]["postgresql"]["databases"] == [
-        {"name": "crm", "project": "crm", "owner": "crm"}
-    ]
-    assert "packageVersion" not in services[0]["postgresql"]
-    assert services[0]["metrics"] == {"enabled": True}
     assert len(ssh_public_keys) == 1
     assert ssh_public_keys[0]["id"] == "example-admin"
     assert ssh_public_keys[0]["algorithm"] == "ssh-rsa"
@@ -187,6 +177,26 @@ def test_inventory_serialization_excludes_secret_references() -> None:
     serialized = json.dumps(payload).lower()
     assert "private key" not in serialized
     assert "passwordvalue" not in serialized
+
+
+def test_inventory_serialization_covers_declared_services() -> None:
+    services = _inventory().as_dict()["services"]
+
+    assert isinstance(services, list)
+    assert len(services) == 2
+    assert services[0]["id"] == "postgresql-main"
+    assert services[0]["bind"] == {"address": "127.0.0.1", "port": 5432}
+    assert services[0]["postgresql"]["databases"] == [
+        {"name": "crm", "project": "crm", "owner": "crm"}
+    ]
+    assert "packageVersion" not in services[0]["postgresql"]
+    assert services[0]["metrics"] == {"enabled": True}
+    assert services[1]["id"] == "redis-cache"
+    assert services[1]["serviceKind"] == "redis"
+    assert services[1]["bind"] == {"address": "127.0.0.1", "port": 6379}
+    assert services[1]["redis"] == {"maxmemoryMb": 256, "appendOnly": True}
+    assert "postgresql" not in services[1]
+    assert services[1]["metrics"] == {"enabled": True}
 
 
 def test_inventory_cli_emits_structured_output(

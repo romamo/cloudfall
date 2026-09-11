@@ -137,6 +137,20 @@ def test_inventory_renders_ansible_host_variables() -> None:
                     "retentionDays": 14,
                 },
                 "metrics": {"enabled": True},
+            },
+            {
+                "id": "redis-cache",
+                "serviceKind": "redis",
+                "environment": "production",
+                "server": "h1",
+                "bind": {"address": "127.0.0.1", "port": 6379},
+                "redis": {"maxmemoryMb": 256, "appendOnly": True},
+                "backup": {
+                    "directory": "/var/backups/cloudfall/redis-cache",
+                    "onCalendar": "*-*-* 03:00:00 UTC",
+                    "retentionDays": 7,
+                },
+                "metrics": {"enabled": True},
             }
         ],
         "cloudfall_domains": [],

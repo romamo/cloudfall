@@ -541,6 +541,8 @@ def _validate_service_references(
         )
         raise StateValidationError(issue)
 
+    if spec.get("serviceKind") != "postgresql":
+        return
     postgresql = _required_mapping(spec, "postgresql", document.source)
     raw_databases = postgresql.get("databases")
     if not isinstance(raw_databases, list):

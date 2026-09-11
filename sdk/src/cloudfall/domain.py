@@ -544,6 +544,7 @@ class ServiceKind(StrEnum):
     """Infrastructure service kinds supported by Cloudfall v1."""
 
     POSTGRESQL = "postgresql"
+    REDIS = "redis"
 
     @classmethod
     def from_boundary(cls, value: object) -> ServiceKind:
