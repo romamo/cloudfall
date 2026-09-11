@@ -12,17 +12,20 @@ plan; the wedge use case is a migration from Render onto a Hetzner-class
 server. The principles behind the project are in the
 [manifesto](MANIFESTO.md).
 
-> **Every layer proven live.** On 2026-09-08 all five milestones ran on
-> disposable Hetzner Cloud Debian 13 servers: idempotent baseline, compliant
-> audits, host metrics through the mTLS logging stack, loopback PostgreSQL
-> with peer-auth databases, real Let's Encrypt certificates, health-gated
-> deploys with an automatic rollback of a bad release, and — for the full
-> wedge — an application actually hosted on Render, cut over with its data
-> and a real TTL-lowered DNS record flip on an owned domain, driven by an AI
-> agent through `cloudfall-mcp` alone, with the migrate plan pausing at DNS
-> verification and resuming to byte-identical responses from the Cloudfall
-> host (see the [proving-run reports](docs/proving-runs/)). Not yet
-> exercised: bare-metal RAID/storage provisioning (see the
+> **Every migration layer proven live.** On 2026-09-08 the full wedge ran
+> on disposable Hetzner Cloud Debian 13 servers: idempotent baseline,
+> compliant audits, host metrics through the mTLS logging stack, loopback
+> PostgreSQL with peer-auth databases, real Let's Encrypt certificates,
+> health-gated deploys with an automatic rollback of a bad release, and an
+> application actually hosted on Render, cut over with its data and a real
+> TTL-lowered DNS record flip on an owned domain, driven by an AI agent
+> through `cloudfall-mcp` alone. On 2026-09-10 the operations layer
+> followed: an induced failure raised a declared alert as evidence, the
+> propose-mode operator remediated it with a single human approval, and a
+> second identical failure was remediated autonomously under declared
+> policy (see the [proving-run reports](docs/proving-runs/)). Not yet
+> exercised live: the backup restore drill, alert delivery to an external
+> destination, and bare-metal RAID/storage provisioning (see the
 > [roadmap](ROADMAP.md))
 
 ## Why Cloudfall
@@ -64,16 +67,21 @@ full architecture and the long-term fleet vision.
 Cloudfall is pre-1.0. Implemented today: config validation, typed inventory,
 deterministic Ansible inventory rendering, read-only server inspection,
 config-versus-observed drift audit, a Debian bootstrap role, a UTC time
-baseline, an nftables firewall, a guarded Loki/Grafana/Alloy logging stack,
-an evidence-derived operations dashboard, a service catalog (PostgreSQL and
-Nginx/TLS sites), the health-gated deploy slice with artifact releases and
-symlink rollback, the `cloudfall-mcp` server, the `render.yaml` blueprint
-importer, and the resumable `cloudfall migrate` orchestrator. Every
-implemented layer has been validated live on disposable Debian targets (see
-the [proving-run reports](docs/proving-runs/)). Next up: broader catalog
-breadth (Redis, MySQL, Elasticsearch, Node runtimes), Render API import,
-an automated cutover generator, and bare-metal storage provisioning. See
-the [roadmap](ROADMAP.md) for the milestone plan.
+baseline, an nftables firewall, a guarded Loki/Grafana/Alloy logging stack
+with declared alert rules and notification channels, an evidence-derived
+operations dashboard, a service catalog (PostgreSQL, Redis, and Nginx/TLS
+sites), the health-gated deploy slice with artifact releases and symlink
+rollback, sops/age secret rendering, receipted backup and restore-proof
+commands, the `cloudfall-mcp` server, blueprint and live-API Render
+importers, the resumable `cloudfall migrate` orchestrator with explicit
+cutover steps, and the always-on operator with receipted proposals and
+policy-bounded autonomy. All of it has been validated live on disposable
+Debian targets except two paths: the backup restore drill and alert
+delivery to an external destination, which milestone M10 exists to close
+(see the [proving-run reports](docs/proving-runs/)). Next up: the M10
+proving run, broader catalog breadth (MySQL, Elasticsearch, RabbitMQ, Node
+runtimes), bare-metal storage provisioning, and PostgreSQL high
+availability (M11). See the [roadmap](ROADMAP.md) for the milestone plan.
 
 ## Quickstart
 
@@ -206,11 +214,24 @@ The server binds `127.0.0.1:8100` by default; set `DASHBOARD_HOST`,
 `DASHBOARD_PORT`, and `DASHBOARD_REFRESH` to override. The projection stays
 strictly read-only either way.
 
-## Logging and storage guides
+## Always-on operator
+
+The operator is the always-on half of Cloudfall: a process on the management
+host that watches declared alerts and audited drift, writes every diagnosis
+as a schema-validated proposal receipt, and executes only existing engine
+entry points — after an explicit approval, or autonomously for operation
+classes licensed by a declared `OperatorPolicy` and earned receipt history.
+DNS cutover, data deletion, and database promotion always require explicit
+confirmation. See the [operator guide](docs/operator-guide.md).
+
+## Logging, secrets, and storage guides
 
 - A guarded parallel logging slice deploys Loki, loopback-only Grafana, an
   mTLS ingestion gateway, and Alloy without touching legacy agents: see the
   [logging service guide](docs/logging-service-guide.md)
+- Declared secret references render into per-component `0600` environment
+  files from a sops/age-encrypted secrets directory: see the
+  [secrets guide](docs/secrets-guide.md)
 - New two-drive servers use a RAID1 system area plus independent storage
   tails: review the [hybrid storage design](docs/hybrid-storage-design.md)
   and the destructive, new-server-only

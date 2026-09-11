@@ -15,14 +15,17 @@ status without evidence, no compliance without audit.
 ## Control plane stack
 
 ```text
-Human → AI agent → CLI / Python API → Config (YAML) → Execution engine → Servers
+Human / AI agent ──edits──► Config (YAML)
+Human / AI agent ──runs───► CLI / Python API ──► Execution engine ──► Servers
 ```
 
-The agent operates against structured config through a stable CLI and Python
-API instead of inventing shell commands or discovering infrastructure over SSH.
-Every mutating operation goes through the engine's explicit playbook
-contracts and produces receipts; status is derived from validated
-observations, never inferred.
+The config is a store, not a pipeline stage: humans and agents edit it
+directly, the CLI validates and reads it, and the engine converges servers
+to it. The agent operates against structured config through a stable CLI
+and Python API instead of inventing shell commands or discovering
+infrastructure over SSH. Every mutating operation goes through the engine's
+explicit playbook contracts and produces receipts; status is derived from
+validated observations, never inferred.
 
 ## Module boundaries
 
@@ -47,11 +50,13 @@ independent release cycles or access control require it.
 
 The config is declarative only, organized as typed resources validated
 against versioned JSON Schemas: servers, server types, applications,
-components, services, domains, logging stacks, and SSH public keys.
+components, services, domains, logging stacks, alert rules, operator
+policy, and SSH public keys.
 
 The config never contains secret values; schemas and validation reject them.
-Secrets exist as references, materialized into environment files outside the
-config directory and consumed by systemd via `EnvironmentFile`.
+Secrets exist as references, rendered from a sops/age-encrypted secrets
+directory into environment files outside the config directory and consumed
+by systemd via `EnvironmentFile`.
 
 ## Application and component model
 
@@ -70,7 +75,9 @@ supported.
 
 ## Deployment strategy
 
-Artifacts are built on the management host, never on production servers:
+Artifacts are built on the management host — the machine running Cloudfall,
+which is a workstation for one-off migrations or a small always-on host
+once the operator runs persistently — never on production servers:
 
 ```text
 Git ref → build artifact (hashed tarball + release metadata) → digest-verified
@@ -85,29 +92,51 @@ automatic or manual per application.
 
 ## Supported workloads
 
-Applications run as native systemd services on long-lived Debian hosts, not
+Applications run as native systemd units on long-lived Debian hosts, not
 in containers. The primary stacks are Python (uv, Gunicorn/Uvicorn, Celery)
 and Node.js; anything that runs as a systemd service with a health endpoint
 fits the model.
 
 ## Infrastructure model
 
-Servers are traditional long-lived Debian hosts (not immutable), bootstrapped
-with RAID1, described by reusable server types (`HostProfile` resources), and
-treated as "all-fit-all":
+Servers are traditional long-lived Debian hosts (not immutable), described
+by reusable server types (`HostProfile` resources); bare-metal server types
+add software RAID1 and the hybrid storage layout, while cloud VPS types do
+not. Any server can run any declared service or component:
 
-- Infrastructure services (PostgreSQL today; Redis, MySQL, Elasticsearch, and
-  friends as the catalog grows) stay pinned to declared servers
+- Infrastructure services (PostgreSQL and Redis today; MySQL, Elasticsearch,
+  and friends as the catalog grows) stay pinned to declared servers
 - Application components are movable: reassigning `crm-backend` from `h1,h2`
   to `h3` is a config change followed by convergence
 - Failover is manual with easy reassignment rather than automated
-  orchestration
+  orchestration; the planned PostgreSQL high-availability formation (M11 on
+  the roadmap) amends this at the database layer only, where a standby may
+  be promoted automatically but an operator never initiates a promotion
+  without explicit confirmation
 
 ## Networking
 
-Nginx terminates HTTP with virtual hosts rendered from `Domain` resources and
-Let's Encrypt TLS. Cloudflare proxying is used where appropriate, and future
-load balancing is Cloudflare plus Nginx, with HAProxy optional later.
+Nginx terminates TLS with virtual hosts rendered from `Domain` resources and
+Let's Encrypt certificates. Cloudflare proxying is used where appropriate,
+and future load balancing is Cloudflare plus Nginx, with HAProxy optional
+later.
+
+## Operations layer
+
+Operating servers is the same evidence discipline running continuously:
+
+- **Alerting** — alert rules and notification channels are typed config
+  rendered into the Loki/Grafana/Alloy stack; a firing alert is evidence,
+  exposed over a read-only mTLS route on the same gateway that receives
+  logs and metrics
+- **Operator** — an always-on management-host process watches alerts and
+  scheduled drift audits, writes every diagnosis as a schema-validated
+  proposal receipt (trigger evidence, diagnosis, exact operation, outcome),
+  and executes only existing engine entry points
+- **Graduated autonomy** — autonomy is granted per operation class by a
+  declared `OperatorPolicy` and earned by verified receipt history, never
+  globally; DNS cutover, data deletion, and database promotion stay behind
+  explicit confirmation regardless of autonomy level
 
 ## Long-term vision: fleet operation
 
@@ -115,18 +144,19 @@ The wedge proves the model on one host. The same config, audit, and deploy
 machinery is designed to extend to fleet operation without architectural
 change:
 
-- **Catalog breadth** — Redis, MySQL, Elasticsearch, RabbitMQ, and Node
-  runtime services following the PostgreSQL pattern: pinned installs,
+- **Catalog breadth** — MySQL, Elasticsearch, RabbitMQ, and Node runtime
+  services following the PostgreSQL and Redis pattern: pinned installs,
   loopback-only binds, backup policies, audited evidence
-- **Multi-server assignment** — components spread across servers and moved by
-  editing the config
-- **Secrets manager integration** — environment files generated from a
-  central secrets manager instead of locally maintained files, keeping the
-  platform/application/component hierarchy
-- **Fleet observability** — per-service exporters and alerting layered on the
-  existing Loki/Grafana/Alloy stack
-- **Backup and restore** — declared backup policies with restore-proof
-  commands as first-class CLI operations
+- **Multi-server assignment at scale** — components spread across many
+  servers and moved by editing the config; the model exists, fleet-scale
+  operation is the unproven part
+- **Managed secrets backends** — the sops/age provider boundary admits a
+  central secrets manager later, keeping the platform/application/component
+  scope hierarchy
+- **Fleet observability** — per-service exporters beyond PostgreSQL and
+  Redis, and alert rules spanning more than one host
+- **PostgreSQL high availability** — a declared replication, failover, and
+  point-in-time-recovery formation (M11 on the roadmap)
 
 ## Status
 
