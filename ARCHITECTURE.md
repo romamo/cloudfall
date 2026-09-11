@@ -3,9 +3,10 @@
 Cloudfall is built wedge-first: take a SaaS off a cloud PaaS such as Render and
 run it on one fresh Debian host with a hardened baseline, monitoring, deploys,
 and rollback. The architecture, however, is designed from day one for the
-larger goal behind the wedge: an AI agent safely operating 10–20 standalone
+larger goal behind the wedge: an AI agent safely operating 10–100 standalone
 SaaS applications across a fleet of dedicated Debian servers without
-Kubernetes. This document describes the durable design shared by both stories;
+Kubernetes (see the [fleet goals](docs/fleet-goals.md)). This document
+describes the durable design shared by both stories;
 [`ROADMAP.md`](ROADMAP.md) is the authoritative source for what is implemented
 today.
 
@@ -142,7 +143,8 @@ Operating servers is the same evidence discipline running continuously:
 
 The wedge proves the model on one host. The same config, audit, and deploy
 machinery is designed to extend to fleet operation without architectural
-change:
+change; the [fleet goals](docs/fleet-goals.md) state the requirements this
+must deliver and their current status:
 
 - **Catalog breadth** — MySQL, Elasticsearch, RabbitMQ, and Node runtime
   services following the PostgreSQL and Redis pattern: pinned installs,
