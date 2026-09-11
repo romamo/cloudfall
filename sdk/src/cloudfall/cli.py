@@ -65,6 +65,11 @@ from cloudfall.operator import (
 from cloudfall.operator import (
     run_once as operator_run_once,
 )
+from cloudfall.render_api import (
+    HttpRenderApiClient,
+    import_render_api,
+    read_api_key,
+)
 from cloudfall.service_evidence import (
     DeploymentReceiptSet,
     DomainObservationSet,
@@ -540,6 +545,49 @@ def _add_import_parsers(
         default=Path("state/schemas/v1"),
         help="versioned schema directory (default: state/schemas/v1)",
     )
+    render_api_parser = import_commands.add_parser(
+        "render-api",
+        help="map a live Render workspace onto Cloudfall state via the API",
+    )
+    render_api_parser.add_argument(
+        "--api-key-file",
+        type=Path,
+        required=True,
+        help="file containing only the Render API key",
+    )
+    render_api_parser.add_argument(
+        "--api-url",
+        default="https://api.render.com/v1",
+        help="Render API base URL (default: https://api.render.com/v1)",
+    )
+    render_api_parser.add_argument(
+        "--project",
+        required=True,
+        help="Cloudfall project id (also the project's Linux user)",
+    )
+    render_api_parser.add_argument(
+        "--server",
+        required=True,
+        help="declared server id that receives every imported resource",
+    )
+    render_api_parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path("tmp/import/state"),
+        help="state fragment output directory (default: tmp/import/state)",
+    )
+    render_api_parser.add_argument(
+        "--env-dir",
+        type=Path,
+        default=Path("tmp/import/env"),
+        help="environment file output directory (default: tmp/import/env)",
+    )
+    render_api_parser.add_argument(
+        "--schemas",
+        type=Path,
+        default=Path("state/schemas/v1"),
+        help="versioned schema directory (default: state/schemas/v1)",
+    )
 
 
 def _add_operator_parsers(
@@ -707,14 +755,25 @@ def _run_import_render(arguments: Namespace) -> int:
             state_directory=Path(arguments.output),
             environment_directory=Path(arguments.env_dir),
         )
-        result = import_render_blueprint(
-            Path(arguments.blueprint), targets, Path(arguments.schemas)
-        )
+        if arguments.import_command == "render-api":
+            api_key = read_api_key(Path(arguments.api_key_file))
+            client = HttpRenderApiClient(
+                api_key=api_key, base_url=arguments.api_url
+            )
+            result = import_render_api(
+                client, targets, Path(arguments.schemas)
+            )
+        else:
+            result = import_render_blueprint(
+                Path(arguments.blueprint), targets, Path(arguments.schemas)
+            )
     except (RenderImportError, StateValidationError) as error:
         sys.stderr.write(f"{json.dumps(error.as_dict(), sort_keys=True)}\n")
         return 2
     _write_json(result.as_dict())
     return 0
+
+
 
 
 def _dispatch(

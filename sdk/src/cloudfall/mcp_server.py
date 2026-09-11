@@ -143,6 +143,23 @@ def _build_registrations(toolset: AgentToolset) -> tuple[_Registration, ...]:
             )
         )
 
+    def import_render_api(
+        api_key_file: str,
+        project: str,
+        server_id: str,
+        output_directory: str = "tmp/import/state",
+        environment_directory: str = "tmp/import/env",
+    ) -> str:
+        return _dump(
+            toolset.import_render_api(
+                api_key_file,
+                project,
+                server_id,
+                output_directory,
+                environment_directory,
+            )
+        )
+
     def build_artifact(component: str, git_ref: str) -> str:
         return _dump(toolset.build_artifact(component, git_ref))
 
@@ -152,6 +169,14 @@ def _build_registrations(toolset: AgentToolset) -> tuple[_Registration, ...]:
             "import_render",
             "Map a render.yaml blueprint onto Cloudfall state fragments "
             "with a structured gap report",
+            None,
+        ),
+        (
+            import_render_api,
+            "import_render_api",
+            "Map a live Render workspace onto Cloudfall state fragments "
+            "through the Render API; the api_key_file is a controller-side "
+            "file containing only the API key",
             None,
         ),
         (

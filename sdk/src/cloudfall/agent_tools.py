@@ -54,6 +54,10 @@ from cloudfall.operator import (
 from cloudfall.operator import (
     run_once as operator_run_once,
 )
+from cloudfall.render_api import HttpRenderApiClient, read_api_key
+from cloudfall.render_api import (
+    import_render_api as render_api_import,
+)
 from cloudfall.service_evidence import (
     DeploymentReceiptSet,
     DomainObservationSet,
@@ -240,6 +244,35 @@ class AgentToolset:
         try:
             result = import_render_blueprint(
                 self._path(blueprint), targets, self._config.schema_directory
+            )
+        except (RenderImportError, StateValidationError) as error:
+            return error.as_dict()
+        return result.as_dict()
+
+    def import_render_api(
+        self,
+        api_key_file: str,
+        project: str,
+        server: str,
+        output_directory: str,
+        environment_directory: str,
+    ) -> dict[str, object]:
+        """Map a live Render workspace onto Cloudfall state fragments."""
+        try:
+            targets = ImportTargets(
+                project_id=ResourceId.from_boundary(project),
+                server_id=ResourceId.from_boundary(server),
+                state_directory=self._path(output_directory),
+                environment_directory=self._path(environment_directory),
+            )
+        except (TypeError, ValueError) as error:
+            return _invalid_argument(error)
+        try:
+            client = HttpRenderApiClient(
+                api_key=read_api_key(self._path(api_key_file))
+            )
+            result = render_api_import(
+                client, targets, self._config.schema_directory
             )
         except (RenderImportError, StateValidationError) as error:
             return error.as_dict()

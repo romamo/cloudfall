@@ -51,6 +51,22 @@ Not imported today; each lands in the gap report instead of being guessed at:
 uv run cloudfall import render render.yaml --project acme --server h1
 ```
 
+No `render.yaml`? Import the live workspace straight from the Render API
+instead — put your API key alone into a file and run:
+
+```sh
+uv run cloudfall import render-api --api-key-file ~/.render/api-key \
+  --project acme --server h1
+```
+
+The API path discovers services, workers, cron jobs, and managed PostgreSQL
+(including its real major version), reads the actual environment variable
+values, and rewrites any value that matches a managed database's connection
+string to the local peer-authenticated socket URL. Secret values the API
+does not expose are left empty in the environment file with an
+action-required gap entry. Both paths share the same mapping and the same
+gap report.
+
 This maps every supported Render service onto Cloudfall config: web,
 private, and worker services become components, managed PostgreSQL becomes
 a PostgreSQL service with application-owned databases, and custom domains

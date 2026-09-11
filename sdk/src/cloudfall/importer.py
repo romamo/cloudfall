@@ -161,10 +161,21 @@ def import_render_blueprint(
     schema_directory: Path,
 ) -> RenderImportResult:
     """Map one Render blueprint onto validated Cloudfall state files."""
-    _require_project_user(targets.project_id)
     blueprint = _load_blueprint(blueprint_path)
+    return import_render_mapping(blueprint, targets, schema_directory)
+
+
+def import_render_mapping(
+    blueprint: Mapping[str, object],
+    targets: ImportTargets,
+    schema_directory: Path,
+    initial_gaps: tuple[ImportGap, ...] = (),
+) -> RenderImportResult:
+    """Map one blueprint-shaped Render description onto state files."""
+    _require_project_user(targets.project_id)
     catalog = SchemaCatalog(schema_directory)
     state = _ImportState()
+    state.gaps.extend(initial_gaps)
     state.database_names = _database_name_map(blueprint)
     groups = _environment_groups(blueprint, state)
 
