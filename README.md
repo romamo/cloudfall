@@ -142,7 +142,10 @@ connection URL into a local file and either run `cloudfall data migrate`
 directly or add `--data <database>=<url-file>` to the migration plan. The
 engine dumps on the target host, restores over the peer-authenticated
 socket, refuses non-empty target databases, verifies per-table row counts,
-and writes a `DataMigrationReceipt`.
+and writes a `DataMigrationReceipt`. The same path serves databases hosted
+without a platform blueprint — serverless PostgreSQL providers such as
+Neon — where only the data moves: see the
+[Neon migration guide](docs/neon-migration-guide.md).
 
 ## Inspect servers and audit drift
 
