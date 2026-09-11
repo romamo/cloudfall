@@ -49,6 +49,15 @@ Replication is not a backup. Before assigning a dataset to unmirrored storage,
 record its replica placement, verify that a single-host loss preserves quorum,
 and confirm that a separate backup can recover logical deletion or corruption.
 
+Declaration in Cloudfall config is the enforcement mechanism for all of the
+above, and it is a precondition, not paperwork: a dataset the audit cannot see
+is a dataset whose replication and backups rot silently — a snapshot
+repository pointing at an unmounted path can sit dead for years while the
+service keeps writing a single copy. No dataset may be placed on a data tail
+before it is declared with its owning service, replica hosts, and backup
+policy, so that audit and backup receipts continuously prove the failure
+contract instead of assuming it.
+
 ## Recommended system footprint
 
 For a general-purpose server with two 512 GB NVMe drives, start with this
@@ -124,6 +133,17 @@ Apply these rules:
    percentage only on dedicated data volumes, never on `/`.
 7. Size filesystems from measured retention and growth, not merely from all
    currently available space.
+8. Declare every tail-resident dataset in Cloudfall config — the owning
+   `Service`, its replica hosts, and its backup policy — before it stores
+   production data. An undeclared mount on a data tail is a provisioning
+   defect: nothing audits it, nothing backs it up, and its failure contract
+   exists only in someone's memory.
+9. Keep data for services without working cross-server replication on the
+   mirrored system area, not on a tail. PostgreSQL qualifies today: until the
+   high-availability formation ships (M11 on the roadmap), its only recovery
+   path is scheduled dumps, so a tail placement sets the loss window to the
+   dump interval on a single drive. Reassess per service as replication
+   becomes available.
 
 ## Boot and service semantics
 
