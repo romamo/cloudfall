@@ -157,12 +157,17 @@ routine and widen what it can carry, in rough priority order:
 
 - **Catalog breadth** — Redis, MySQL, Elasticsearch, RabbitMQ, and Node
   runtime services following the PostgreSQL pattern: pinned installs,
-  loopback-only binds, backup policies, audited evidence
-- **Render API import** — import live services and cron jobs through the
-  Render API instead of requiring a `render.yaml` blueprint
-- **Cutover generator** — TTL lowering, parallel-run verification, the DNS
-  switch, and a rollback window generated as explicit plan steps rather
-  than surfacing only in the import report
+  loopback-only binds, backup policies, audited evidence (Redis ✔ with RDB
+  backups, restore checks, and Alloy metrics; the rest pending)
+- **Render API import** ✔ — `cloudfall import render-api` maps a live
+  workspace with real environment values and database-URL rewriting; cron
+  jobs arrive with their schedules in the gap report, and modeling them as
+  systemd timers stays tracked
+- **Cutover generator** ✔ — the migrate plan now carries explicit
+  `ttl-lower` (authoritative TTLs measured, pause while above 300s),
+  `parallel-run` (the origin must serve every domain before DNS changes),
+  the existing `dns-verify` switch pause, and `rollback-window` (pre-switch
+  answers recorded with an exact 24h revert recipe)
 - **Secrets v2** — environment files generated from secret references in a
   central secrets manager, replacing locally maintained per-component files
 - **Bare-metal provisioning** — software RAID and storage layout for

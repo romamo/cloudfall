@@ -26,14 +26,17 @@ ENGINE = ROOT / "engine"
 EXPECTED_STEPS = [
     "baseline",
     "services",
+    "ttl-lower",
     "build:crm-backend",
     "deploy:crm-backend",
     "domains-http",
+    "parallel-run",
     "dns-verify",
     "domains-tls",
     "inspect",
     "audit",
     "verify-routes",
+    "rollback-window",
 ]
 
 
@@ -137,12 +140,17 @@ def test_failed_steps_persist_progress_and_resume(tmp_path: Path) -> None:
 
     assert first["status"] == "error"
     assert first["step"] == "deploy:crm-backend"
-    assert first["completed"] == 3
+    assert first["completed"] == 4
     plan = json.loads((tmp_path / "plan.json").read_text(encoding="utf-8"))
     completed = [
         step["id"] for step in plan["steps"] if step["status"] == "completed"
     ]
-    assert completed == ["baseline", "services", "build:crm-backend"]
+    assert completed == [
+        "baseline",
+        "services",
+        "ttl-lower",
+        "build:crm-backend",
+    ]
 
     second_calls: list[str] = []
     second = execute_migration(config, options, runners=_runners(second_calls))

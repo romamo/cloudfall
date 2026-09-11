@@ -13,12 +13,18 @@ from __future__ import annotations
 import json
 import socket
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from ipaddress import ip_address
 from typing import TYPE_CHECKING, cast
 
 from cloudfall.audit import AuditStatus, audit_inventory
+from cloudfall.cutover import (
+    SystemDnsProbe,
+    check_ttl,
+    parallel_run,
+    rollback_instructions,
+)
 from cloudfall.domain import ReleaseId, ResourceId, TcpPort
 from cloudfall.inventory import PlatformInventory
 from cloudfall.lifecycle import (
@@ -63,6 +69,11 @@ _ERROR_PLAN_STALE = "migrate_plan_stale"
 _ERROR_PLAN_INVALID = "migrate_plan_invalid"
 _ERROR_RELEASE_MISSING = "migrate_release_missing"
 _ERROR_DNS_UNVERIFIED = "migrate_dns_unverified"
+_ERROR_TTL_HIGH = "migrate_ttl_high"
+_ERROR_PARALLEL_RUN = "migrate_parallel_run_failed"
+_MAX_CUTOVER_TTL_SECONDS = 300
+_ROLLBACK_WINDOW_HOURS = 24
+_PAUSE_CODES = frozenset({_ERROR_DNS_UNVERIFIED, _ERROR_TTL_HIGH})
 _ERROR_AUDIT_DRIFT = "migrate_audit_drift"
 _ERROR_ROUTES_UNHEALTHY = "migrate_routes_unhealthy"
 _ERROR_DATABASE_UNKNOWN = "migrate_database_unknown"
@@ -146,7 +157,7 @@ def execute_migration(
     resolved_runners = (
         runners
         if runners is not None
-        else _build_runners(config, options, inventory, releases)
+        else _build_runners(config, options, inventory, releases, steps)
     )
     for step in steps:
         if step.status is StepStatus.COMPLETED:
@@ -158,7 +169,7 @@ def execute_migration(
             envelope = _envelope(
                 "paused"
                 if isinstance(error, MigrateError)
-                and error.code == _ERROR_DNS_UNVERIFIED
+                and error.code in _PAUSE_CODES
                 else "error",
                 steps,
             )
@@ -198,6 +209,14 @@ def _computed_steps(
             "services", "converge every declared infrastructure service"
         ),
     ]
+    if inventory.domains:
+        steps.append(
+            PlanStep(
+                "ttl-lower",
+                "measure authoritative DNS TTLs and require them at or "
+                f"below {_MAX_CUTOVER_TTL_SECONDS}s before the cutover",
+            )
+        )
     steps.extend(
         PlanStep(
             f"data:{database}",
@@ -229,6 +248,11 @@ def _computed_steps(
                     "render every declared domain route over HTTP",
                 ),
                 PlanStep(
+                    "parallel-run",
+                    "prove the new origin serves every declared domain "
+                    "before any DNS record changes",
+                ),
+                PlanStep(
                     "dns-verify",
                     "verify public DNS points at the declared proxy servers",
                 ),
@@ -245,9 +269,17 @@ def _computed_steps(
         )
     )
     if inventory.domains:
-        steps.append(
-            PlanStep(
-                "verify-routes", "require every declared route to be healthy"
+        steps.extend(
+            (
+                PlanStep(
+                    "verify-routes",
+                    "require every declared route to be healthy",
+                ),
+                PlanStep(
+                    "rollback-window",
+                    "record the pre-switch DNS answers and the explicit "
+                    f"{_ROLLBACK_WINDOW_HOURS}h rollback recipe",
+                ),
             )
         )
     return steps
@@ -378,11 +410,15 @@ def _build_runners(
     options: MigrateOptions,
     inventory: PlatformInventory,
     releases: dict[str, str],
+    steps: list[PlanStep],
 ) -> dict[str, Runner]:
     context = config.context()
     runners: dict[str, Runner] = {
         "baseline": lambda: _playbook(config, "baseline.yml", {}),
         "services": lambda: _playbook(config, "services.yml", {}),
+        "ttl-lower": lambda: _lower_ttl(inventory),
+        "parallel-run": lambda: _parallel_run(inventory),
+        "rollback-window": lambda: _rollback_window(steps),
         "domains-http": lambda: _playbook(
             config, "domains.yml", _domain_vars(config)
         ),
@@ -506,6 +542,64 @@ def _domain_vars(config: AgentConfig) -> dict[str, object]:
             config.deployments_directory.resolve()
         )
     }
+
+
+def _lower_ttl(inventory: PlatformInventory) -> dict[str, object]:
+    detail, offenders = check_ttl(
+        inventory, SystemDnsProbe(), _MAX_CUTOVER_TTL_SECONDS
+    )
+    if offenders:
+        message = (
+            "lower these DNS TTLs at your provider, wait one old TTL for "
+            "propagation, and rerun the migration: " + "; ".join(offenders)
+        )
+        raise MigrateError(_ERROR_TTL_HIGH, message)
+    return detail
+
+
+def _parallel_run(inventory: PlatformInventory) -> dict[str, object]:
+    detail, failures = parallel_run(inventory, SocketDomainNetworkClient())
+    if failures:
+        message = (
+            "the new origin does not serve every declared domain yet; fix "
+            "these before touching DNS: " + "; ".join(failures)
+        )
+        raise MigrateError(_ERROR_PARALLEL_RUN, message)
+    return detail
+
+
+def _rollback_window(steps: list[PlanStep]) -> dict[str, object]:
+    previous = next(
+        (
+            step.detail
+            for step in steps
+            if step.step_id == "ttl-lower" and step.detail is not None
+        ),
+        None,
+    )
+    switched_at = next(
+        (
+            step.completed_at
+            for step in steps
+            if step.step_id == "dns-verify" and step.completed_at is not None
+        ),
+        None,
+    )
+    now = datetime.now(tz=UTC)
+    switched = switched_at if switched_at is not None else _timestamp(now)
+    window_ends = _timestamp(
+        now + timedelta(hours=_ROLLBACK_WINDOW_HOURS)
+    )
+    return rollback_instructions(
+        previous if previous is not None else {},
+        _ROLLBACK_WINDOW_HOURS,
+        switched,
+        window_ends,
+    )
+
+
+def _timestamp(moment: datetime) -> str:
+    return moment.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _verify_dns(inventory: PlatformInventory) -> dict[str, object]:

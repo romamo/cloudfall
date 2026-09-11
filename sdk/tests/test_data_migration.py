@@ -131,7 +131,8 @@ def test_migrate_plan_orders_data_steps_after_services(
     steps = cast("list[dict[str, object]]", result["steps"])
     step_ids = [str(step["id"]) for step in steps]
     assert "data:crm" in step_ids
-    assert step_ids.index("data:crm") == step_ids.index("services") + 1
+    assert step_ids.index("services") < step_ids.index("data:crm")
+    assert step_ids.index("data:crm") < step_ids.index("deploy:crm-backend")
     assert step_ids.index("data:crm") < step_ids.index("deploy:crm-backend")
 
 
