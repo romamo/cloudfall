@@ -68,10 +68,19 @@ def test_render_environment_merges_refs_in_override_order(
     assert "LOG_LEVEL=info" in content
     assert "LOG_LEVEL=warning" not in content
     assert "STRIPE_KEY=sk_test_123" in content
+    assert "FEATURE_SIGNUPS=true" in content
+    assert "REDIS_URL=redis://127.0.0.1:6379/0" in content
     mode = stat.S_IMODE(output.stat().st_mode)
     assert mode == 0o600
     assert result["status"] == "ok"
-    assert result["keys"] == ["LOG_LEVEL", "SENTRY_DSN", "STRIPE_KEY"]
+    assert result["keys"] == [
+        "FEATURE_SIGNUPS",
+        "LOG_LEVEL",
+        "REDIS_URL",
+        "SENTRY_DSN",
+        "STRIPE_KEY",
+    ]
+    assert result["declaredKeys"] == ["FEATURE_SIGNUPS", "REDIS_URL"]
     serialized = str(result)
     assert "sk_test_123" not in serialized
     assert "https://shared.example/1" not in serialized
@@ -124,3 +133,23 @@ def test_unknown_component_is_refused(tmp_path: Path) -> None:
         )
 
     assert caught.value.code == "secrets_component_unknown"
+
+
+def test_declared_and_secret_key_conflicts_fail_fast(tmp_path: Path) -> None:
+    provider = _provider(tmp_path)
+    backend = tmp_path / "secrets" / "production" / "crm" / "backend.env"
+    backend.write_text(
+        "STRIPE_KEY=sk_test_123\nFEATURE_SIGNUPS=false\n", encoding="utf-8"
+    )
+
+    with pytest.raises(SecretsError) as caught:
+        render_environment(
+            _context(tmp_path),
+            ResourceId.from_boundary("crm-backend"),
+            provider,
+            tmp_path / "out.env",
+        )
+
+    assert caught.value.code == "secrets_key_conflict"
+    assert "FEATURE_SIGNUPS" in caught.value.message
+    assert "exactly one place" in caught.value.message

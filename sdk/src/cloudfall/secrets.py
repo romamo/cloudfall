@@ -33,6 +33,7 @@ _ERROR_SOURCE_MISSING = "secrets_source_missing"
 _ERROR_SOURCE_INVALID = "secrets_source_invalid"
 _ERROR_COMPONENT_UNKNOWN = "secrets_component_unknown"
 _ERROR_DECRYPT_FAILED = "secrets_decrypt_failed"
+_ERROR_KEY_CONFLICT = "secrets_key_conflict"
 _KEY_PATTERN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 _FILE_MODE = 0o600
 
@@ -111,11 +112,19 @@ def render_environment(
         if project.resource_id == component.project_id
     )
     references = (*project.secret_refs, *component.secret_refs)
-    merged: dict[str, str] = {
-        key: value
-        for reference in references
-        for key, value in provider.fetch(reference)
-    }
+    declared = dict(component.environment)
+    merged: dict[str, str] = dict(declared)
+    for reference in references:
+        for key, value in provider.fetch(reference):
+            if key in declared:
+                message = (
+                    f"{key} is declared in the component's non-secret "
+                    "environment and also provided by the secret source "
+                    f"{provider.source_path(reference)}; a key must live "
+                    "in exactly one place"
+                )
+                raise SecretsError(_ERROR_KEY_CONFLICT, message)
+            merged[key] = value
     content = "".join(f"{key}={value}\n" for key, value in merged.items())
     output_path.parent.mkdir(parents=True, exist_ok=True)
     descriptor = os.open(
@@ -130,6 +139,7 @@ def render_environment(
         "environmentFile": str(output_path),
         "sha256": hashlib.sha256(content.encode("utf-8")).hexdigest(),
         "keys": sorted(merged),
+        "declaredKeys": sorted(declared),
         "references": [reference.as_dict() for reference in references],
     }
 

@@ -494,10 +494,11 @@ class ComponentInventory:
     service: ComponentService
     health_check: ComponentHealthCheck
     secret_refs: tuple[SecretReference, ...] = ()
+    environment: tuple[tuple[str, str], ...] = ()
 
     def as_dict(self) -> dict[str, object]:
         """Serialize the component for inventory consumers."""
-        return {
+        result: dict[str, object] = {
             "id": self.resource_id.value,
             "project": self.project_id.value,
             "servers": [server.value for server in self.server_ids],
@@ -508,6 +509,9 @@ class ComponentInventory:
             "service": self.service.as_dict(),
             "healthCheck": self.health_check.as_dict(),
         }
+        if self.environment:
+            result["environment"] = dict(self.environment)
+        return result
 
 
 @dataclass(frozen=True, slots=True)
@@ -1453,7 +1457,20 @@ def _component_inventory(document: ResourceDocument) -> ComponentInventory:
         ),
         health_check=_component_health_check(health),
         secret_refs=_secret_references(spec.get("secretRefs")),
+        environment=_declared_environment(spec.get("environment")),
     )
+
+
+def _declared_environment(value: object) -> tuple[tuple[str, str], ...]:
+    if value is None:
+        return ()
+    if not isinstance(value, dict) or not all(
+        isinstance(key, str) and isinstance(entry, str)
+        for key, entry in value.items()
+    ):
+        message = "validated component environment is not a string mapping"
+        raise TypeError(message)
+    return tuple(value.items())
 
 
 def _secret_references(value: object) -> tuple[SecretReference, ...]:

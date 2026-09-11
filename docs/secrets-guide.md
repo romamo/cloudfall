@@ -57,6 +57,27 @@ sops secrets/production/crm/backend.env
 # opens your editor; write KEY=VALUE lines; sops encrypts on save
 ```
 
+## Non-secret configuration: declare it in state
+
+Feature flags, Redis database ids, and other plain configuration do not
+belong in encrypted fragments — they belong in the component's declared
+`environment` block, where changes are diffable, reviewable, and audited
+like any other state:
+
+```yaml
+# state/production/components/crm-backend.yaml
+spec:
+  environment:
+    FEATURE_SIGNUPS: "true"
+    REDIS_URL: redis://127.0.0.1:6379/0
+```
+
+Rendering merges declared entries with the secret fragments into one
+environment file. A key may live in **exactly one place**: if a declared
+key also appears in a secret source, rendering fails fast with a
+`secrets_key_conflict` naming the key and the offending file — no silent
+shadowing in either direction.
+
 ## Declaring and rendering
 
 Projects declare platform-scope references; components declare project and

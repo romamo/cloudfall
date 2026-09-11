@@ -29,6 +29,9 @@ spec:
       - 127.0.0.1
       - --port
       - "8100"
+  environment:
+    FEATURE_SIGNUPS: "true"
+    REDIS_URL: redis://127.0.0.1:6379/0
   healthCheck:
     type: http
     scheme: http
