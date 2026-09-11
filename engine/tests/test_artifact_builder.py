@@ -11,12 +11,12 @@ from pathlib import Path
 
 import pytest
 from cloudfall.inventory import PlatformInventory
-from cloudfall.validation import validate_state
+from cloudfall.validation import validate_config
 from cloudfall_engine.artifact import ArtifactBuildError, build_artifact
 
 ROOT = Path(__file__).parents[2]
-SCHEMAS = ROOT / "state" / "schemas" / "v1"
-EXAMPLES = ROOT / "state" / "examples"
+SCHEMAS = ROOT / "config" / "schemas" / "v1"
+EXAMPLES = ROOT / "config" / "examples"
 _GIT = shutil.which("git") or "git"
 
 
@@ -43,21 +43,21 @@ def _fixture_inventory(tmp_path: Path) -> PlatformInventory:
     _git("-C", str(repository), "-c", "init.defaultBranch=main", "init", "--quiet")
     (repository / "app.py").write_text("print('crm')\n", encoding="utf-8")
     (repository / "pyproject.toml").write_text(
-        '[project]\nname = "crm-backend"\nversion = "1.0.0"\n',
+        '[application]\nname = "crm-backend"\nversion = "1.0.0"\n',
         encoding="utf-8",
     )
     _git("-C", str(repository), "add", ".")
     _git("-C", str(repository), "commit", "--quiet", "--message", "initial")
 
-    state_directory = tmp_path / "state"
-    shutil.copytree(EXAMPLES, state_directory)
-    component_path = state_directory / "components" / "crm-backend.yaml"
+    config_directory = tmp_path / "config"
+    shutil.copytree(EXAMPLES, config_directory)
+    component_path = config_directory / "components" / "crm-backend.yaml"
     component = component_path.read_text(encoding="utf-8").replace(
         "https://github.com/example/crm-backend.git",
         f"file://{repository}",
     )
     component_path.write_text(component, encoding="utf-8")
-    return PlatformInventory.from_state(validate_state(state_directory, SCHEMAS))
+    return PlatformInventory.from_state(validate_config(config_directory, SCHEMAS))
 
 
 def test_builder_packages_a_hashed_release_with_metadata(

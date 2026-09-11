@@ -21,15 +21,15 @@ from cloudfall.lifecycle import (
 )
 
 ROOT = Path(__file__).parents[2]
-SCHEMAS = ROOT / "state" / "schemas" / "v1"
-EXAMPLES = ROOT / "state" / "examples"
+SCHEMAS = ROOT / "config" / "schemas" / "v1"
+EXAMPLES = ROOT / "config" / "examples"
 ENGINE = ROOT / "engine"
 RELEASE = "20260101T000000Z-abcdef0"
 
 
 def _context(tmp_path: Path) -> EngineContext:
     return EngineContext(
-        state_directory=EXAMPLES,
+        config_directory=EXAMPLES,
         schema_directory=SCHEMAS,
         engine_directory=ENGINE,
         inventory_file=tmp_path / "inventory.json",

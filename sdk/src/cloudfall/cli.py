@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
     from cloudfall.operations import FleetOperations
     from cloudfall.operator import AlertFeed, OperatorProposal
-    from cloudfall.validation import ValidatedState
+    from cloudfall.validation import ValidatedConfig
 
 from cloudfall.agent_tools import AgentConfig
 from cloudfall.audit import AuditStatus, audit_inventory
@@ -88,26 +88,26 @@ from cloudfall.service_evidence import (
     load_domain_observations,
 )
 from cloudfall.validation import (
+    ConfigValidationError,
     SchemaCatalog,
-    StateValidationError,
-    validate_state,
+    validate_config,
 )
 
 
-def _add_state_parsers(
+def _add_config_parsers(
     commands: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
-    state_parser = commands.add_parser("state", help="operate on platform state")
-    state_commands = state_parser.add_subparsers(dest="state_command", required=True)
-    validate_parser = state_commands.add_parser(
-        "validate", help="validate YAML state and resource references"
+    config_parser = commands.add_parser("config", help="operate on the config")
+    config_commands = config_parser.add_subparsers(dest="config_command", required=True)
+    validate_parser = config_commands.add_parser(
+        "validate", help="validate the YAML config and resource references"
     )
-    validate_parser.add_argument("state_directory", type=Path)
+    validate_parser.add_argument("config_directory", type=Path)
     validate_parser.add_argument(
         "--schemas",
         type=Path,
-        default=Path("state/schemas/v1"),
-        help="versioned schema directory (default: state/schemas/v1)",
+        default=Path("config/schemas/v1"),
+        help="versioned schema directory (default: config/schemas/v1)",
     )
 
     inventory_parser = commands.add_parser(
@@ -119,24 +119,24 @@ def _add_state_parsers(
     show_parser = inventory_commands.add_parser(
         "show", help="show non-secret platform inventory"
     )
-    show_parser.add_argument("state_directory", type=Path)
+    show_parser.add_argument("config_directory", type=Path)
     show_parser.add_argument(
         "--schemas",
         type=Path,
-        default=Path("state/schemas/v1"),
-        help="versioned schema directory (default: state/schemas/v1)",
+        default=Path("config/schemas/v1"),
+        help="versioned schema directory (default: config/schemas/v1)",
     )
 
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="cloudfall")
     commands = parser.add_subparsers(dest="command", required=True)
-    _add_state_parsers(commands)
+    _add_config_parsers(commands)
 
     audit_parser = commands.add_parser(
-        "audit", help="compare desired state with observed server snapshots"
+        "audit", help="compare the config with observed server snapshots"
     )
-    audit_parser.add_argument("state_directory", type=Path)
+    audit_parser.add_argument("config_directory", type=Path)
     audit_parser.add_argument(
         "--observed",
         type=Path,
@@ -166,7 +166,7 @@ def _parser() -> argparse.ArgumentParser:
     services_inspect_parser = services_commands.add_parser(
         "inspect", help="collect DNS, TLS, origin, and public route evidence"
     )
-    services_inspect_parser.add_argument("state_directory", type=Path)
+    services_inspect_parser.add_argument("config_directory", type=Path)
     services_inspect_parser.add_argument(
         "--output",
         type=Path,
@@ -176,13 +176,13 @@ def _parser() -> argparse.ArgumentParser:
     services_inspect_parser.add_argument(
         "--schemas",
         type=Path,
-        default=Path("state/schemas/v1"),
-        help="versioned schema directory (default: state/schemas/v1)",
+        default=Path("config/schemas/v1"),
+        help="versioned schema directory (default: config/schemas/v1)",
     )
     services_status_parser = services_commands.add_parser(
         "status", help="derive service lifecycle status from current evidence"
     )
-    services_status_parser.add_argument("state_directory", type=Path)
+    services_status_parser.add_argument("config_directory", type=Path)
     services_status_parser.add_argument(
         "--observed",
         type=Path,
@@ -204,14 +204,14 @@ def _parser() -> argparse.ArgumentParser:
     services_status_parser.add_argument(
         "--schemas",
         type=Path,
-        default=Path("state/schemas/v1"),
-        help="versioned schema directory (default: state/schemas/v1)",
+        default=Path("config/schemas/v1"),
+        help="versioned schema directory (default: config/schemas/v1)",
     )
     audit_parser.add_argument(
         "--schemas",
         type=Path,
-        default=Path("state/schemas/v1"),
-        help="versioned schema directory (default: state/schemas/v1)",
+        default=Path("config/schemas/v1"),
+        help="versioned schema directory (default: config/schemas/v1)",
     )
 
     dashboard_parser = commands.add_parser(
@@ -223,7 +223,7 @@ def _parser() -> argparse.ArgumentParser:
     dashboard_build_parser = dashboard_commands.add_parser(
         "build", help="build a static read-only operations dashboard"
     )
-    dashboard_build_parser.add_argument("state_directory", type=Path)
+    dashboard_build_parser.add_argument("config_directory", type=Path)
     dashboard_build_parser.add_argument(
         "--observed",
         type=Path,
@@ -251,14 +251,14 @@ def _parser() -> argparse.ArgumentParser:
     dashboard_build_parser.add_argument(
         "--schemas",
         type=Path,
-        default=Path("state/schemas/v1"),
-        help="versioned schema directory (default: state/schemas/v1)",
+        default=Path("config/schemas/v1"),
+        help="versioned schema directory (default: config/schemas/v1)",
     )
 
     dashboard_serve_parser = dashboard_commands.add_parser(
         "serve", help="serve a live-refreshing read-only dashboard over HTTP"
     )
-    dashboard_serve_parser.add_argument("state_directory", type=Path)
+    dashboard_serve_parser.add_argument("config_directory", type=Path)
     dashboard_serve_parser.add_argument(
         "--observed",
         type=Path,
@@ -280,8 +280,8 @@ def _parser() -> argparse.ArgumentParser:
     dashboard_serve_parser.add_argument(
         "--schemas",
         type=Path,
-        default=Path("state/schemas/v1"),
-        help="versioned schema directory (default: state/schemas/v1)",
+        default=Path("config/schemas/v1"),
+        help="versioned schema directory (default: config/schemas/v1)",
     )
     dashboard_serve_parser.add_argument(
         "--host",
@@ -319,12 +319,12 @@ def _add_migrate_parser(
         "migrate",
         help="run the resumable end-to-end migration plan",
     )
-    migrate_parser.add_argument("state_directory", type=Path)
+    migrate_parser.add_argument("config_directory", type=Path)
     migrate_parser.add_argument(
         "--schemas",
         type=Path,
-        default=Path("state/schemas/v1"),
-        help="versioned schema directory (default: state/schemas/v1)",
+        default=Path("config/schemas/v1"),
+        help="versioned schema directory (default: config/schemas/v1)",
     )
     migrate_parser.add_argument(
         "--engine",
@@ -434,7 +434,7 @@ def _add_lifecycle_parsers(
             "declared service with row-count verification"
         ),
     )
-    data_migrate_parser.add_argument("state_directory", type=Path)
+    data_migrate_parser.add_argument("config_directory", type=Path)
     data_migrate_parser.add_argument("service")
     data_migrate_parser.add_argument(
         "--database",
@@ -459,8 +459,8 @@ def _add_lifecycle_parsers(
     data_migrate_parser.add_argument(
         "--schemas",
         type=Path,
-        default=Path("state/schemas/v1"),
-        help="versioned schema directory (default: state/schemas/v1)",
+        default=Path("config/schemas/v1"),
+        help="versioned schema directory (default: config/schemas/v1)",
     )
     data_migrate_parser.add_argument(
         "--engine",
@@ -533,13 +533,13 @@ def _add_import_parsers(
         dest="import_command", required=True
     )
     render_parser = import_commands.add_parser(
-        "render", help="map a render.yaml blueprint onto Cloudfall state"
+        "render", help="map a render.yaml blueprint onto Cloudfall config"
     )
     render_parser.add_argument("blueprint", type=Path)
     render_parser.add_argument(
-        "--project",
+        "--application",
         required=True,
-        help="Cloudfall project id (also the project's Linux user)",
+        help="Cloudfall application id (also the application's Linux user)",
     )
     render_parser.add_argument(
         "--server",
@@ -549,8 +549,8 @@ def _add_import_parsers(
     render_parser.add_argument(
         "--output",
         type=Path,
-        default=Path("tmp/import/state"),
-        help="state fragment output directory (default: tmp/import/state)",
+        default=Path("tmp/import/config"),
+        help="config fragment output directory (default: tmp/import/config)",
     )
     render_parser.add_argument(
         "--env-dir",
@@ -561,12 +561,12 @@ def _add_import_parsers(
     render_parser.add_argument(
         "--schemas",
         type=Path,
-        default=Path("state/schemas/v1"),
-        help="versioned schema directory (default: state/schemas/v1)",
+        default=Path("config/schemas/v1"),
+        help="versioned schema directory (default: config/schemas/v1)",
     )
     render_api_parser = import_commands.add_parser(
         "render-api",
-        help="map a live Render workspace onto Cloudfall state via the API",
+        help="map a live Render workspace onto Cloudfall config via the API",
     )
     render_api_parser.add_argument(
         "--api-key-file",
@@ -580,9 +580,9 @@ def _add_import_parsers(
         help="Render API base URL (default: https://api.render.com/v1)",
     )
     render_api_parser.add_argument(
-        "--project",
+        "--application",
         required=True,
-        help="Cloudfall project id (also the project's Linux user)",
+        help="Cloudfall application id (also the application's Linux user)",
     )
     render_api_parser.add_argument(
         "--server",
@@ -592,8 +592,8 @@ def _add_import_parsers(
     render_api_parser.add_argument(
         "--output",
         type=Path,
-        default=Path("tmp/import/state"),
-        help="state fragment output directory (default: tmp/import/state)",
+        default=Path("tmp/import/config"),
+        help="config fragment output directory (default: tmp/import/config)",
     )
     render_api_parser.add_argument(
         "--env-dir",
@@ -604,8 +604,8 @@ def _add_import_parsers(
     render_api_parser.add_argument(
         "--schemas",
         type=Path,
-        default=Path("state/schemas/v1"),
-        help="versioned schema directory (default: state/schemas/v1)",
+        default=Path("config/schemas/v1"),
+        help="versioned schema directory (default: config/schemas/v1)",
     )
 
 
@@ -694,13 +694,13 @@ def _add_secrets_parsers(
         "render",
         help="render one component's references into its environment file",
     )
-    render_parser.add_argument("state_directory", type=Path)
+    render_parser.add_argument("config_directory", type=Path)
     render_parser.add_argument("component")
     render_parser.add_argument(
         "--schemas",
         type=Path,
-        default=Path("state/schemas/v1"),
-        help="versioned schema directory (default: state/schemas/v1)",
+        default=Path("config/schemas/v1"),
+        help="versioned schema directory (default: config/schemas/v1)",
     )
     render_parser.add_argument(
         "--secrets-dir",
@@ -753,13 +753,13 @@ def _add_backup_parsers(
         ("verify", "prove the newest backup restores for one service"),
     ):
         subparser = backup_commands.add_parser(name, help=description)
-        subparser.add_argument("state_directory", type=Path)
+        subparser.add_argument("config_directory", type=Path)
         subparser.add_argument("service")
         subparser.add_argument(
             "--schemas",
             type=Path,
-            default=Path("state/schemas/v1"),
-            help="versioned schema directory (default: state/schemas/v1)",
+            default=Path("config/schemas/v1"),
+            help="versioned schema directory (default: config/schemas/v1)",
         )
         subparser.add_argument(
             "--receipts",
@@ -771,12 +771,12 @@ def _add_backup_parsers(
 
 
 def _add_operator_arguments(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("state_directory", type=Path)
+    parser.add_argument("config_directory", type=Path)
     parser.add_argument(
         "--schemas",
         type=Path,
-        default=Path("state/schemas/v1"),
-        help="versioned schema directory (default: state/schemas/v1)",
+        default=Path("config/schemas/v1"),
+        help="versioned schema directory (default: config/schemas/v1)",
     )
     parser.add_argument(
         "--proposals",
@@ -818,13 +818,13 @@ def _add_operator_engine_arguments(parser: argparse.ArgumentParser) -> None:
 
 
 def _add_lifecycle_arguments(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("state_directory", type=Path)
+    parser.add_argument("config_directory", type=Path)
     parser.add_argument("component")
     parser.add_argument(
         "--schemas",
         type=Path,
-        default=Path("state/schemas/v1"),
-        help="versioned schema directory (default: state/schemas/v1)",
+        default=Path("config/schemas/v1"),
+        help="versioned schema directory (default: config/schemas/v1)",
     )
     parser.add_argument(
         "--engine",
@@ -845,12 +845,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     arguments = _parser().parse_args(argv)
     if arguments.command == "import":
         return _run_import_render(arguments)
-    state_directory = Path(arguments.state_directory)
+    config_directory = Path(arguments.config_directory)
     schema_directory = Path(arguments.schemas)
     try:
-        state = validate_state(state_directory, schema_directory)
+        state = validate_config(config_directory, schema_directory)
         return _dispatch(arguments, state, schema_directory)
-    except StateValidationError as error:
+    except ConfigValidationError as error:
         sys.stderr.write(f"{json.dumps(error.as_dict(), sort_keys=True)}\n")
         return 2
 
@@ -858,9 +858,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 def _run_import_render(arguments: Namespace) -> int:
     try:
         targets = ImportTargets(
-            project_id=ResourceId.from_boundary(arguments.project),
+            application_id=ResourceId.from_boundary(arguments.application),
             server_id=ResourceId.from_boundary(arguments.server),
-            state_directory=Path(arguments.output),
+            config_directory=Path(arguments.output),
             environment_directory=Path(arguments.env_dir),
         )
         if arguments.import_command == "render-api":
@@ -875,7 +875,7 @@ def _run_import_render(arguments: Namespace) -> int:
             result = import_render_blueprint(
                 Path(arguments.blueprint), targets, Path(arguments.schemas)
             )
-    except (RenderImportError, StateValidationError) as error:
+    except (RenderImportError, ConfigValidationError) as error:
         sys.stderr.write(f"{json.dumps(error.as_dict(), sort_keys=True)}\n")
         return 2
     _write_json(result.as_dict())
@@ -885,9 +885,9 @@ def _run_import_render(arguments: Namespace) -> int:
 
 
 def _dispatch(
-    arguments: Namespace, state: ValidatedState, schema_directory: Path
+    arguments: Namespace, state: ValidatedConfig, schema_directory: Path
 ) -> int:
-    handlers: dict[str, Callable[[Namespace, ValidatedState, Path], int]] = {
+    handlers: dict[str, Callable[[Namespace, ValidatedConfig, Path], int]] = {
         "audit": _run_audit,
         "backup:run": _run_backup_run,
         "backup:verify": _run_backup_verify,
@@ -907,7 +907,7 @@ def _dispatch(
         "rollback": _run_rollback,
         "services:inspect": _run_services_inspect,
         "services:status": _run_services_status,
-        "state:validate": _run_state_validate,
+        "config:validate": _run_config_validate,
     }
     key = _command_key(arguments)
     try:
@@ -926,15 +926,15 @@ def _command_key(arguments: Namespace) -> str:
     return f"{arguments.command}:{subcommand}"
 
 
-def _run_state_validate(
-    _arguments: Namespace, state: ValidatedState, _schema_directory: Path
+def _run_config_validate(
+    _arguments: Namespace, state: ValidatedConfig, _schema_directory: Path
 ) -> int:
     _write_json(state.as_dict())
     return 0
 
 
 def _run_inventory_show(
-    _arguments: Namespace, state: ValidatedState, _schema_directory: Path
+    _arguments: Namespace, state: ValidatedConfig, _schema_directory: Path
 ) -> int:
     _write_json(
         {
@@ -946,7 +946,7 @@ def _run_inventory_show(
 
 
 def _run_audit(
-    arguments: Namespace, state: ValidatedState, schema_directory: Path
+    arguments: Namespace, state: ValidatedConfig, schema_directory: Path
 ) -> int:
     observations = load_observations(Path(arguments.observed), schema_directory)
     report = audit_inventory(
@@ -965,7 +965,7 @@ def _run_audit(
 
 
 def _run_secrets_render(
-    arguments: Namespace, _state: ValidatedState, schema_directory: Path
+    arguments: Namespace, _state: ValidatedConfig, schema_directory: Path
 ) -> int:
     output = (
         Path(arguments.output)
@@ -988,13 +988,13 @@ def _run_secrets_render(
 
 
 def _run_backup_run(
-    arguments: Namespace, _state: ValidatedState, schema_directory: Path
+    arguments: Namespace, _state: ValidatedConfig, schema_directory: Path
 ) -> int:
     return _run_backup_operation(arguments, schema_directory, backup_service)
 
 
 def _run_backup_verify(
-    arguments: Namespace, _state: ValidatedState, schema_directory: Path
+    arguments: Namespace, _state: ValidatedConfig, schema_directory: Path
 ) -> int:
     return _run_backup_operation(arguments, schema_directory, verify_backup)
 
@@ -1057,7 +1057,7 @@ def _operator_exit(error: OperatorError) -> int:
 
 
 def _run_operator_run(
-    arguments: Namespace, state: ValidatedState, schema_directory: Path
+    arguments: Namespace, state: ValidatedConfig, schema_directory: Path
 ) -> int:
     inventory = PlatformInventory.from_state(state)
     try:
@@ -1119,7 +1119,7 @@ def _run_operator_run(
 
 
 def _run_operator_list(
-    arguments: Namespace, _state: ValidatedState, schema_directory: Path
+    arguments: Namespace, _state: ValidatedConfig, schema_directory: Path
 ) -> int:
     try:
         store = _operator_store(arguments, schema_directory)
@@ -1131,7 +1131,7 @@ def _run_operator_list(
 
 
 def _run_operator_show(
-    arguments: Namespace, _state: ValidatedState, schema_directory: Path
+    arguments: Namespace, _state: ValidatedConfig, schema_directory: Path
 ) -> int:
     try:
         store = _operator_store(arguments, schema_directory)
@@ -1143,7 +1143,7 @@ def _run_operator_show(
 
 
 def _run_operator_approve(
-    arguments: Namespace, state: ValidatedState, schema_directory: Path
+    arguments: Namespace, state: ValidatedConfig, schema_directory: Path
 ) -> int:
     inventory = PlatformInventory.from_state(state)
     try:
@@ -1176,7 +1176,7 @@ def _run_operator_approve(
 
 
 def _run_services_inspect(
-    arguments: Namespace, state: ValidatedState, _schema_directory: Path
+    arguments: Namespace, state: ValidatedConfig, _schema_directory: Path
 ) -> int:
     paths = inspect_domains(
         PlatformInventory.from_state(state),
@@ -1194,7 +1194,7 @@ def _run_services_inspect(
 
 
 def _run_services_status(
-    arguments: Namespace, state: ValidatedState, schema_directory: Path
+    arguments: Namespace, state: ValidatedConfig, schema_directory: Path
 ) -> int:
     operations = _service_operations(arguments, state, schema_directory)
     _write_json(
@@ -1207,7 +1207,7 @@ def _run_services_status(
 
 
 def _run_dashboard_build(
-    arguments: Namespace, state: ValidatedState, schema_directory: Path
+    arguments: Namespace, state: ValidatedConfig, schema_directory: Path
 ) -> int:
     operations = _service_operations(arguments, state, schema_directory)
     artifacts = build_dashboard(operations, Path(arguments.output))
@@ -1223,10 +1223,10 @@ def _run_dashboard_build(
 
 
 def _run_dashboard_serve(
-    arguments: Namespace, _state: ValidatedState, schema_directory: Path
+    arguments: Namespace, _state: ValidatedConfig, schema_directory: Path
 ) -> int:
     sources = EvidenceSources(
-        state_directory=Path(arguments.state_directory),
+        config_directory=Path(arguments.config_directory),
         schema_directory=schema_directory,
         observed_directory=Path(arguments.observed),
         service_observed_directory=Path(arguments.service_observed),
@@ -1258,7 +1258,7 @@ def _run_dashboard_serve(
 
 
 def _service_operations(
-    arguments: Namespace, state: ValidatedState, schema_directory: Path
+    arguments: Namespace, state: ValidatedConfig, schema_directory: Path
 ) -> FleetOperations:
     observations = load_observations(Path(arguments.observed), schema_directory)
     deployment_receipts = _optional_deployment_receipts(
@@ -1278,7 +1278,7 @@ def _service_operations(
 
 def _engine_context(arguments: Namespace, schema_directory: Path) -> EngineContext:
     return EngineContext(
-        state_directory=Path(arguments.state_directory),
+        config_directory=Path(arguments.config_directory),
         schema_directory=schema_directory,
         engine_directory=Path(arguments.engine),
         inventory_file=Path(arguments.inventory_file),
@@ -1291,7 +1291,7 @@ def _lifecycle_exit(error: LifecycleError) -> int:
 
 
 def _run_data_migrate(
-    arguments: Namespace, _state: ValidatedState, schema_directory: Path
+    arguments: Namespace, _state: ValidatedConfig, schema_directory: Path
 ) -> int:
     try:
         result = migrate_data(
@@ -1308,7 +1308,7 @@ def _run_data_migrate(
 
 
 def _run_deploy(
-    arguments: Namespace, _state: ValidatedState, schema_directory: Path
+    arguments: Namespace, _state: ValidatedConfig, schema_directory: Path
 ) -> int:
     try:
         result = deploy(
@@ -1332,7 +1332,7 @@ def _run_deploy(
 
 
 def _run_rollback(
-    arguments: Namespace, _state: ValidatedState, schema_directory: Path
+    arguments: Namespace, _state: ValidatedConfig, schema_directory: Path
 ) -> int:
     try:
         result = rollback(
@@ -1347,7 +1347,7 @@ def _run_rollback(
 
 
 def _run_restart(
-    arguments: Namespace, _state: ValidatedState, schema_directory: Path
+    arguments: Namespace, _state: ValidatedConfig, schema_directory: Path
 ) -> int:
     try:
         result = restart(
@@ -1361,7 +1361,7 @@ def _run_restart(
 
 
 def _run_health(
-    arguments: Namespace, _state: ValidatedState, schema_directory: Path
+    arguments: Namespace, _state: ValidatedConfig, schema_directory: Path
 ) -> int:
     try:
         result = health(
@@ -1375,7 +1375,7 @@ def _run_health(
 
 
 def _run_migrate(
-    arguments: Namespace, _state: ValidatedState, schema_directory: Path
+    arguments: Namespace, _state: ValidatedConfig, schema_directory: Path
 ) -> int:
     try:
         builds = _key_value_pairs(arguments.build, "--build")
@@ -1400,7 +1400,7 @@ def _run_migrate(
         sys.stderr.write(f"{json.dumps(payload, sort_keys=True)}\n")
         return 2
     config = AgentConfig(
-        state_directory=Path(arguments.state_directory),
+        config_directory=Path(arguments.config_directory),
         schema_directory=schema_directory,
         engine_directory=Path(arguments.engine),
         inventory_file=Path(arguments.inventory_file),

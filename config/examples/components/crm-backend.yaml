@@ -1,0 +1,50 @@
+---
+apiVersion: cloudfall/v1
+kind: Component
+metadata:
+  id: crm-backend
+  description: Example CRM HTTP API
+spec:
+  application: crm
+  repository:
+    url: https://github.com/example/crm-backend.git
+  runtime:
+    type: python
+    version: "3.14"
+    packageManager: uv
+  deployment:
+    strategy: artifact-symlink
+    servers:
+      - h1
+      - h2
+    installRoot: /srv/apps/crm/backend
+    retainUntilCleanup: true
+  service:
+    manager: systemd
+    name: crm-backend
+    command:
+      - .venv/bin/uvicorn
+      - crm.asgi:application
+      - --host
+      - 127.0.0.1
+      - --port
+      - "8100"
+  environment:
+    FEATURE_SIGNUPS: "true"
+    REDIS_URL: redis://127.0.0.1:6379/0
+  healthCheck:
+    type: http
+    scheme: http
+    port: 8100
+    path: /health
+    expectedStatuses:
+      - 200
+    timeoutSeconds: 5
+    attempts: 5
+  secretRefs:
+    - scope: application
+      environment: production
+      path: /crm
+    - scope: component
+      environment: production
+      path: /crm/backend

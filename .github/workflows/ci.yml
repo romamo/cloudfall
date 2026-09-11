@@ -30,12 +30,12 @@ jobs:
         run: uv run pytest
 
       - name: Validate example state
-        run: uv run cloudfall state validate state/examples
+        run: uv run cloudfall config validate config/examples
 
       - name: Render Ansible inventory
         run: >-
-          uv run cloudfall-engine inventory render state/examples
-          --schemas state/schemas/v1 --output tmp/ansible-inventory.json
+          uv run cloudfall-engine inventory render config/examples
+          --schemas config/schemas/v1 --output tmp/ansible-inventory.json
 
       - name: Ansible syntax checks
         env:

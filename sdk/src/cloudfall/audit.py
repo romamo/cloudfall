@@ -1,4 +1,4 @@
-"""Compare desired host profiles with validated server observations."""
+"""Compare desired server types with validated server observations."""
 
 from __future__ import annotations
 
@@ -20,11 +20,11 @@ if TYPE_CHECKING:
         ComponentInventory,
         ConfigurationFileRequirement,
         FirewallRequirement,
-        HostProfileInventory,
         LoggingStackInventory,
         PlatformInventory,
         RaidRequirement,
         ServerInventory,
+        ServerTypeInventory,
         ServiceInventory,
     )
     from cloudfall.observation import ObservationSet, ObservedServerSnapshot
@@ -71,7 +71,7 @@ class ServerAudit:
     """Audit result for one desired server."""
 
     server_id: str
-    profile_id: str
+    server_type_id: str
     status: AuditStatus
     observation: str | None
     observed_at: str | None
@@ -81,7 +81,7 @@ class ServerAudit:
         """Serialize a server audit."""
         return {
             "server": self.server_id,
-            "profile": self.profile_id,
+            "serverType": self.server_type_id,
             "status": self.status.value,
             "observation": self.observation,
             "observedAt": self.observed_at,
@@ -135,7 +135,7 @@ def audit_inventory(
     audits = tuple(
         _audit_server(
             server,
-            inventory.profile(server.profile_id),
+            inventory.server_type(server.server_type_id),
             tuple(
                 service
                 for service in inventory.services
@@ -169,7 +169,7 @@ def audit_inventory(
 
 def _audit_server(  # noqa: PLR0913 - one audit, many evidence sources.
     server: ServerInventory,
-    profile: HostProfileInventory,
+    server_type: ServerTypeInventory,
     services: tuple[ServiceInventory, ...],
     alert_rules: tuple[AlertRuleInventory, ...],
     components: tuple[ComponentInventory, ...],
@@ -186,7 +186,7 @@ def _audit_server(  # noqa: PLR0913 - one audit, many evidence sources.
         )
         return ServerAudit(
             server_id=server.resource_id.value,
-            profile_id=profile.resource_id.value,
+            server_type_id=server_type.resource_id.value,
             status=AuditStatus.UNKNOWN,
             observation=None,
             observed_at=None,
@@ -196,20 +196,20 @@ def _audit_server(  # noqa: PLR0913 - one audit, many evidence sources.
     checks: list[AuditCheck] = []
     checks.append(
         _comparison(
-            "profile.id",
-            profile.resource_id.value,
-            snapshot.profile_id.value,
-            matches=profile.resource_id == snapshot.profile_id,
+            "server_type.id",
+            server_type.resource_id.value,
+            snapshot.server_type_id.value,
+            matches=server_type.resource_id == snapshot.server_type_id,
         )
     )
-    checks.extend(_audit_os(profile, snapshot))
-    if profile.raid is not None:
-        checks.extend(_audit_raid(profile.raid, snapshot))
-    checks.extend(_audit_mounts(profile, snapshot))
-    checks.extend(_audit_packages(profile, snapshot))
-    checks.extend(_audit_services(profile, snapshot))
-    if profile.firewall is not None:
-        checks.extend(_audit_firewall(server, profile.firewall, snapshot))
+    checks.extend(_audit_os(server_type, snapshot))
+    if server_type.raid is not None:
+        checks.extend(_audit_raid(server_type.raid, snapshot))
+    checks.extend(_audit_mounts(server_type, snapshot))
+    checks.extend(_audit_packages(server_type, snapshot))
+    checks.extend(_audit_services(server_type, snapshot))
+    if server_type.firewall is not None:
+        checks.extend(_audit_firewall(server, server_type.firewall, snapshot))
     checks.extend(_audit_service_binds(services, snapshot))
     checks.extend(_audit_alert_rules(alert_rules, snapshot))
     checks.extend(
@@ -217,10 +217,10 @@ def _audit_server(  # noqa: PLR0913 - one audit, many evidence sources.
             components, environment_receipts, snapshot
         )
     )
-    checks.extend(_audit_configuration(profile, snapshot))
+    checks.extend(_audit_configuration(server_type, snapshot))
     return ServerAudit(
         server_id=server.resource_id.value,
-        profile_id=profile.resource_id.value,
+        server_type_id=server_type.resource_id.value,
         status=_aggregate_status(check.status for check in checks),
         observation=str(snapshot.source),
         observed_at=_string(snapshot.spec, "observedAt"),
@@ -229,19 +229,19 @@ def _audit_server(  # noqa: PLR0913 - one audit, many evidence sources.
 
 
 def _audit_os(
-    profile: HostProfileInventory, snapshot: ObservedServerSnapshot
+    server_type: ServerTypeInventory, snapshot: ObservedServerSnapshot
 ) -> tuple[AuditCheck, ...]:
     observed = _mapping(snapshot.spec, "os")
     distribution = _string(observed, "distribution")
     major_version = _string(observed, "majorVersion")
     service_manager = _string(observed, "serviceManager")
-    versions = [version.value for version in profile.os.versions]
+    versions = [version.value for version in server_type.os.versions]
     return (
         _comparison(
             "os.distribution",
-            profile.os.distribution.value,
+            server_type.os.distribution.value,
             distribution,
-            matches=distribution == profile.os.distribution.value,
+            matches=distribution == server_type.os.distribution.value,
         ),
         _comparison(
             "os.majorVersion",
@@ -251,9 +251,9 @@ def _audit_os(
         ),
         _comparison(
             "os.serviceManager",
-            profile.os.service_manager.value,
+            server_type.os.service_manager.value,
             service_manager,
-            matches=service_manager == profile.os.service_manager.value,
+            matches=service_manager == server_type.os.service_manager.value,
         ),
     )
 
@@ -301,7 +301,7 @@ def _audit_raid(
 
 
 def _audit_mounts(
-    profile: HostProfileInventory, snapshot: ObservedServerSnapshot
+    server_type: ServerTypeInventory, snapshot: ObservedServerSnapshot
 ) -> tuple[AuditCheck, ...]:
     storage = _mapping(snapshot.spec, "storage")
     filesystems = {
@@ -309,7 +309,7 @@ def _audit_mounts(
         for item in _mapping_sequence(storage, "filesystems")
     }
     checks: list[AuditCheck] = []
-    for requirement in profile.mounts:
+    for requirement in server_type.mounts:
         actual = filesystems.get(requirement.path.value)
         desired = {
             "filesystem": requirement.filesystem.value,
@@ -351,13 +351,13 @@ def _audit_mounts(
 
 
 def _audit_packages(
-    profile: HostProfileInventory, snapshot: ObservedServerSnapshot
+    server_type: ServerTypeInventory, snapshot: ObservedServerSnapshot
 ) -> tuple[AuditCheck, ...]:
     packages: dict[str, list[Mapping[str, object]]] = {}
     for entry in _mapping_sequence(snapshot.spec, "packages"):
         packages.setdefault(_string(entry, "name"), []).append(entry)
     checks: list[AuditCheck] = []
-    for requirement in profile.required_packages:
+    for requirement in server_type.required_packages:
         entries = tuple(packages.get(requirement.name.value, []))
         versions = [_string(entry, "version") for entry in entries]
         desired: object = (
@@ -377,7 +377,7 @@ def _audit_packages(
                 matches=matches,
             )
         )
-    for package in profile.forbidden_packages:
+    for package in server_type.forbidden_packages:
         present = package.value in packages
         checks.append(
             _comparison(
@@ -391,12 +391,12 @@ def _audit_packages(
 
 
 def _audit_services(
-    profile: HostProfileInventory, snapshot: ObservedServerSnapshot
+    server_type: ServerTypeInventory, snapshot: ObservedServerSnapshot
 ) -> tuple[AuditCheck, ...]:
     services = _mapping(snapshot.spec, "services")
     timers = _mapping(snapshot.spec, "timers")
     checks: list[AuditCheck] = []
-    for requirement in profile.required_services:
+    for requirement in server_type.required_services:
         evidence = timers if requirement.name.is_timer else services
         raw_actual = evidence.get(requirement.name.value)
         actual = _optional_mapping(raw_actual)
@@ -757,7 +757,7 @@ def _audit_component_environment(
 
 
 def _audit_configuration(
-    profile: HostProfileInventory, snapshot: ObservedServerSnapshot
+    server_type: ServerTypeInventory, snapshot: ObservedServerSnapshot
 ) -> tuple[AuditCheck, ...]:
     evidence = {
         _string(item, "path"): item
@@ -765,7 +765,7 @@ def _audit_configuration(
     }
     return tuple(
         _audit_configuration_file(requirement, evidence.get(requirement.path.value))
-        for requirement in profile.configuration_files
+        for requirement in server_type.configuration_files
     )
 
 

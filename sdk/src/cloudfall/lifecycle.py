@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, cast
 from jsonschema.exceptions import ValidationError
 
 from cloudfall.inventory import PlatformInventory
-from cloudfall.validation import SchemaCatalog, validate_state
+from cloudfall.validation import SchemaCatalog, validate_config
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -133,7 +133,7 @@ class LifecycleResult:
 class EngineContext:
     """Filesystem contract shared by every lifecycle action."""
 
-    state_directory: Path
+    config_directory: Path
     schema_directory: Path
     engine_directory: Path
     inventory_file: Path
@@ -342,7 +342,7 @@ def build_release_artifact(
         "cloudfall_engine",
         "artifact",
         "build",
-        str(context.state_directory),
+        str(context.config_directory),
         component_id.value,
         "--ref",
         git_ref,
@@ -607,7 +607,7 @@ def _backup_operation(
     receipt_directory: Path,
     action: str,
 ) -> dict[str, object]:
-    state = validate_state(context.state_directory, context.schema_directory)
+    state = validate_config(context.config_directory, context.schema_directory)
     inventory = PlatformInventory.from_state(state)
     declared = next(
         (
@@ -651,7 +651,7 @@ def _backup_operation(
 def _postgresql_service(
     context: EngineContext, service_id: ResourceId
 ) -> ServiceInventory:
-    state = validate_state(context.state_directory, context.schema_directory)
+    state = validate_config(context.config_directory, context.schema_directory)
     inventory = PlatformInventory.from_state(state)
     service = next(
         (
@@ -672,7 +672,7 @@ def _postgresql_service(
 def _component(
     context: EngineContext, component_id: ResourceId
 ) -> ComponentInventory:
-    state = validate_state(context.state_directory, context.schema_directory)
+    state = validate_config(context.config_directory, context.schema_directory)
     inventory = PlatformInventory.from_state(state)
     component = next(
         (
@@ -697,7 +697,7 @@ def _render_inventory_step(context: EngineContext) -> ExecutionStep:
             "cloudfall_engine",
             "inventory",
             "render",
-            str(context.state_directory),
+            str(context.config_directory),
             "--schemas",
             str(context.schema_directory),
             "--output",

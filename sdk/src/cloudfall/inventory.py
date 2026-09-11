@@ -1,4 +1,4 @@
-"""Typed, read-only inventory projections over validated platform state."""
+"""Typed, read-only inventory projections over validated config."""
 
 from __future__ import annotations
 
@@ -72,7 +72,7 @@ from cloudfall.domain import (
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from cloudfall.validation import ValidatedState
+    from cloudfall.validation import ValidatedConfig
 
 
 @dataclass(frozen=True, slots=True)
@@ -132,7 +132,7 @@ class ServerInventory:
     hostname: Hostname
     address: ConnectionAddress
     environment: ResourceId
-    profile_id: ResourceId
+    server_type_id: ResourceId
     lifecycle: ServerLifecycle
     ssh_user: LinuxUser
     ssh_port: TcpPort
@@ -147,7 +147,7 @@ class ServerInventory:
             "hostname": self.hostname.value,
             "address": self.address.value,
             "environment": self.environment.value,
-            "profile": self.profile_id.value,
+            "serverType": self.server_type_id.value,
             "lifecycle": self.lifecycle.value,
             "ssh": {
                 "user": self.ssh_user.value,
@@ -164,7 +164,7 @@ class ServerInventory:
 
 @dataclass(frozen=True, slots=True)
 class OperatingSystemRequirement:
-    """Desired operating-system contract for a host profile."""
+    """Desired operating-system contract for a server type."""
 
     distribution: OperatingSystemDistribution
     versions: tuple[OperatingSystemMajorVersion, ...]
@@ -282,7 +282,7 @@ class ConfigurationFileRequirement:
 
 
 @dataclass(frozen=True, slots=True)
-class HostProfileInventory:
+class ServerTypeInventory:
     """Reusable desired host contract."""
 
     resource_id: ResourceId
@@ -296,7 +296,7 @@ class HostProfileInventory:
     configuration_files: tuple[ConfigurationFileRequirement, ...]
 
     def as_dict(self) -> dict[str, object]:
-        """Serialize the profile for inspection and audit consumers."""
+        """Serialize the server_type for inspection and audit consumers."""
         required_packages: list[dict[str, object]] = []
         for package in self.required_packages:
             item: dict[str, object] = {"name": package.name.value}
@@ -368,8 +368,8 @@ class SecretReference:
 
 
 @dataclass(frozen=True, slots=True)
-class ProjectInventory:
-    """Composition and ownership data for one SaaS project."""
+class ApplicationInventory:
+    """Composition and ownership data for one SaaS application."""
 
     resource_id: ResourceId
     linux_user: LinuxUser
@@ -378,7 +378,7 @@ class ProjectInventory:
     secret_refs: tuple[SecretReference, ...] = ()
 
     def as_dict(self) -> dict[str, object]:
-        """Serialize project composition for inventory consumers."""
+        """Serialize application composition for inventory consumers."""
         return {
             "id": self.resource_id.value,
             "linuxUser": self.linux_user.value,
@@ -485,7 +485,7 @@ class ComponentInventory:
     """Placement and deployment contract for one deployable component."""
 
     resource_id: ResourceId
-    project_id: ResourceId
+    application_id: ResourceId
     server_ids: tuple[ResourceId, ...]
     install_root: AbsolutePath
     retain_until_cleanup: bool
@@ -500,7 +500,7 @@ class ComponentInventory:
         """Serialize the component for inventory consumers."""
         result: dict[str, object] = {
             "id": self.resource_id.value,
-            "project": self.project_id.value,
+            "application": self.application_id.value,
             "servers": [server.value for server in self.server_ids],
             "installRoot": self.install_root.value,
             "retainUntilCleanup": self.retain_until_cleanup,
@@ -622,17 +622,17 @@ class ServiceBind:
 
 @dataclass(frozen=True, slots=True)
 class PostgresDatabase:
-    """One project-owned PostgreSQL database."""
+    """One application-owned PostgreSQL database."""
 
     name: PostgresDatabaseName
-    project_id: ResourceId
+    application_id: ResourceId
     owner: LinuxUser
 
     def as_dict(self) -> dict[str, object]:
         """Serialize the database with its resolved owner role."""
         return {
             "name": self.name.value,
-            "project": self.project_id.value,
+            "application": self.application_id.value,
             "owner": self.owner.value,
         }
 
@@ -960,7 +960,7 @@ class LoggingFileSource:
     resource_id: ResourceId
     path: AbsolutePath
     server_ids: tuple[ResourceId, ...]
-    project_id: ResourceId | None
+    application_id: ResourceId | None
     component_id: ResourceId | None
 
     def as_dict(self) -> dict[str, object]:
@@ -970,8 +970,8 @@ class LoggingFileSource:
             "path": self.path.value,
             "servers": [server.value for server in self.server_ids],
         }
-        if self.project_id is not None:
-            result["project"] = self.project_id.value
+        if self.application_id is not None:
+            result["application"] = self.application_id.value
         if self.component_id is not None:
             result["component"] = self.component_id.value
         return result
@@ -1166,11 +1166,11 @@ class LoggingStackInventory:
 
 @dataclass(frozen=True, slots=True)
 class PlatformInventory:
-    """Typed inventory of validated servers, projects, and components."""
+    """Typed inventory of validated servers, applications, and components."""
 
     servers: tuple[ServerInventory, ...]
-    profiles: tuple[HostProfileInventory, ...]
-    projects: tuple[ProjectInventory, ...]
+    server_types: tuple[ServerTypeInventory, ...]
+    applications: tuple[ApplicationInventory, ...]
     components: tuple[ComponentInventory, ...]
     domains: tuple[DomainInventory, ...]
     services: tuple[ServiceInventory, ...]
@@ -1180,19 +1180,19 @@ class PlatformInventory:
     operator_policies: tuple[OperatorPolicyInventory, ...]
 
     @classmethod
-    def from_state(cls, state: ValidatedState) -> PlatformInventory:
-        """Project validated state into stable inventory records."""
+    def from_state(cls, state: ValidatedConfig) -> PlatformInventory:
+        """Application validated state into stable inventory records."""
         servers = tuple(
             _server_inventory(document)
             for document in state.resources(ResourceKind.SERVER)
         )
-        profiles = tuple(
-            _host_profile_inventory(document)
+        server_types = tuple(
+            _server_type_inventory(document)
             for document in state.resources(ResourceKind.HOST_PROFILE)
         )
-        projects = tuple(
-            _project_inventory(document)
-            for document in state.resources(ResourceKind.PROJECT)
+        applications = tuple(
+            _application_inventory(document)
+            for document in state.resources(ResourceKind.APPLICATION)
         )
         components = tuple(
             _component_inventory(document)
@@ -1202,9 +1202,11 @@ class PlatformInventory:
             _domain_inventory(document)
             for document in state.resources(ResourceKind.DOMAIN)
         )
-        projects_by_id = {project.resource_id: project for project in projects}
+        applications_by_id = {
+            application.resource_id: application for application in applications
+        }
         services = tuple(
-            _service_inventory(document, projects_by_id)
+            _service_inventory(document, applications_by_id)
             for document in state.resources(ResourceKind.SERVICE)
         )
         ssh_public_keys = tuple(
@@ -1225,8 +1227,8 @@ class PlatformInventory:
         )
         return cls(
             servers=servers,
-            profiles=profiles,
-            projects=projects,
+            server_types=server_types,
+            applications=applications,
             components=components,
             domains=domains,
             services=services,
@@ -1236,20 +1238,20 @@ class PlatformInventory:
             operator_policies=operator_policies,
         )
 
-    def profile(self, profile_id: ResourceId) -> HostProfileInventory:
-        """Return an existing desired host profile."""
-        profile = next(
+    def server_type(self, server_type_id: ResourceId) -> ServerTypeInventory:
+        """Return an existing desired server type."""
+        server_type = next(
             (
                 candidate
-                for candidate in self.profiles
-                if candidate.resource_id == profile_id
+                for candidate in self.server_types
+                if candidate.resource_id == server_type_id
             ),
             None,
         )
-        if profile is None:
-            message = f"host profile does not exist: {profile_id}"
+        if server_type is None:
+            message = f"server type does not exist: {server_type_id}"
             raise KeyError(message)
-        return profile
+        return server_type
 
     def components_on_server(
         self, server_id: ResourceId
@@ -1288,8 +1290,12 @@ class PlatformInventory:
         """Serialize the complete non-secret platform inventory."""
         return {
             "servers": [server.as_dict() for server in self.servers],
-            "hostProfiles": [profile.as_dict() for profile in self.profiles],
-            "projects": [project.as_dict() for project in self.projects],
+            "serverTypes": [
+                server_type.as_dict() for server_type in self.server_types
+            ],
+            "applications": [
+                application.as_dict() for application in self.applications
+            ],
             "components": [component.as_dict() for component in self.components],
             "domains": [domain.as_dict() for domain in self.domains],
             "services": [service.as_dict() for service in self.services],
@@ -1311,7 +1317,7 @@ def _server_inventory(document: ResourceDocument) -> ServerInventory:
         hostname=Hostname.from_boundary(spec.get("hostname")),
         address=ConnectionAddress.from_boundary(spec.get("address")),
         environment=ResourceId.from_boundary(spec.get("environment")),
-        profile_id=ResourceId.from_boundary(spec.get("profile")),
+        server_type_id=ResourceId.from_boundary(spec.get("serverType")),
         lifecycle=ServerLifecycle.from_boundary(spec.get("lifecycle")),
         ssh_user=LinuxUser.from_boundary(ssh.get("user")),
         ssh_port=TcpPort.from_boundary(ssh.get("port")),
@@ -1349,7 +1355,7 @@ def _server_network(value: object) -> ServerNetwork | None:
     )
 
 
-def _host_profile_inventory(document: ResourceDocument) -> HostProfileInventory:
+def _server_type_inventory(document: ResourceDocument) -> ServerTypeInventory:
     spec = _mapping(document.content, "spec")
     os_requirement = _mapping(spec, "os")
     storage = _mapping(spec, "storage")
@@ -1358,7 +1364,7 @@ def _host_profile_inventory(document: ResourceDocument) -> HostProfileInventory:
     packages = _mapping(spec, "packages")
     services = _mapping(spec, "services")
     configuration = _mapping(spec, "configuration")
-    return HostProfileInventory(
+    return ServerTypeInventory(
         resource_id=document.key.resource_id,
         os=OperatingSystemRequirement(
             distribution=OperatingSystemDistribution.from_boundary(
@@ -1409,13 +1415,13 @@ def _host_profile_inventory(document: ResourceDocument) -> HostProfileInventory:
     )
 
 
-def _project_inventory(document: ResourceDocument) -> ProjectInventory:
+def _application_inventory(document: ResourceDocument) -> ApplicationInventory:
     spec = _mapping(document.content, "spec")
-    return ProjectInventory(
+    return ApplicationInventory(
         resource_id=document.key.resource_id,
         linux_user=LinuxUser.from_boundary(spec.get("linuxUser")),
         approval=DeploymentApproval.from_boundary(spec.get("approval")),
-        component_ids=_resource_ids(spec.get("components"), "project components"),
+        component_ids=_resource_ids(spec.get("components"), "application components"),
         secret_refs=_secret_references(spec.get("secretRefs")),
     )
 
@@ -1433,7 +1439,7 @@ def _component_inventory(document: ResourceDocument) -> ComponentInventory:
         raise TypeError(message)
     return ComponentInventory(
         resource_id=document.key.resource_id,
-        project_id=ResourceId.from_boundary(spec.get("project")),
+        application_id=ResourceId.from_boundary(spec.get("application")),
         server_ids=_resource_ids(deployment.get("servers"), "component servers"),
         install_root=AbsolutePath.from_boundary(deployment.get("installRoot")),
         retain_until_cleanup=_boolean(
@@ -1578,7 +1584,7 @@ def _domain_inventory(document: ResourceDocument) -> DomainInventory:
 
 def _service_inventory(
     document: ResourceDocument,
-    projects_by_id: Mapping[ResourceId, ProjectInventory],
+    applications_by_id: Mapping[ResourceId, ApplicationInventory],
 ) -> ServiceInventory:
     spec = _mapping(document.content, "spec")
     bind = _mapping(spec, "bind")
@@ -1598,7 +1604,7 @@ def _service_inventory(
                 else None
             ),
             databases=tuple(
-                _postgres_database(item, projects_by_id)
+                _postgres_database(item, applications_by_id)
                 for item in _mapping_list(
                     raw_postgresql.get("databases"), "service databases"
                 )
@@ -1707,17 +1713,19 @@ def _service_metrics_enabled(
 
 def _postgres_database(
     content: Mapping[str, object],
-    projects_by_id: Mapping[ResourceId, ProjectInventory],
+    applications_by_id: Mapping[ResourceId, ApplicationInventory],
 ) -> PostgresDatabase:
-    project_id = ResourceId.from_boundary(content.get("project"))
-    project = projects_by_id.get(project_id)
-    if project is None:
-        message = f"service database references an unknown project: {project_id}"
+    application_id = ResourceId.from_boundary(content.get("application"))
+    application = applications_by_id.get(application_id)
+    if application is None:
+        message = (
+            f"service database references an unknown application: {application_id}"
+        )
         raise KeyError(message)
     return PostgresDatabase(
         name=PostgresDatabaseName.from_boundary(content.get("name")),
-        project_id=project_id,
-        owner=project.linux_user,
+        application_id=application_id,
+        owner=application.linux_user,
     )
 
 
@@ -1911,14 +1919,16 @@ def _alert_receiver(content: Mapping[str, object]) -> AlertReceiverInventory:
 
 
 def _logging_file_source(content: Mapping[str, object]) -> LoggingFileSource:
-    raw_project = content.get("project")
+    raw_application = content.get("application")
     raw_component = content.get("component")
     return LoggingFileSource(
         resource_id=ResourceId.from_boundary(content.get("id")),
         path=AbsolutePath.from_boundary(content.get("path")),
         server_ids=_resource_ids(content.get("servers"), "log-file servers"),
-        project_id=(
-            ResourceId.from_boundary(raw_project) if raw_project is not None else None
+        application_id=(
+            ResourceId.from_boundary(raw_application)
+            if raw_application is not None
+            else None
         ),
         component_id=(
             ResourceId.from_boundary(raw_component)
@@ -1958,7 +1968,7 @@ def _service_requirement(content: Mapping[str, object]) -> ServiceRequirement:
 def _firewall_requirement(value: object) -> FirewallRequirement | None:
     if value is None:
         return None
-    firewall = _boundary_mapping(value, "host profile firewall")
+    firewall = _boundary_mapping(value, "server type firewall")
     return FirewallRequirement(
         policy=FirewallPolicy.from_boundary(firewall.get("policy")),
         allowed_inbound=tuple(

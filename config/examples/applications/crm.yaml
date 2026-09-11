@@ -1,0 +1,15 @@
+---
+apiVersion: cloudfall/v1
+kind: Application
+metadata:
+  id: crm
+  description: Example customer relationship management product
+spec:
+  linuxUser: crm
+  approval: manual
+  components:
+    - crm-backend
+  secretRefs:
+    - scope: platform
+      environment: production
+      path: /shared

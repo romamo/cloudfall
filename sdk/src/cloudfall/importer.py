@@ -32,7 +32,7 @@ _RESOURCE_SLUG_MAX = 63
 _ERROR_BLUEPRINT_INVALID = "import_blueprint_invalid"
 _ERROR_NAME_INVALID = "import_name_invalid"
 _ERROR_NAME_COLLISION = "import_name_collision"
-_ERROR_PROJECT_INVALID = "import_project_invalid"
+_ERROR_PROJECT_INVALID = "import_application_invalid"
 _CATEGORY_UNSUPPORTED = "unsupported"
 _CATEGORY_ASSUMPTION = "assumption"
 _CATEGORY_ACTION = "action"
@@ -76,9 +76,9 @@ class ImportGap:
 class ImportTargets:
     """Where imported resources are placed."""
 
-    project_id: ResourceId
+    application_id: ResourceId
     server_id: ResourceId
-    state_directory: Path
+    config_directory: Path
     environment_directory: Path
 
 
@@ -86,7 +86,7 @@ class ImportTargets:
 class RenderImportResult:
     """Structured outcome of one blueprint import."""
 
-    project_id: ResourceId
+    application_id: ResourceId
     components: tuple[str, ...]
     services: tuple[str, ...]
     domains: tuple[str, ...]
@@ -99,7 +99,7 @@ class RenderImportResult:
         """Serialize the import result for agent consumers."""
         return {
             "status": "ok",
-            "project": self.project_id.value,
+            "application": self.application_id.value,
             "components": list(self.components),
             "services": list(self.services),
             "domains": list(self.domains),
@@ -172,7 +172,7 @@ def import_render_mapping(
     initial_gaps: tuple[ImportGap, ...] = (),
 ) -> RenderImportResult:
     """Map one blueprint-shaped Render description onto state files."""
-    _require_project_user(targets.project_id)
+    _require_application_user(targets.application_id)
     catalog = SchemaCatalog(schema_directory)
     state = _ImportState()
     state.gaps.extend(initial_gaps)
@@ -196,14 +196,14 @@ def import_render_mapping(
         raise RenderImportError(code, message)
 
     service_documents = _import_databases(blueprint, targets, state)
-    project_document = _project_document(targets, state)
+    application_document = _application_document(targets, state)
 
     written: list[Path] = [
         _write_resource(
             catalog,
-            ResourceKind.PROJECT,
-            project_document,
-            targets.state_directory / "projects",
+            ResourceKind.APPLICATION,
+            application_document,
+            targets.config_directory / "applications",
         )
     ]
     written.extend(
@@ -211,7 +211,7 @@ def import_render_mapping(
             catalog,
             ResourceKind.COMPONENT,
             document,
-            targets.state_directory / "components",
+            targets.config_directory / "components",
         )
         for document in state.component_documents
     )
@@ -220,7 +220,7 @@ def import_render_mapping(
             catalog,
             ResourceKind.SERVICE,
             document,
-            targets.state_directory / "services",
+            targets.config_directory / "services",
         )
         for document in service_documents
     )
@@ -229,7 +229,7 @@ def import_render_mapping(
             catalog,
             ResourceKind.DOMAIN,
             document,
-            targets.state_directory / "domains",
+            targets.config_directory / "domains",
         )
         for document in state.domain_documents
     )
@@ -237,7 +237,7 @@ def import_render_mapping(
     environment_files = _write_environment_files(targets, state)
     report = _write_report(targets, state)
     return RenderImportResult(
-        project_id=targets.project_id,
+        application_id=targets.application_id,
         components=tuple(
             _document_id(document) for document in state.component_documents
         ),
@@ -374,14 +374,14 @@ def _import_component(  # noqa: PLR0913 - one boundary mapping, many inputs.
             "description": f"Imported from Render service {name}",
         },
         "spec": {
-            "project": targets.project_id.value,
+            "application": targets.application_id.value,
             "repository": _repository(raw_service, repo),
             "runtime": _runtime(runtime, resolved, name, state),
             "deployment": {
                 "strategy": "artifact-symlink",
                 "servers": [targets.server_id.value],
                 "installRoot": (
-                    f"/srv/apps/{targets.project_id.value}/{component_id}"
+                    f"/srv/apps/{targets.application_id.value}/{component_id}"
                 ),
                 "retainUntilCleanup": True,
             },
@@ -565,7 +565,7 @@ def _import_databases(
         databases.append(
             {
                 "name": state.database_names[name],
-                "project": targets.project_id.value,
+                "application": targets.application_id.value,
             }
         )
         declared_major = entry.get("postgresMajorVersion")
@@ -575,7 +575,7 @@ def _import_databases(
             state.gap(
                 _CATEGORY_ACTION,
                 name,
-                "database roles use peer authentication as the project user; "
+                "database roles use peer authentication as the application user; "
                 "update connection strings that referenced the Render user",
             )
     if major_version is None:
@@ -753,18 +753,18 @@ def _environment_groups(
     return groups
 
 
-def _project_document(
+def _application_document(
     targets: ImportTargets, state: _ImportState
 ) -> dict[str, object]:
     return {
         "apiVersion": "cloudfall/v1",
-        "kind": "Project",
+        "kind": "Application",
         "metadata": {
-            "id": targets.project_id.value,
+            "id": targets.application_id.value,
             "description": "Imported from a Render blueprint",
         },
         "spec": {
-            "linuxUser": targets.project_id.value,
+            "linuxUser": targets.application_id.value,
             "approval": "manual",
             "components": [
                 _document_id(document)
@@ -814,8 +814,8 @@ def _write_report(targets: ImportTargets, state: _ImportState) -> Path:
         "# Render import report",
         "",
         "Imported resources are declarative state only. Merge this",
-        "directory with your servers and host profiles, then run",
-        "`cloudfall state validate` before deploying anything.",
+        "directory with your servers and server types, then run",
+        "`cloudfall config validate` before deploying anything.",
         "",
     ]
     for category, title in (
@@ -832,18 +832,18 @@ def _write_report(targets: ImportTargets, state: _ImportState) -> Path:
             f"- **{gap.subject}**: {gap.detail}" for gap in entries
         )
         lines.append("")
-    path = targets.state_directory / "IMPORT-REPORT.md"
-    targets.state_directory.mkdir(parents=True, exist_ok=True)
+    path = targets.config_directory / "IMPORT-REPORT.md"
+    targets.config_directory.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines), encoding="utf-8")
     return path
 
 
-def _require_project_user(project_id: ResourceId) -> None:
+def _require_application_user(application_id: ResourceId) -> None:
     try:
-        LinuxUser(project_id.value)
+        LinuxUser(application_id.value)
     except ValueError as error:
         detail = (
-            f"project id {project_id.value!r} is not usable as a Linux user"
+            f"application id {application_id.value!r} is not usable as a Linux user"
         )
         raise RenderImportError(_ERROR_PROJECT_INVALID, detail) from error
 

@@ -20,8 +20,8 @@ native service configuration before restart, deploy one host at a time, and
 never manage Filebeat or the existing Elastic path:
 
 ```console
-task logging:check STATE_DIR=state/examples
-task logging:deploy STATE_DIR=state/examples
+task logging:check CONFIG_DIR=config/examples
+task logging:deploy CONFIG_DIR=config/examples
 ```
 
 Follow the [`logging service guide`](../docs/logging-service-guide.md) before
@@ -30,11 +30,11 @@ declaring a `LoggingStack` for live hosts.
 Its first executable capability is deterministic Ansible inventory rendering:
 
 ```console
-uv run cloudfall-engine inventory render state/examples
+uv run cloudfall-engine inventory render config/examples
 ```
 
 The renderer consumes the SDK's typed inventory and creates host variables plus
-environment, project, and component groups. It never includes secret values or
+environment, application, and component groups. It never includes secret values or
 secret references.
 
 Active environment-scoped SSH public keys are rendered as
@@ -48,8 +48,8 @@ to synchronize. The play targets the complete Cloudfall inventory and runs one h
 at a time; use `TIME_LIMIT` for a bounded deployment:
 
 ```console
-task time:check STATE_DIR=state/examples TIME_LIMIT=h1
-task time:deploy STATE_DIR=state/examples TIME_LIMIT=h1
+task time:check CONFIG_DIR=config/examples TIME_LIMIT=h1
+task time:deploy CONFIG_DIR=config/examples TIME_LIMIT=h1
 ```
 
 ## Server baseline
@@ -83,8 +83,8 @@ application deployment. It:
 
 - validates that the host is Debian with systemd;
 - installs a minimal baseline package set without upgrading the OS;
-- creates one system account per project;
-- creates project shared directories; and
+- creates one system account per application;
+- creates application shared directories; and
 - creates component `releases/` and `shared/` directories.
 
 It deliberately does not install Debian, configure RAID, change SSH or firewall
@@ -103,8 +103,8 @@ task services:deploy
 The PostgreSQL role installs the declared major version from the PGDG
 repository (optionally pinned), binds the cluster to loopback through a
 managed `conf.d` drop-in, and creates one login role and database per
-declared project using peer authentication over the local socket — no
-database passwords exist anywhere. Components connect as their project's
+declared application using peer authentication over the local socket — no
+database passwords exist anywhere. Components connect as their application's
 Linux user. Backups run `pg_dump` in custom format on the declared systemd
 calendar with bounded retention, and
 `/usr/local/sbin/cloudfall-postgresql-restore-check` proves the newest dump
@@ -186,7 +186,7 @@ remote host. It reads Ansible facts, the Debian package database through
 `inet cloudfall` nftables table as JSON, listening TCP/UDP sockets from
 `ss -tulnH`, `lsblk`, `findmnt`, `/proc/mdstat`,
 `mdadm --detail --scan`, read-only NVMe reports from `smartctl`, and `stat` data for the
-configuration paths allowlisted by the server's `HostProfile`.
+configuration paths allowlisted by the server's `ServerType`.
 
 Configuration capture is deliberately bounded to metadata and optional SHA-256
 hashes; the role does not fetch file contents. The only persistent writes are
@@ -204,6 +204,6 @@ The play requires the inventory SSH account to connect and become root. A
 collection failure stops the run instead of producing partial evidence that
 could be mistaken for a complete audit.
 
-Generated inventory keeps project and component collections in host variables.
-This prevents variable collisions when one server belongs to multiple project
+Generated inventory keeps application and component collections in host variables.
+This prevents variable collisions when one server belongs to multiple application
 or component groups.

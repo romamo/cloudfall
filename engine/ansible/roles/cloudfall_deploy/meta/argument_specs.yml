@@ -10,10 +10,10 @@ argument_specs:
           id:
             type: str
             required: true
-          project:
+          application:
             type: str
             required: true
-          project_user:
+          application_user:
             type: str
             required: true
           install_root:

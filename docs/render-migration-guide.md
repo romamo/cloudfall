@@ -23,7 +23,7 @@ Render and Cloudfall describe the same things with different words:
 | Managed PostgreSQL (`databases:`) | `Service` of kind PostgreSQL: localhost-only bind, application-owned databases, peer authentication, no database passwords |
 | Custom domain | `Domain` resource: Nginx virtual host plus Let's Encrypt TLS |
 | Environment variables and env groups | Environment files kept outside the config directory; the config never contains secret values |
-| Instance type / plan | Your server (VPS or bare metal) plus its server type (`HostProfile`) |
+| Instance type / plan | Your server (VPS or bare metal) plus its server type (`ServerType`) |
 | Deploy from GitHub | `cloudfall deploy`: artifact built from a git ref, health-check gate, symlink switch, automatic rollback |
 | Render dashboard | Local operations dashboard (`task dashboard`) |
 | Service (Render's umbrella term) | Split into two concepts: infrastructure **services** (PostgreSQL, Nginx) and application **components** |
@@ -48,7 +48,7 @@ Not imported today; each lands in the gap report instead of being guessed at:
 ## Step 1: import the blueprint
 
 ```console
-uv run cloudfall import render render.yaml --project acme --server h1
+uv run cloudfall import render render.yaml --application acme --server h1
 ```
 
 No `render.yaml`? Import the live workspace straight from the Render API
@@ -56,7 +56,7 @@ instead — put your API key alone into a file and run:
 
 ```sh
 uv run cloudfall import render-api --api-key-file ~/.render/api-key \
-  --project acme --server h1
+  --application acme --server h1
 ```
 
 The API path discovers services, workers, cron jobs, and managed PostgreSQL
@@ -91,10 +91,10 @@ Treat the required-actions list as your migration checklist.
 ## Step 3: complete the config
 
 Merge the emitted fragment with the resources the blueprint cannot know
-about: your `Server` and its server type (`HostProfile`). Then validate:
+about: your `Server` and its server type (`ServerType`). Then validate:
 
 ```console
-uv run cloudfall state validate state/production
+uv run cloudfall config validate config/production
 ```
 
 ## Step 4: fill in environment files
@@ -107,8 +107,8 @@ and validation rejects them if they do.
 ## Step 5: run the migration plan
 
 ```console
-uv run cloudfall migrate state/production --build acme-api=main
-uv run cloudfall migrate state/production --build acme-api=main --yes
+uv run cloudfall migrate config/production --build acme-api=main
+uv run cloudfall migrate config/production --build acme-api=main --yes
 ```
 
 Without `--yes` the command shows the plan. With it, the plan executes step

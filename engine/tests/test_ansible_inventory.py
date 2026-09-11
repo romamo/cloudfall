@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from cloudfall.inventory import PlatformInventory
-from cloudfall.validation import validate_state
+from cloudfall.validation import validate_config
 from cloudfall_engine.ansible_inventory import render_ansible_inventory
 from cloudfall_engine.cli import main
 
@@ -15,12 +15,12 @@ if TYPE_CHECKING:
     import pytest
 
 ROOT = Path(__file__).parents[2]
-SCHEMAS = ROOT / "state" / "schemas" / "v1"
-EXAMPLES = ROOT / "state" / "examples"
+SCHEMAS = ROOT / "config" / "schemas" / "v1"
+EXAMPLES = ROOT / "config" / "examples"
 
 
 def _rendered_inventory() -> dict[str, object]:
-    state = validate_state(EXAMPLES, SCHEMAS)
+    state = validate_config(EXAMPLES, SCHEMAS)
     return render_ansible_inventory(PlatformInventory.from_state(state))
 
 
@@ -84,8 +84,8 @@ def test_inventory_renders_ansible_host_variables() -> None:
             {
                 "id": "crm-backend",
                 "install_root": "/srv/apps/crm/backend",
-                "project": "crm",
-                "project_user": "crm",
+                "application": "crm",
+                "application_user": "crm",
                 "repository": {
                     "url": "https://github.com/example/crm-backend.git",
                 },
@@ -128,7 +128,7 @@ def test_inventory_renders_ansible_host_variables() -> None:
                 "postgresql": {
                     "majorVersion": "17",
                     "databases": [
-                        {"name": "crm", "project": "crm", "owner": "crm"}
+                        {"name": "crm", "application": "crm", "owner": "crm"}
                     ],
                 },
                 "backup": {
@@ -163,7 +163,7 @@ def test_inventory_renders_ansible_host_variables() -> None:
                 {"port": 443, "protocol": "tcp", "description": "https"},
             ],
         },
-        "cloudfall_host_profile": {
+        "cloudfall_server_type": {
             "configuration": {
                 "files": [
                     {
@@ -234,7 +234,7 @@ def test_inventory_renders_ansible_host_variables() -> None:
             "workload": "application",
         },
         "cloudfall_lifecycle": "active",
-        "cloudfall_projects": [{"approval": "manual", "id": "crm", "user": "crm"}],
+        "cloudfall_applications": [{"approval": "manual", "id": "crm", "user": "crm"}],
         "cloudfall_server_id": "h1",
     }
     assert logging_backend["id"] == "operations"
@@ -249,12 +249,12 @@ def test_inventory_renders_ansible_host_variables() -> None:
     }
 
 
-def test_inventory_renders_environment_project_and_component_groups() -> None:
+def test_inventory_renders_environment_application_and_component_groups() -> None:
     children = _inventory_children(_rendered_inventory())
     environments = _mapping_entry(children, "cloudfall_environments")
     environment_groups = _mapping_entry(environments, "children")
-    projects = _mapping_entry(children, "cloudfall_projects")
-    project_groups = _mapping_entry(projects, "children")
+    applications = _mapping_entry(children, "cloudfall_applications")
+    application_groups = _mapping_entry(applications, "children")
     components = _mapping_entry(children, "cloudfall_components")
     component_groups = _mapping_entry(components, "children")
     logging_backends = _mapping_entry(children, "cloudfall_logging_backends")
@@ -264,7 +264,7 @@ def test_inventory_renders_environment_project_and_component_groups() -> None:
     assert environment_groups["environment_production"] == {
         "hosts": {"h1": {}, "h2": {}},
     }
-    assert project_groups["project_crm"] == {
+    assert application_groups["application_crm"] == {
         "hosts": {"h1": {}, "h2": {}},
     }
     assert component_groups["component_crm_backend"] == {

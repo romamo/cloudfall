@@ -17,7 +17,7 @@ from cloudfall.render_api import (
 )
 
 ROOT = Path(__file__).parents[2]
-SCHEMAS = ROOT / "state" / "schemas" / "v1"
+SCHEMAS = ROOT / "config" / "schemas" / "v1"
 
 _INTERNAL_URL = "postgres://acme:secret@dpg-internal/acme_db"
 _EXTERNAL_URL = "postgres://acme:secret@dpg.render.com/acme_db"
@@ -162,9 +162,9 @@ def test_import_render_api_writes_state_and_resolved_env(
     tmp_path: Path,
 ) -> None:
     targets = ImportTargets(
-        project_id=ResourceId.from_boundary("acme"),
+        application_id=ResourceId.from_boundary("acme"),
         server_id=ResourceId.from_boundary("h1"),
-        state_directory=tmp_path / "state",
+        config_directory=tmp_path / "config",
         environment_directory=tmp_path / "env",
     )
     client = FakeRenderClient()
@@ -192,7 +192,7 @@ def test_import_render_api_writes_state_and_resolved_env(
     assert "suspended" in gap_details
     assert "0 6 * * *" in gap_details
     assert "static" in gap_details
-    service_path = tmp_path / "state" / "services" / "postgresql-main.yaml"
+    service_path = tmp_path / "config" / "services" / "postgresql-main.yaml"
     assert service_path.is_file()
     assert "majorVersion: '16'" in service_path.read_text(encoding="utf-8")
     assert client.env_var_requests == ["srv-web", "srv-worker", "srv-cron"]
@@ -246,12 +246,12 @@ def test_cli_render_api_reports_missing_key_file(
             "render-api",
             "--api-key-file",
             str(tmp_path / "missing"),
-            "--project",
+            "--application",
             "acme",
             "--server",
             "h1",
             "--output",
-            str(tmp_path / "state"),
+            str(tmp_path / "config"),
             "--env-dir",
             str(tmp_path / "env"),
             "--schemas",
@@ -300,9 +300,9 @@ def test_import_refuses_an_empty_workspace_with_a_structured_error(
             return ()
 
     targets = ImportTargets(
-        project_id=ResourceId.from_boundary("legacy"),
+        application_id=ResourceId.from_boundary("legacy"),
         server_id=ResourceId.from_boundary("h1"),
-        state_directory=tmp_path / "state",
+        config_directory=tmp_path / "config",
         environment_directory=tmp_path / "env",
     )
 
@@ -311,4 +311,4 @@ def test_import_refuses_an_empty_workspace_with_a_structured_error(
 
     assert caught.value.code == "render_import_empty"
     assert "container runtimes" in str(caught.value)
-    assert not (tmp_path / "state").exists()
+    assert not (tmp_path / "config").exists()

@@ -23,7 +23,7 @@ declared triggers onto the engine entry points you already use.
 One pass (fetch alerts, propose, exit):
 
 ```sh
-uv run cloudfall operator run state/production \
+uv run cloudfall operator run config/production \
   --gateway-ca certs/ca.crt \
   --gateway-cert certs/operator.crt \
   --gateway-key certs/operator.key
@@ -32,7 +32,7 @@ uv run cloudfall operator run state/production \
 Always-on with audited drift checks every 15 minutes:
 
 ```sh
-uv run cloudfall operator run state/production \
+uv run cloudfall operator run config/production \
   --gateway-ca certs/ca.crt \
   --gateway-cert certs/operator.crt \
   --gateway-key certs/operator.key \
@@ -62,7 +62,7 @@ After=network-online.target
 
 [Service]
 WorkingDirectory=/opt/cloudfall
-ExecStart=/usr/local/bin/uv run cloudfall operator run state/production \
+ExecStart=/usr/local/bin/uv run cloudfall operator run config/production \
   --gateway-ca certs/ca.crt --gateway-cert certs/operator.crt \
   --gateway-key certs/operator.key --interval 30 --drift-interval 900
 Restart=on-failure
@@ -74,9 +74,9 @@ WantedBy=multi-user.target
 ## Reviewing and approving
 
 ```sh
-uv run cloudfall operator list state/production
-uv run cloudfall operator show state/production op-20260910t150000-abcdef1234567890
-uv run cloudfall operator approve state/production op-... \
+uv run cloudfall operator list config/production
+uv run cloudfall operator show config/production op-20260910t150000-abcdef1234567890
+uv run cloudfall operator approve config/production op-... \
   --gateway-ca certs/ca.crt --gateway-cert certs/operator.crt \
   --gateway-key certs/operator.key
 ```
@@ -142,7 +142,7 @@ proposals it executed and which it withheld, with reasons.
 handshake — start it with the gateway material to enable the watch tool:
 
 ```sh
-uv run cloudfall-mcp --state state/production \
+uv run cloudfall-mcp --state config/production \
   --gateway-ca certs/ca.crt --gateway-cert certs/operator.crt \
   --gateway-key certs/operator.key
 ```

@@ -1,0 +1,289 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cloudfall.internal/schemas/v1/server-type.schema.json",
+  "title": "Cloudfall server type",
+  "x-cloudfall-kind": "ServerType",
+  "type": "object",
+  "properties": {
+    "apiVersion": {
+      "$ref": "common.schema.json#/$defs/apiVersion"
+    },
+    "kind": {
+      "const": "ServerType"
+    },
+    "metadata": {
+      "$ref": "common.schema.json#/$defs/metadata"
+    },
+    "spec": {
+      "type": "object",
+      "properties": {
+        "os": {
+          "type": "object",
+          "properties": {
+            "distribution": {
+              "const": "Debian"
+            },
+            "versions": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[0-9]+$"
+              },
+              "minItems": 1,
+              "uniqueItems": true
+            },
+            "serviceManager": {
+              "const": "systemd"
+            }
+          },
+          "required": [
+            "distribution",
+            "versions",
+            "serviceManager"
+          ],
+          "additionalProperties": false
+        },
+        "storage": {
+          "type": "object",
+          "properties": {
+            "softwareRaid": {
+              "type": "object",
+              "properties": {
+                "level": {
+                  "enum": [
+                    "raid0",
+                    "raid1",
+                    "raid5",
+                    "raid6",
+                    "raid10"
+                  ]
+                },
+                "minimumActiveDevices": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "minimumUsableBytes": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "level",
+                "minimumActiveDevices",
+                "minimumUsableBytes"
+              ],
+              "additionalProperties": false
+            },
+            "mounts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "$ref": "common.schema.json#/$defs/absolutePath"
+                  },
+                  "filesystem": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 30
+                  },
+                  "minimumBytes": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                },
+                "required": [
+                  "path",
+                  "filesystem",
+                  "minimumBytes"
+                ],
+                "additionalProperties": false
+              },
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "mounts"
+          ],
+          "additionalProperties": false
+        },
+        "packages": {
+          "type": "object",
+          "properties": {
+            "required": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "$ref": "common.schema.json#/$defs/packageName"
+                  },
+                  "version": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "additionalProperties": false
+              },
+              "uniqueItems": true
+            },
+            "forbidden": {
+              "type": "array",
+              "items": {
+                "$ref": "common.schema.json#/$defs/packageName"
+              },
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "required",
+            "forbidden"
+          ],
+          "additionalProperties": false
+        },
+        "firewall": {
+          "type": "object",
+          "properties": {
+            "policy": {
+              "const": "default-deny"
+            },
+            "allowedInbound": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "port": {
+                    "$ref": "common.schema.json#/$defs/networkPort"
+                  },
+                  "protocol": {
+                    "$ref": "common.schema.json#/$defs/networkProtocol"
+                  },
+                  "description": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9 ._-]{0,199}$"
+                  }
+                },
+                "required": [
+                  "port",
+                  "protocol"
+                ],
+                "additionalProperties": false
+              },
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "policy",
+            "allowedInbound"
+          ],
+          "additionalProperties": false
+        },
+        "services": {
+          "type": "object",
+          "properties": {
+            "required": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "$ref": "common.schema.json#/$defs/systemdUnitName"
+                  },
+                  "state": {
+                    "enum": [
+                      "running",
+                      "stopped"
+                    ]
+                  },
+                  "status": {
+                    "enum": [
+                      "enabled",
+                      "disabled",
+                      "static",
+                      "indirect"
+                    ]
+                  }
+                },
+                "required": [
+                  "name",
+                  "state",
+                  "status"
+                ],
+                "additionalProperties": false
+              },
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "required"
+          ],
+          "additionalProperties": false
+        },
+        "configuration": {
+          "type": "object",
+          "properties": {
+            "files": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "$ref": "common.schema.json#/$defs/absolutePath"
+                  },
+                  "capture": {
+                    "enum": [
+                      "metadata",
+                      "hash"
+                    ]
+                  },
+                  "owner": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "group": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "mode": {
+                    "$ref": "common.schema.json#/$defs/fileMode"
+                  },
+                  "sha256": {
+                    "$ref": "common.schema.json#/$defs/sha256"
+                  }
+                },
+                "required": [
+                  "path",
+                  "capture"
+                ],
+                "additionalProperties": false
+              },
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "files"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "os",
+        "storage",
+        "packages",
+        "services",
+        "configuration"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "apiVersion",
+    "kind",
+    "metadata",
+    "spec"
+  ],
+  "additionalProperties": false
+}

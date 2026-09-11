@@ -1,0 +1,24 @@
+---
+apiVersion: cloudfall/v1
+kind: Service
+metadata:
+  id: postgresql-main
+  description: Example loopback PostgreSQL service with application databases
+spec:
+  serviceKind: postgresql
+  environment: production
+  server: h1
+  bind:
+    address: 127.0.0.1
+    port: 5432
+  postgresql:
+    majorVersion: "17"
+    databases:
+      - name: crm
+        application: crm
+  backup:
+    directory: /var/backups/cloudfall/postgresql-main
+    onCalendar: "*-*-* 02:00:00 UTC"
+    retentionDays: 14
+  metrics:
+    enabled: true

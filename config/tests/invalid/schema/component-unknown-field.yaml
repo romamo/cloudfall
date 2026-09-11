@@ -1,0 +1,35 @@
+---
+apiVersion: cloudfall/v1
+kind: Component
+metadata:
+  id: crm-backend
+spec:
+  application: crm
+  repository:
+    url: https://github.com/example/crm-backend.git
+  runtime:
+    type: python
+    version: "3.14"
+    packageManager: uv
+  deployment:
+    strategy: artifact-symlink
+    servers:
+      - h1
+    installRoot: /srv/apps/crm/backend
+    retainUntilCleanup: true
+  service:
+    manager: systemd
+    name: crm-backend
+    command:
+      - .venv/bin/uvicorn
+      - crm.asgi:application
+  healthCheck:
+    type: http
+    scheme: http
+    port: 8100
+    path: /health
+    expectedStatuses:
+      - 200
+    timeoutSeconds: 5
+    attempts: 5
+  unsupportedField: rejected

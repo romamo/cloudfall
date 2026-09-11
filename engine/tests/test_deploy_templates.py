@@ -15,8 +15,8 @@ TEMPLATES = (
 def _component() -> dict[str, object]:
     return {
         "id": "crm-backend",
-        "project": "crm",
-        "project_user": "crm",
+        "application": "crm",
+        "application_user": "crm",
         "install_root": "/srv/apps/crm/backend",
         "service": {
             "manager": "systemd",
@@ -45,7 +45,7 @@ def _render() -> str:
     )
 
 
-def test_unit_runs_the_release_command_as_the_project_user() -> None:
+def test_unit_runs_the_release_command_as_the_application_user() -> None:
     rendered = _render()
 
     assert "User=crm" in rendered

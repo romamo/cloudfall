@@ -1,0 +1,234 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cloudfall.internal/schemas/v1/component.schema.json",
+  "title": "Cloudfall component",
+  "x-cloudfall-kind": "Component",
+  "type": "object",
+  "properties": {
+    "apiVersion": {
+      "$ref": "common.schema.json#/$defs/apiVersion"
+    },
+    "kind": {
+      "const": "Component"
+    },
+    "metadata": {
+      "$ref": "common.schema.json#/$defs/metadata"
+    },
+    "spec": {
+      "type": "object",
+      "properties": {
+        "application": {
+          "$ref": "common.schema.json#/$defs/resourceId"
+        },
+        "repository": {
+          "type": "object",
+          "properties": {
+            "url": {
+              "type": "string",
+              "format": "uri",
+              "pattern": "^(?:https|ssh|file)://"
+            },
+            "subdirectory": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+            }
+          },
+          "required": [
+            "url"
+          ],
+          "additionalProperties": false
+        },
+        "runtime": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "enum": [
+                "python",
+                "node",
+                "pm2"
+              ]
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 30
+            },
+            "packageManager": {
+              "enum": [
+                "uv",
+                "npm",
+                "pnpm",
+                "yarn"
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "version",
+            "packageManager"
+          ],
+          "additionalProperties": false
+        },
+        "deployment": {
+          "type": "object",
+          "properties": {
+            "strategy": {
+              "const": "artifact-symlink"
+            },
+            "servers": {
+              "type": "array",
+              "items": {
+                "$ref": "common.schema.json#/$defs/resourceId"
+              },
+              "minItems": 1,
+              "uniqueItems": true
+            },
+            "installRoot": {
+              "$ref": "common.schema.json#/$defs/absolutePath"
+            },
+            "retainUntilCleanup": {
+              "const": true
+            }
+          },
+          "required": [
+            "strategy",
+            "servers",
+            "installRoot",
+            "retainUntilCleanup"
+          ],
+          "additionalProperties": false
+        },
+        "service": {
+          "type": "object",
+          "properties": {
+            "manager": {
+              "const": "systemd"
+            },
+            "name": {
+              "$ref": "common.schema.json#/$defs/resourceId"
+            },
+            "command": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "minItems": 1
+            }
+          },
+          "required": [
+            "manager",
+            "name",
+            "command"
+          ],
+          "additionalProperties": false
+        },
+        "healthCheck": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "const": "http"
+                },
+                "scheme": {
+                  "enum": [
+                    "http",
+                    "https"
+                  ]
+                },
+                "port": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535
+                },
+                "path": {
+                  "type": "string",
+                  "pattern": "^/"
+                },
+                "expectedStatuses": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": 100,
+                    "maximum": 599
+                  },
+                  "minItems": 1,
+                  "uniqueItems": true
+                },
+                "timeoutSeconds": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 300
+                },
+                "attempts": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 20
+                }
+              },
+              "required": [
+                "type",
+                "scheme",
+                "port",
+                "path",
+                "expectedStatuses",
+                "timeoutSeconds",
+                "attempts"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "const": "none"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "environment": {
+          "type": "object",
+          "minProperties": 1,
+          "patternProperties": {
+            "^[A-Za-z_][A-Za-z0-9_]*$": {
+              "type": "string",
+              "maxLength": 1000,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+            }
+          },
+          "additionalProperties": false
+        },
+        "secretRefs": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/secretReference"
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "application",
+        "repository",
+        "runtime",
+        "deployment",
+        "service",
+        "healthCheck"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "apiVersion",
+    "kind",
+    "metadata",
+    "spec"
+  ],
+  "additionalProperties": false
+}

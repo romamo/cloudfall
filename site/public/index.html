@@ -268,7 +268,7 @@
           <span></span><span></span><span></span>
           <div class="title">cloudfall migrate</div>
         </div>
-        <pre><span class="p">$</span> <span class="cmd">uv run cloudfall import render render.yaml --project acme --server h1</span>
+        <pre><span class="p">$</span> <span class="cmd">uv run cloudfall import render render.yaml --application acme --server h1</span>
 <span class="p">$</span> <span class="cmd">uv run cloudfall migrate state --build web=main --yes</span>
   <span class="ok">✓ baseline</span>       <span class="step">converge every server to the managed baseline</span>
   <span class="ok">✓ services</span>       <span class="step">converge every declared infrastructure service</span>
@@ -430,7 +430,7 @@
       <div class="kicker">Get started</div>
       <h2>One command to see it validate</h2>
       <div class="install"><span class="p">$</span> git clone https://github.com/romamo/cloudfall && cd cloudfall
-<span class="p">$</span> uv run cloudfall state validate state/examples</div>
+<span class="p">$</span> uv run cloudfall config validate config/examples</div>
       <div class="cta">
         <a class="btn btn-primary" href="https://github.com/romamo/cloudfall">Star on GitHub</a>
         <a class="btn btn-ghost" href="https://github.com/romamo/cloudfall/blob/main/ROADMAP.md">See the roadmap</a>

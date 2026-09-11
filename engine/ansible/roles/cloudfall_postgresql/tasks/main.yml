@@ -132,7 +132,7 @@
   changed_when: false
   when: not ansible_check_mode
 
-- name: Create missing project login roles
+- name: Create missing application login roles
   ansible.builtin.command:
     argv:
       - /usr/bin/psql
@@ -203,7 +203,7 @@
   changed_when: false
   when: not ansible_check_mode
 
-- name: Create missing project databases
+- name: Create missing application databases
   ansible.builtin.command:
     argv:
       - /usr/bin/psql

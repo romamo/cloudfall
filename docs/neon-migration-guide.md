@@ -20,7 +20,7 @@ Neon and Cloudfall describe overlapping things with different words:
 
 | Neon | Cloudfall |
 |---|---|
-| Project | `Service` of kind PostgreSQL on a declared server |
+| Application | `Service` of kind PostgreSQL on a declared server |
 | Default branch | The declared databases of that service |
 | Compute endpoint | The PostgreSQL systemd unit: always on, no cold starts |
 | Connection pooler (built-in PgBouncer) | Not needed for a co-located app: peer-authenticated local socket, no passwords, no TLS in the middle |
@@ -49,14 +49,14 @@ simply absent:
 - A Debian 13 server already converged through baseline and services
   (a Hetzner Cloud VPS is the proven reference), or a fresh one plus an
   hour to get there
-- The Neon project's connection details and console access
+- The Neon application's connection details and console access
 - Python 3.14 and [`uv`](https://docs.astral.sh/uv/) on the machine you
   run Cloudfall from
 
 ## Step 1: declare the PostgreSQL service
 
 One `Service` resource, with the major version matching Neon's (the Neon
-console shows it under project settings):
+console shows it under application settings):
 
 ```yaml
 ---
@@ -76,7 +76,7 @@ spec:
     majorVersion: "17"
     databases:
       - name: app
-        project: app
+        application: app
   backup:
     directory: /var/backups/cloudfall/postgresql-main
     onCalendar: "*-*-* 02:00:00 UTC"
@@ -89,8 +89,8 @@ Declare one entry under `databases` per Neon database you are keeping.
 Validate and converge:
 
 ```console
-uv run cloudfall state validate state/production
-uv run cloudfall services state/production
+uv run cloudfall config validate config/production
+uv run cloudfall services config/production
 ```
 
 ## Step 2: pre-flight checks on the Neon side
@@ -106,7 +106,7 @@ now versus a surprise after cutover:
   `majorVersion` at the major level
 - **Branches** — only the branch you dump from migrates; anything
   worth keeping on another branch is a separate database to declare and
-  migrate, everything else dies with the project
+  migrate, everything else dies with the application
 - **Size** — `SELECT pg_size_pretty(pg_database_size(current_database()));`
   to estimate the write-freeze window; dump plus restore for a
   10–20 GB database is minutes, not hours
@@ -136,7 +136,7 @@ after the dump starts are lost. Put the application into maintenance
 mode or stop its writers, then:
 
 ```console
-uv run cloudfall data migrate state/production postgresql-main \
+uv run cloudfall data migrate config/production postgresql-main \
   --database app --source-url-file tmp/neon-app-url
 ```
 
@@ -166,20 +166,20 @@ frozen until the app is verified against the new database.
 
 ## Step 6: wind down Neon
 
-- Keep the Neon project **paused, not deleted**, for a rollback window
+- Keep the Neon application **paused, not deleted**, for a rollback window
   (a week is plenty); scale-to-zero makes waiting nearly free
 - Verify the first scheduled backup ran and run the restore drill:
   `cloudfall backup run` / `cloudfall backup verify` — the point of
   leaving a managed provider is that restorability is now your receipt
   to hold
-- Then delete the Neon project; billing stops with it
+- Then delete the Neon application; billing stops with it
 
 ## After the migration
 
 - `task audit` proves the server matches the config, with distinct exit
   codes for drift
 - The declared alert rules (a `postgresql-down` example ships in
-  `state/examples/alert-rules/`) put the database under the same
+  `config/examples/alert-rules/`) put the database under the same
   detect-diagnose-remediate loop as everything else
 - The backup timer, restore drill, and `BackupReceipt` replace Neon's
   managed backups; PITR and a standby arrive with roadmap M11

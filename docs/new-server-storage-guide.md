@@ -430,7 +430,7 @@ smartctl -x /dev/nvme1n1
 ## 11. Register and inspect the server with Cloudfall
 
 Add the new `Server` only after the operating system and SSH access are stable.
-Create a dedicated hybrid-storage `HostProfile`; do not reuse
+Create a dedicated hybrid-storage `ServerType`; do not reuse
 `debian-application` if its full-disk RAID and root thresholds do not match this
 layout.
 
@@ -440,7 +440,7 @@ packages, services, ownership, and capacity thresholds to the actual server:
 ```yaml
 ---
 apiVersion: cloudfall/v1
-kind: HostProfile
+kind: ServerType
 metadata:
   id: debian-hybrid-storage
   description: Two-drive RAID1 system with independent replicated-data tails
@@ -495,10 +495,10 @@ of swap, boot, and root, or the total capacity of both drives.
 Validate, render, inspect, and audit:
 
 ```console
-task validate STATE_DIR=state/production
-task inventory STATE_DIR=state/production
-task inspect STATE_DIR=state/production
-task audit STATE_DIR=state/production
+task validate CONFIG_DIR=config/production
+task inventory CONFIG_DIR=config/production
+task inspect CONFIG_DIR=config/production
+task audit CONFIG_DIR=config/production
 ```
 
 `task inspect` also rebuilds the local dashboard. Review the generated
@@ -567,7 +567,7 @@ or loss of the host/replica breaks cluster quorum.
 - [ ] MD checks, SMART monitoring, filesystem usage alerts, and `fstrim.timer`
       are active.
 - [ ] Both one-drive boot tests passed and the arrays returned to `[UU]`.
-- [ ] Cloudfall state validates, inspection is current, audit results were reviewed,
+- [ ] Cloudfall config validates, inspection is current, audit results were reviewed,
       and the operations dashboard has no unexplained critical task.
 
 ## Troubleshooting

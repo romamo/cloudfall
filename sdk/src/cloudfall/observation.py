@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, cast
 from jsonschema.exceptions import ValidationError
 
 from cloudfall.domain import ResourceId, SourceLocation
-from cloudfall.validation import SchemaCatalog, StateValidationError, ValidationIssue
+from cloudfall.validation import ConfigValidationError, SchemaCatalog, ValidationIssue
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -23,7 +23,7 @@ class ObservedServerSnapshot:
     """One schema-validated observation of a managed server."""
 
     server_id: ResourceId
-    profile_id: ResourceId
+    server_type_id: ResourceId
     content: Mapping[str, object]
     source: Path
 
@@ -57,7 +57,7 @@ def load_observations(
                 f"{observation_directory}"
             ),
         )
-        raise StateValidationError(issue)
+        raise ConfigValidationError(issue)
 
     catalog = SchemaCatalog(schema_directory)
     snapshots: list[ObservedServerSnapshot] = []
@@ -74,7 +74,7 @@ def load_observations(
                 source=source,
                 field_path=tuple(error.absolute_path),
             )
-            raise StateValidationError(issue) from error
+            raise ConfigValidationError(issue) from error
 
         metadata = _mapping(content, "metadata")
         spec = _mapping(content, "spec")
@@ -89,7 +89,7 @@ def load_observations(
                 ),
                 source=source,
             )
-            raise StateValidationError(issue)
+            raise ConfigValidationError(issue)
         if server_id in index:
             issue = ValidationIssue(
                 code="observation_duplicate",
@@ -99,11 +99,11 @@ def load_observations(
                 ),
                 source=source,
             )
-            raise StateValidationError(issue)
+            raise ConfigValidationError(issue)
 
         snapshot = ObservedServerSnapshot(
             server_id=server_id,
-            profile_id=ResourceId.from_boundary(spec.get("profile")),
+            server_type_id=ResourceId.from_boundary(spec.get("serverType")),
             content=content,
             source=path,
         )
@@ -122,14 +122,14 @@ def _load_json(path: Path) -> Mapping[str, object]:
             message=error.msg,
             source=SourceLocation(path=path, document_number=1),
         )
-        raise StateValidationError(issue) from error
+        raise ConfigValidationError(issue) from error
     if not isinstance(raw, dict) or not all(isinstance(key, str) for key in raw):
         issue = ValidationIssue(
             code="observation_shape_invalid",
             message="observation root must be an object",
             source=SourceLocation(path=path, document_number=1),
         )
-        raise StateValidationError(issue)
+        raise ConfigValidationError(issue)
     return cast("Mapping[str, object]", raw)
 
 

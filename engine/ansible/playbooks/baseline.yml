@@ -9,11 +9,11 @@
     cloudfall_bootstrap_component_keys:
       - id
       - install_root
-      - project
-      - project_user
+      - application
+      - application_user
   roles:
     - role: cloudfall_bootstrap
-      cloudfall_bootstrap_projects: "{{ cloudfall_projects }}"
+      cloudfall_bootstrap_applications: "{{ cloudfall_applications }}"
       cloudfall_bootstrap_components: >-
         {{
           cloudfall_components

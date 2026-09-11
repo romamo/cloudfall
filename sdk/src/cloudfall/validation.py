@@ -29,8 +29,8 @@ from cloudfall.domain import (
 
 _SCHEMA_FILES: Mapping[ResourceKind, str] = {
     ResourceKind.SERVER: "server.schema.json",
-    ResourceKind.HOST_PROFILE: "host-profile.schema.json",
-    ResourceKind.PROJECT: "project.schema.json",
+    ResourceKind.HOST_PROFILE: "server-type.schema.json",
+    ResourceKind.APPLICATION: "application.schema.json",
     ResourceKind.COMPONENT: "component.schema.json",
     ResourceKind.DOMAIN: "domain.schema.json",
     ResourceKind.SSH_PUBLIC_KEY: "ssh-public-key.schema.json",
@@ -64,7 +64,7 @@ class ValidationIssue:
         return result
 
 
-class StateValidationError(ValueError):
+class ConfigValidationError(ValueError):
     """Fail-fast state validation error with a stable machine-readable code."""
 
     def __init__(self, issue: ValidationIssue) -> None:
@@ -84,8 +84,8 @@ class StateValidationError(ValueError):
 
 
 @dataclass(frozen=True, slots=True)
-class ValidatedState:
-    """Read-only, indexed platform state."""
+class ValidatedConfig:
+    """Read-only, indexed config."""
 
     documents: tuple[ResourceDocument, ...]
     _index: Mapping[ResourceKey, ResourceDocument]
@@ -137,7 +137,7 @@ class SchemaCatalog:
                 code="schema_directory_missing",
                 message=f"schema directory does not exist: {schema_directory}",
             )
-            raise StateValidationError(issue)
+            raise ConfigValidationError(issue)
 
         schemas = self._load_schemas(schema_directory)
         registry = Registry().with_resources(
@@ -154,7 +154,7 @@ class SchemaCatalog:
                     code="schema_invalid",
                     message=f"{path}: {error.message}",
                 )
-                raise StateValidationError(issue) from error
+                raise ConfigValidationError(issue) from error
             named_validators[path.name] = Draft202012Validator(
                 schema,
                 registry=registry,
@@ -171,7 +171,7 @@ class SchemaCatalog:
                     code="schema_missing",
                     message=f"required schema does not exist: {path}",
                 )
-                raise StateValidationError(issue) from error
+                raise ConfigValidationError(issue) from error
         self._validators = validators
         self._named_validators = named_validators
 
@@ -186,7 +186,7 @@ class SchemaCatalog:
                     code="schema_json_invalid",
                     message=f"{path}: {error.msg}",
                 )
-                raise StateValidationError(issue) from error
+                raise ConfigValidationError(issue) from error
             if not isinstance(raw, dict) or not all(
                 isinstance(key, str) for key in raw
             ):
@@ -194,7 +194,7 @@ class SchemaCatalog:
                     code="schema_shape_invalid",
                     message=f"schema root must be an object: {path}",
                 )
-                raise StateValidationError(issue)
+                raise ConfigValidationError(issue)
             schemas[path] = cast("Mapping[str, object]", raw)
         return schemas
 
@@ -206,7 +206,7 @@ class SchemaCatalog:
                 code="schema_id_missing",
                 message=f"schema must define a string $id: {path}",
             )
-            raise StateValidationError(issue)
+            raise ConfigValidationError(issue)
         return schema_id
 
     def validate(self, kind: ResourceKind, content: Mapping[str, object]) -> None:
@@ -222,7 +222,7 @@ class SchemaCatalog:
                 code="schema_missing",
                 message=f"schema does not exist in catalog: {filename}",
             )
-            raise StateValidationError(issue) from error
+            raise ConfigValidationError(issue) from error
         validator.validate(content)
 
 
@@ -233,28 +233,28 @@ class StateValidator:
         """Create a state validator backed by a validated schema catalog."""
         self._schemas = schemas
 
-    def validate_directory(self, state_directory: Path) -> ValidatedState:
+    def validate_directory(self, config_directory: Path) -> ValidatedConfig:
         """Validate every YAML resource below a directory."""
-        if not state_directory.is_dir():
+        if not config_directory.is_dir():
             issue = ValidationIssue(
-                code="state_directory_missing",
-                message=f"state directory does not exist: {state_directory}",
+                code="config_directory_missing",
+                message=f"state directory does not exist: {config_directory}",
             )
-            raise StateValidationError(issue)
+            raise ConfigValidationError(issue)
 
         paths = tuple(
             path
-            for path in sorted(state_directory.rglob("*"))
+            for path in sorted(config_directory.rglob("*"))
             if path.is_file() and path.suffix.lower() in _YAML_SUFFIXES
         )
         if not paths:
             issue = ValidationIssue(
                 code="state_empty",
                 message=(
-                    f"state directory contains no YAML documents: {state_directory}"
+                    f"state directory contains no YAML documents: {config_directory}"
                 ),
             )
-            raise StateValidationError(issue)
+            raise ConfigValidationError(issue)
 
         documents: list[ResourceDocument] = []
         index: dict[ResourceKey, ResourceDocument] = {}
@@ -270,12 +270,12 @@ class StateValidator:
                         ),
                         source=document.source,
                     )
-                    raise StateValidationError(issue)
+                    raise ConfigValidationError(issue)
                 index[document.key] = document
                 documents.append(document)
 
         self._validate_references(documents, index)
-        return ValidatedState(documents=tuple(documents), _index=index)
+        return ValidatedConfig(documents=tuple(documents), _index=index)
 
     def _load_file(self, path: Path) -> Iterable[ResourceDocument]:
         try:
@@ -289,7 +289,7 @@ class StateValidator:
                 message=str(error),
                 source=SourceLocation(path=path, document_number=1),
             )
-            raise StateValidationError(issue) from error
+            raise ConfigValidationError(issue) from error
 
         for number, raw in enumerate(raw_documents, start=1):
             source = SourceLocation(path=path, document_number=number)
@@ -299,7 +299,7 @@ class StateValidator:
                     message="YAML document is empty",
                     source=source,
                 )
-                raise StateValidationError(issue)
+                raise ConfigValidationError(issue)
             if not isinstance(raw, dict) or not all(
                 isinstance(key, str) for key in raw
             ):
@@ -308,7 +308,7 @@ class StateValidator:
                     message="resource document must be an object with string keys",
                     source=source,
                 )
-                raise StateValidationError(issue)
+                raise ConfigValidationError(issue)
             content = cast("Mapping[str, object]", raw)
             kind = self._resource_kind(content, source)
             try:
@@ -320,7 +320,7 @@ class StateValidator:
                     source=source,
                     field_path=tuple(error.absolute_path),
                 )
-                raise StateValidationError(issue) from error
+                raise ConfigValidationError(issue) from error
             resource_id = self._resource_id(content, source)
             yield ResourceDocument(
                 key=ResourceKey(kind=kind, resource_id=resource_id),
@@ -341,7 +341,7 @@ class StateValidator:
                 source=source,
                 field_path=("kind",),
             )
-            raise StateValidationError(issue) from error
+            raise ConfigValidationError(issue) from error
 
     @staticmethod
     def _resource_id(
@@ -357,7 +357,7 @@ class StateValidator:
                 source=source,
                 field_path=("metadata", "id"),
             )
-            raise StateValidationError(issue) from error
+            raise ConfigValidationError(issue) from error
 
     @staticmethod
     def _validate_references(
@@ -376,26 +376,26 @@ def _validate_server_references(
     spec: Mapping[str, object],
     index: Mapping[ResourceKey, ResourceDocument],
 ) -> None:
-    profile_id = _resource_id_value(spec, "profile", document.source)
+    server_type_id = _resource_id_value(spec, "serverType", document.source)
     _require_resource(
         index,
         ResourceKind.HOST_PROFILE,
-        profile_id,
+        server_type_id,
         document.source,
-        ("spec", "profile"),
+        ("spec", "serverType"),
     )
     _validate_server_network(spec, document.source)
 
 
-def _validate_host_profile_references(
+def _validate_server_type_references(
     document: ResourceDocument,
     spec: Mapping[str, object],
     _index: Mapping[ResourceKey, ResourceDocument],
 ) -> None:
-    _validate_host_profile(spec, document.source)
+    _validate_server_type(spec, document.source)
 
 
-def _validate_project_references(
+def _validate_application_references(
     document: ResourceDocument,
     spec: Mapping[str, object],
     index: Mapping[ResourceKey, ResourceDocument],
@@ -431,7 +431,7 @@ def _validate_ssh_public_key(
             source=document.source,
             field_path=("spec", "publicKey"),
         )
-        raise StateValidationError(issue) from error
+        raise ConfigValidationError(issue) from error
 
 
 def _validate_component_references(
@@ -439,16 +439,16 @@ def _validate_component_references(
     spec: Mapping[str, object],
     index: Mapping[ResourceKey, ResourceDocument],
 ) -> None:
-    project_id = _resource_id_value(spec, "project", document.source)
-    project = _require_resource(
+    application_id = _resource_id_value(spec, "application", document.source)
+    application = _require_resource(
         index,
-        ResourceKind.PROJECT,
-        project_id,
+        ResourceKind.APPLICATION,
+        application_id,
         document.source,
-        ("spec", "project"),
+        ("spec", "application"),
     )
     deployment = _required_mapping(spec, "deployment", document.source)
-    _validate_install_root(deployment, project_id, document.source)
+    _validate_install_root(deployment, application_id, document.source)
     server_ids = _resource_id_list(deployment, "servers", document.source)
     for server_id in server_ids:
         _require_resource(
@@ -458,19 +458,23 @@ def _validate_component_references(
             document.source,
             ("spec", "deployment", "servers"),
         )
-    project_spec = _required_mapping(project.content, "spec", project.source)
-    project_components = _resource_id_list(project_spec, "components", project.source)
-    if document.key.resource_id not in project_components:
+    application_spec = _required_mapping(
+        application.content, "spec", application.source
+    )
+    application_components = _resource_id_list(
+        application_spec, "components", application.source
+    )
+    if document.key.resource_id not in application_components:
         issue = ValidationIssue(
-            code="project_component_mismatch",
+            code="application_component_mismatch",
             message=(
-                f"Project/{project_id} does not list "
+                f"Application/{application_id} does not list "
                 f"Component/{document.key.resource_id}"
             ),
             source=document.source,
-            field_path=("spec", "project"),
+            field_path=("spec", "application"),
         )
-        raise StateValidationError(issue)
+        raise ConfigValidationError(issue)
 
 
 def _validate_domain_references(
@@ -498,7 +502,7 @@ def _validate_domain_references(
             source=document.source,
             field_path=("spec", "aliases"),
         )
-        raise StateValidationError(issue)
+        raise ConfigValidationError(issue)
     tls = _required_mapping(spec, "tls", document.source)
     health = _required_mapping(spec, "healthCheck", document.source)
     if tls.get("mode") == "required" and health.get("scheme") != "https":
@@ -508,7 +512,7 @@ def _validate_domain_references(
             source=document.source,
             field_path=("spec", "healthCheck", "scheme"),
         )
-        raise StateValidationError(issue)
+        raise ConfigValidationError(issue)
 
 
 def _validate_service_references(
@@ -539,7 +543,7 @@ def _validate_service_references(
             source=document.source,
             field_path=("spec", "environment"),
         )
-        raise StateValidationError(issue)
+        raise ConfigValidationError(issue)
 
     if spec.get("serviceKind") != "postgresql":
         return
@@ -552,7 +556,7 @@ def _validate_service_references(
             source=document.source,
             field_path=("spec", "postgresql", "databases"),
         )
-        raise StateValidationError(issue)
+        raise ConfigValidationError(issue)
     seen_names: set[object] = set()
     for position, raw_database in enumerate(raw_databases):
         if not isinstance(raw_database, dict) or not all(
@@ -564,7 +568,7 @@ def _validate_service_references(
                 source=document.source,
                 field_path=("spec", "postgresql", "databases", position),
             )
-            raise StateValidationError(issue)
+            raise ConfigValidationError(issue)
         database = cast("Mapping[str, object]", raw_database)
         name = database.get("name")
         if name in seen_names:
@@ -574,15 +578,15 @@ def _validate_service_references(
                 source=document.source,
                 field_path=("spec", "postgresql", "databases", position, "name"),
             )
-            raise StateValidationError(issue)
+            raise ConfigValidationError(issue)
         seen_names.add(name)
-        project_id = _resource_id_value(database, "project", document.source)
+        application_id = _resource_id_value(database, "application", document.source)
         _require_resource(
             index,
-            ResourceKind.PROJECT,
-            project_id,
+            ResourceKind.APPLICATION,
+            application_id,
             document.source,
-            ("spec", "postgresql", "databases", position, "project"),
+            ("spec", "postgresql", "databases", position, "application"),
         )
 
 
@@ -604,7 +608,7 @@ def _validate_service_uniqueness(documents: Sequence[ResourceDocument]) -> None:
                 source=document.source,
                 field_path=("spec",),
             )
-            raise StateValidationError(issue)
+            raise ConfigValidationError(issue)
         placement = (server_id, raw_kind)
         if placement in placements:
             issue = ValidationIssue(
@@ -616,7 +620,7 @@ def _validate_service_uniqueness(documents: Sequence[ResourceDocument]) -> None:
                 source=document.source,
                 field_path=("spec", "server"),
             )
-            raise StateValidationError(issue)
+            raise ConfigValidationError(issue)
         placements[placement] = document
         listener = (server_id, raw_port)
         if listener in ports:
@@ -629,7 +633,7 @@ def _validate_service_uniqueness(documents: Sequence[ResourceDocument]) -> None:
                 source=document.source,
                 field_path=("spec", "bind", "port"),
             )
-            raise StateValidationError(issue)
+            raise ConfigValidationError(issue)
         ports[listener] = document
 
 
@@ -674,7 +678,7 @@ def _validate_logging_references(
             source=document.source,
             field_path=("spec", "collectors", "files"),
         )
-        raise StateValidationError(issue)
+        raise ConfigValidationError(issue)
     seen_file_ids: set[ResourceId] = set()
     for position, raw_file in enumerate(raw_files):
         if not isinstance(raw_file, dict) or not all(
@@ -686,7 +690,7 @@ def _validate_logging_references(
                 source=document.source,
                 field_path=("spec", "collectors", "files", position),
             )
-            raise StateValidationError(issue)
+            raise ConfigValidationError(issue)
         file_source = cast("Mapping[str, object]", raw_file)
         file_id = _resource_id_value(file_source, "id", document.source)
         if file_id in seen_file_ids:
@@ -696,7 +700,7 @@ def _validate_logging_references(
                 source=document.source,
                 field_path=("spec", "collectors", "files", position, "id"),
             )
-            raise StateValidationError(issue)
+            raise ConfigValidationError(issue)
         seen_file_ids.add(file_id)
         source_servers = _resource_id_list(file_source, "servers", document.source)
         if not frozenset(source_servers).issubset(collector_set):
@@ -712,7 +716,7 @@ def _validate_logging_references(
                     "servers",
                 ),
             )
-            raise StateValidationError(issue)
+            raise ConfigValidationError(issue)
         _validate_logging_file_owner(
             file_source,
             source_servers,
@@ -750,7 +754,7 @@ def _validate_logging_secret_paths(
                 source=source,
                 field_path=("spec", field_name),
             )
-            raise StateValidationError(issue)
+            raise ConfigValidationError(issue)
         path = PurePosixPath(raw_path)
         if path == secret_root or not path.is_relative_to(secret_root):
             issue = ValidationIssue(
@@ -759,7 +763,7 @@ def _validate_logging_secret_paths(
                 source=source,
                 field_path=("spec", field_name),
             )
-            raise StateValidationError(issue)
+            raise ConfigValidationError(issue)
         if path in seen:
             issue = ValidationIssue(
                 code="logging_secret_path_duplicate",
@@ -767,7 +771,7 @@ def _validate_logging_secret_paths(
                 source=source,
                 field_path=("spec", field_name),
             )
-            raise StateValidationError(issue)
+            raise ConfigValidationError(issue)
         seen.add(path)
 
 
@@ -794,7 +798,7 @@ def _validate_logging_ports(
                 source=source,
                 field_path=("spec", name, "port"),
             )
-            raise StateValidationError(issue)
+            raise ConfigValidationError(issue)
         if raw_port in seen:
             issue = ValidationIssue(
                 code="logging_port_conflict",
@@ -805,7 +809,7 @@ def _validate_logging_ports(
                 source=source,
                 field_path=("spec", name, "port"),
             )
-            raise StateValidationError(issue)
+            raise ConfigValidationError(issue)
         seen[raw_port] = name
 
 
@@ -826,7 +830,7 @@ def _require_server_environment(
             source=source,
             field_path=("spec", "environment"),
         )
-        raise StateValidationError(issue)
+        raise ConfigValidationError(issue)
 
 
 def _validate_logging_file_owner(
@@ -836,17 +840,17 @@ def _validate_logging_file_owner(
     position: int,
     index: Mapping[ResourceKey, ResourceDocument],
 ) -> None:
-    raw_project = file_source.get("project")
+    raw_application = file_source.get("application")
     raw_component = file_source.get("component")
-    if raw_project is None:
+    if raw_application is None:
         return
-    project_id = ResourceId.from_boundary(raw_project)
+    application_id = ResourceId.from_boundary(raw_application)
     _require_resource(
         index,
-        ResourceKind.PROJECT,
-        project_id,
+        ResourceKind.APPLICATION,
+        application_id,
         source,
-        ("spec", "collectors", "files", position, "project"),
+        ("spec", "collectors", "files", position, "application"),
     )
     if raw_component is None:
         return
@@ -859,18 +863,18 @@ def _validate_logging_file_owner(
         ("spec", "collectors", "files", position, "component"),
     )
     component_spec = _required_mapping(component.content, "spec", component.source)
-    owner_id = _resource_id_value(component_spec, "project", component.source)
-    if owner_id != project_id:
+    owner_id = _resource_id_value(component_spec, "application", component.source)
+    if owner_id != application_id:
         issue = ValidationIssue(
             code="logging_file_owner_mismatch",
             message=(
-                f"Component/{component_id} belongs to Project/{owner_id}, "
-                f"not Project/{project_id}"
+                f"Component/{component_id} belongs to Application/{owner_id}, "
+                f"not Application/{application_id}"
             ),
             source=source,
             field_path=("spec", "collectors", "files", position),
         )
-        raise StateValidationError(issue)
+        raise ConfigValidationError(issue)
     deployment = _required_mapping(component_spec, "deployment", component.source)
     component_servers = frozenset(
         _resource_id_list(deployment, "servers", component.source)
@@ -885,7 +889,7 @@ def _validate_logging_file_owner(
             source=source,
             field_path=("spec", "collectors", "files", position, "servers"),
         )
-        raise StateValidationError(issue)
+        raise ConfigValidationError(issue)
 
 
 def _validate_logging_uniqueness(
@@ -925,11 +929,11 @@ def _validate_logging_uniqueness(
                     source=document.source,
                     field_path=("spec",),
                 )
-                raise StateValidationError(issue)
+                raise ConfigValidationError(issue)
             seen[identity] = document
 
 
-def _validate_host_profile(spec: Mapping[str, object], source: SourceLocation) -> None:
+def _validate_server_type(spec: Mapping[str, object], source: SourceLocation) -> None:
     storage = _required_mapping(spec, "storage", source)
     packages = _required_mapping(spec, "packages", source)
     services = _required_mapping(spec, "services", source)
@@ -970,11 +974,11 @@ def _validate_host_profile(spec: Mapping[str, object], source: SourceLocation) -
                 source=source,
                 field_path=("spec", "configuration", "files", index),
             )
-            raise StateValidationError(issue)
-    _validate_host_profile_firewall(spec, source)
+            raise ConfigValidationError(issue)
+    _validate_server_type_firewall(spec, source)
 
 
-def _validate_host_profile_firewall(
+def _validate_server_type_firewall(
     spec: Mapping[str, object], source: SourceLocation
 ) -> None:
     if spec.get("firewall") is None:
@@ -988,7 +992,7 @@ def _validate_host_profile_firewall(
             source=source,
             field_path=("spec", "firewall", "allowedInbound"),
         )
-        raise StateValidationError(issue)
+        raise ConfigValidationError(issue)
     seen: set[tuple[object, object]] = set()
     for index, raw_rule in enumerate(raw_rules):
         if not isinstance(raw_rule, dict) or not all(
@@ -1000,7 +1004,7 @@ def _validate_host_profile_firewall(
                 source=source,
                 field_path=("spec", "firewall", "allowedInbound", index),
             )
-            raise StateValidationError(issue)
+            raise ConfigValidationError(issue)
         rule = cast("Mapping[str, object]", raw_rule)
         identity = (rule.get("port"), rule.get("protocol"))
         if identity in seen:
@@ -1013,7 +1017,7 @@ def _validate_host_profile_firewall(
                 source=source,
                 field_path=("spec", "firewall", "allowedInbound", index),
             )
-            raise StateValidationError(issue)
+            raise ConfigValidationError(issue)
         seen.add(identity)
 
 
@@ -1033,7 +1037,7 @@ def _validate_server_network(
             source=source,
             field_path=("spec", "network"),
         )
-        raise StateValidationError(issue)
+        raise ConfigValidationError(issue)
     try:
         ipv4 = IPv4Address(raw_ipv4)
         ipv6 = IPv6Network(raw_ipv6, strict=True)
@@ -1044,7 +1048,7 @@ def _validate_server_network(
             source=source,
             field_path=("spec", "network"),
         )
-        raise StateValidationError(issue) from error
+        raise ConfigValidationError(issue) from error
     if str(ipv4) != raw_ipv4 or str(ipv6) != raw_ipv6:
         issue = ValidationIssue(
             code="server_network_not_canonical",
@@ -1052,7 +1056,7 @@ def _validate_server_network(
             source=source,
             field_path=("spec", "network"),
         )
-        raise StateValidationError(issue)
+        raise ConfigValidationError(issue)
 
 
 def _validate_unique_entry_keys(
@@ -1070,7 +1074,7 @@ def _validate_unique_entry_keys(
             source=source,
             field_path=field_path,
         )
-        raise StateValidationError(issue)
+        raise ConfigValidationError(issue)
     items: list[Mapping[str, object]] = []
     seen: set[object] = set()
     for index, raw_item in enumerate(value):
@@ -1083,17 +1087,17 @@ def _validate_unique_entry_keys(
                 source=source,
                 field_path=(*field_path, index),
             )
-            raise StateValidationError(issue)
+            raise ConfigValidationError(issue)
         item = cast("Mapping[str, object]", raw_item)
         identity = item.get(entry_key)
         if identity in seen:
             issue = ValidationIssue(
-                code="host_profile_entry_duplicate",
-                message=f"duplicate {entry_key} in host profile: {identity}",
+                code="server_type_entry_duplicate",
+                message=f"duplicate {entry_key} in server type: {identity}",
                 source=source,
                 field_path=(*field_path, index, entry_key),
             )
-            raise StateValidationError(issue)
+            raise ConfigValidationError(issue)
         seen.add(identity)
         items.append(item)
     return tuple(items)
@@ -1112,7 +1116,7 @@ def _required_mapping(
             source=source,
             field_path=(key,),
         )
-        raise StateValidationError(issue)
+        raise ConfigValidationError(issue)
     return cast("Mapping[str, object]", value)
 
 
@@ -1128,7 +1132,7 @@ def _resource_id_value(
             source=source,
             field_path=(key,),
         )
-        raise StateValidationError(issue) from error
+        raise ConfigValidationError(issue) from error
 
 
 def _resource_id_list(
@@ -1142,7 +1146,7 @@ def _resource_id_list(
             source=source,
             field_path=(key,),
         )
-        raise StateValidationError(issue)
+        raise ConfigValidationError(issue)
     try:
         return tuple(ResourceId.from_boundary(item) for item in value)
     except (TypeError, ValueError) as error:
@@ -1152,7 +1156,7 @@ def _resource_id_list(
             source=source,
             field_path=(key,),
         )
-        raise StateValidationError(issue) from error
+        raise ConfigValidationError(issue) from error
 
 
 def _require_resource(
@@ -1172,12 +1176,12 @@ def _require_resource(
             source=source,
             field_path=field_path,
         )
-        raise StateValidationError(issue) from error
+        raise ConfigValidationError(issue) from error
 
 
 def _validate_install_root(
     deployment: Mapping[str, object],
-    project_id: ResourceId,
+    application_id: ResourceId,
     source: SourceLocation,
 ) -> None:
     raw_install_root = deployment.get("installRoot")
@@ -1188,19 +1192,22 @@ def _validate_install_root(
             source=source,
             field_path=("spec", "deployment", "installRoot"),
         )
-        raise StateValidationError(issue)
+        raise ConfigValidationError(issue)
     install_root = PurePosixPath(raw_install_root)
-    project_root = PurePosixPath("/srv/apps") / project_id.value
-    if install_root == project_root or not install_root.is_relative_to(project_root):
+    application_root = PurePosixPath("/srv/apps") / application_id.value
+    if install_root == application_root or not install_root.is_relative_to(
+        application_root
+    ):
         issue = ValidationIssue(
             code="component_install_root_invalid",
             message=(
-                f"component installRoot must be below {project_root}: {install_root}"
+                f"component installRoot must be below "
+                f"{application_root}: {install_root}"
             ),
             source=source,
             field_path=("spec", "deployment", "installRoot"),
         )
-        raise StateValidationError(issue)
+        raise ConfigValidationError(issue)
 
 
 def _validate_alert_rule_references(
@@ -1227,7 +1234,7 @@ def _validate_alert_rule_references(
             source=document.source,
             field_path=("spec", "environment"),
         )
-        raise StateValidationError(issue)
+        raise ConfigValidationError(issue)
 
 
 def _validate_operator_policy_references(
@@ -1254,7 +1261,7 @@ def _validate_operator_policy_references(
             source=document.source,
             field_path=("spec", "environment"),
         )
-        raise StateValidationError(issue)
+        raise ConfigValidationError(issue)
     duplicate = next(
         (
             other
@@ -1280,13 +1287,13 @@ def _validate_operator_policy_references(
             source=document.source,
             field_path=("spec", "environment"),
         )
-        raise StateValidationError(issue)
+        raise ConfigValidationError(issue)
 
 
-def validate_state(state_directory: Path, schema_directory: Path) -> ValidatedState:
+def validate_config(config_directory: Path, schema_directory: Path) -> ValidatedConfig:
     """Load and validate a directory of Cloudfall YAML resources."""
     catalog = SchemaCatalog(schema_directory)
-    return StateValidator(catalog).validate_directory(state_directory)
+    return StateValidator(catalog).validate_directory(config_directory)
 
 _REFERENCE_VALIDATORS: Mapping[
     ResourceKind,
@@ -1300,8 +1307,8 @@ _REFERENCE_VALIDATORS: Mapping[
     ],
 ] = {
     ResourceKind.SERVER: _validate_server_references,
-    ResourceKind.HOST_PROFILE: _validate_host_profile_references,
-    ResourceKind.PROJECT: _validate_project_references,
+    ResourceKind.HOST_PROFILE: _validate_server_type_references,
+    ResourceKind.APPLICATION: _validate_application_references,
     ResourceKind.COMPONENT: _validate_component_references,
     ResourceKind.DOMAIN: _validate_domain_references,
     ResourceKind.LOGGING_STACK: _validate_logging_references,

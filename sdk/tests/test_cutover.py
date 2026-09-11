@@ -23,15 +23,15 @@ from cloudfall.service_evidence import (
     ProbeTarget,
     TlsEvidence,
 )
-from cloudfall.validation import validate_state
+from cloudfall.validation import validate_config
 
 ROOT = Path(__file__).parents[2]
-SCHEMAS = ROOT / "state" / "schemas" / "v1"
-EXAMPLES = ROOT / "state" / "examples"
+SCHEMAS = ROOT / "config" / "schemas" / "v1"
+EXAMPLES = ROOT / "config" / "examples"
 
 
 def _inventory() -> PlatformInventory:
-    return PlatformInventory.from_state(validate_state(EXAMPLES, SCHEMAS))
+    return PlatformInventory.from_state(validate_config(EXAMPLES, SCHEMAS))
 
 
 @dataclass(frozen=True, slots=True)

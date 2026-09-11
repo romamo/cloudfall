@@ -49,7 +49,7 @@ server. The principles behind the project are in the
 
 Three modules with strict boundaries:
 
-- [`state/`](state/README.md) — the config: declarative YAML resources and
+- [`config/`](config/README.md) — the config: declarative YAML resources and
   their JSON Schemas
 - [`sdk/`](sdk/README.md) — the `cloudfall` CLI and Python API used by
   agents and tooling
@@ -94,7 +94,7 @@ do not need Python 3.14 preinstalled.
 git clone https://github.com/romamo/cloudfall.git
 cd cloudfall
 uv sync
-uv run cloudfall state validate state/examples
+uv run cloudfall config validate config/examples
 ```
 
 The command validates every YAML config document against the v1 JSON Schemas
@@ -105,8 +105,8 @@ Show the non-secret platform inventory and render it as deterministic Ansible
 JSON:
 
 ```console
-uv run cloudfall inventory show state/examples
-uv run cloudfall-engine inventory render state/examples
+uv run cloudfall inventory show config/examples
+uv run cloudfall-engine inventory render config/examples
 ```
 
 ## Migrate from Render
@@ -114,7 +114,7 @@ uv run cloudfall-engine inventory render state/examples
 Map a `render.yaml` blueprint onto Cloudfall config:
 
 ```console
-uv run cloudfall import render render.yaml --project acme --server h1
+uv run cloudfall import render render.yaml --application acme --server h1
 ```
 
 Web, private, and worker services become `Component` resources (workers use
@@ -134,8 +134,8 @@ server types, validate, then drive the whole migration with one resumable
 plan:
 
 ```console
-uv run cloudfall migrate state/production --build acme-api=main
-uv run cloudfall migrate state/production --build acme-api=main --yes
+uv run cloudfall migrate config/production --build acme-api=main
+uv run cloudfall migrate config/production --build acme-api=main --yes
 ```
 
 Without `--yes` the command shows the plan; with it, the plan executes step
@@ -157,7 +157,7 @@ Neon — where only the data moves: see the
 
 ## Inspect servers and audit drift
 
-Each `Server` references a reusable server type (a `HostProfile` resource)
+Each `Server` references a reusable `ServerType`
 describing its required Debian version, software RAID, filesystem capacity,
 packages, systemd services, and allowlisted configuration evidence.
 
@@ -175,7 +175,7 @@ task audit
 The direct equivalent of `task audit`, for example, is:
 
 ```console
-uv run cloudfall audit state/examples --observed tmp/observed
+uv run cloudfall audit config/examples --observed tmp/observed
 ```
 
 Snapshots are written to `tmp/observed/<server>.json` with mode `0600` and
@@ -244,7 +244,7 @@ Notable changes are recorded in the [changelog](CHANGELOG.md).
 
 Cloudfall is developed in the open, business model included: the
 [lean canvas](docs/lean-canvas.md) describes the problem, the wedge, and
-how the project intends to sustain itself.
+how the application intends to sustain itself.
 
 ## License
 

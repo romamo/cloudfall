@@ -25,7 +25,7 @@ from cloudfall.domain import (
     SourceLocation,
     TcpPort,
 )
-from cloudfall.validation import SchemaCatalog, StateValidationError, ValidationIssue
+from cloudfall.validation import ConfigValidationError, SchemaCatalog, ValidationIssue
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -453,7 +453,7 @@ def _validated_json_documents(
             code=f"{concept.replace(' ', '_')}_directory_missing",
             message=f"{concept} directory does not exist: {directory}",
         )
-        raise StateValidationError(issue)
+        raise ConfigValidationError(issue)
     catalog = SchemaCatalog(schema_directory)
     documents: list[tuple[Path, Mapping[str, object]]] = []
     for path in sorted(directory.rglob("*.json")):
@@ -467,7 +467,7 @@ def _validated_json_documents(
                 source=SourceLocation(path=path, document_number=1),
                 field_path=tuple(error.absolute_path),
             )
-            raise StateValidationError(issue) from error
+            raise ConfigValidationError(issue) from error
         documents.append((path, content))
     return tuple(documents)
 
@@ -481,14 +481,14 @@ def _load_json(path: Path) -> Mapping[str, object]:
             message=error.msg,
             source=SourceLocation(path=path, document_number=1),
         )
-        raise StateValidationError(issue) from error
+        raise ConfigValidationError(issue) from error
     if not isinstance(raw, dict) or not all(isinstance(key, str) for key in raw):
         issue = ValidationIssue(
             code="service_evidence_shape_invalid",
             message="service evidence root must be an object",
             source=SourceLocation(path=path, document_number=1),
         )
-        raise StateValidationError(issue)
+        raise ConfigValidationError(issue)
     return cast("Mapping[str, object]", raw)
 
 
@@ -615,7 +615,7 @@ def _require_matching_identity(
             message=f"metadata.id {metadata_id} does not match domain {domain_id}",
             source=SourceLocation(path=path, document_number=1),
         )
-        raise StateValidationError(issue)
+        raise ConfigValidationError(issue)
 
 
 def _raise_duplicate(
@@ -629,7 +629,7 @@ def _raise_duplicate(
         message=f"domain {domain_id} already supplied at {first_path}",
         source=SourceLocation(path=path, document_number=1),
     )
-    raise StateValidationError(issue)
+    raise ConfigValidationError(issue)
 
 
 def _error_message(error: BaseException) -> str:

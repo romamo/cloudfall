@@ -9,10 +9,10 @@ import pytest
 from cloudfall.agent_tools import AgentConfig, AgentToolset
 
 ROOT = Path(__file__).parents[2]
-SCHEMAS = ROOT / "state" / "schemas" / "v1"
-EXAMPLES = ROOT / "state" / "examples"
+SCHEMAS = ROOT / "config" / "schemas" / "v1"
+EXAMPLES = ROOT / "config" / "examples"
 ENGINE = ROOT / "engine"
-COMPLIANT = ROOT / "state" / "tests" / "observed" / "compliant"
+COMPLIANT = ROOT / "config" / "tests" / "observed" / "compliant"
 
 BLUEPRINT = """\
 services:
@@ -26,7 +26,7 @@ services:
 
 def _config(tmp_path: Path, observed: Path | None = None) -> AgentConfig:
     return AgentConfig(
-        state_directory=EXAMPLES,
+        config_directory=EXAMPLES,
         schema_directory=SCHEMAS,
         engine_directory=ENGINE,
         inventory_file=tmp_path / "inventory.json",
@@ -117,7 +117,7 @@ def test_import_render_tool_maps_a_blueprint(tmp_path: Path) -> None:
         str(blueprint),
         "acme",
         "h1",
-        str(tmp_path / "state"),
+        str(tmp_path / "config"),
         str(tmp_path / "env"),
     )
 
@@ -151,7 +151,7 @@ def test_mcp_server_registers_annotated_tools(tmp_path: Path) -> None:
     tools = {tool.name: tool for tool in asyncio.run(server.list_tools())}
 
     assert {
-        "validate_state",
+        "validate_config",
         "audit_servers",
         "inspect_servers",
         "import_render",

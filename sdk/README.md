@@ -15,10 +15,10 @@ engine's playbook contract for execution — never Ansible internals. Each
 operation is split into a pure, testable execution plan and a thin executor:
 
 ```console
-uv run cloudfall deploy state/examples crm-backend --release <release-id>
-uv run cloudfall rollback state/examples crm-backend --release <release-id>
-uv run cloudfall restart state/examples crm-backend
-uv run cloudfall health state/examples crm-backend
+uv run cloudfall deploy config/examples crm-backend --release <release-id>
+uv run cloudfall rollback config/examples crm-backend --release <release-id>
+uv run cloudfall restart config/examples crm-backend
+uv run cloudfall health config/examples crm-backend
 ```
 
 `deploy` refuses to run when the built artifact is missing, misidentified, or
@@ -44,7 +44,7 @@ would run; only a second call with `confirm=true` executes. Deployments
 through MCP always write release receipts.
 
 ```console
-uv run cloudfall-mcp --state state/examples --engine engine
+uv run cloudfall-mcp --state config/examples --engine engine
 ```
 
 Every tool returns a structured JSON envelope, including errors, so agents
@@ -61,26 +61,26 @@ audit and healthy routes before declaring success. Without confirmation it
 returns the plan preview; interrupted or paused runs resume at the first
 incomplete step.
 
-The SDK validates v1 Server, HostProfile, Project, and Component resources and
-builds a read-only typed index. The `cloudfall state validate` command is its first
+The SDK validates v1 Server, ServerType, Application, and Component resources and
+builds a read-only typed index. The `cloudfall config validate` command is its first
 system boundary.
 
-`LoggingStack` validation additionally resolves backend, collector, project,
+`LoggingStack` validation additionally resolves backend, collector, application,
 and component placement; enforces one stack per environment; and prevents the
 first migration slice from disabling legacy log agents. Inventory output
 contains certificate paths and package pins but never secret values.
 
-`cloudfall inventory show` projects validated state into typed server, project, and
+`cloudfall inventory show` applications validated state into typed server, application, and
 component records. It supports component-to-server placement queries and omits
 secret references from serialized output.
 
 `cloudfall audit` first validates normalized `ObservedServer` JSON snapshots, then
-compares every server with its referenced `HostProfile`. Checks cover OS and
+compares every server with its referenced `ServerType`. Checks cover OS and
 service manager, RAID level/health/capacity, mounted filesystems, required and
 forbidden packages, service state, and allowlisted configuration evidence.
 
 ```console
-uv run cloudfall audit state/examples --observed tmp/observed
+uv run cloudfall audit config/examples --observed tmp/observed
 ```
 
 `cloudfall dashboard build` combines the same validated audit data with operational
@@ -88,7 +88,7 @@ signals such as disk pressure, failed services, and stale evidence. It emits a
 dependency-free static dashboard plus `operations.json` for other clients:
 
 ```console
-uv run cloudfall dashboard build state/examples \
+uv run cloudfall dashboard build config/examples \
   --observed tmp/observed --output tmp/dashboard
 ```
 

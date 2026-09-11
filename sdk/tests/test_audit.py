@@ -11,16 +11,16 @@ from cloudfall.audit import AuditReport, AuditStatus, audit_inventory
 from cloudfall.cli import main
 from cloudfall.inventory import PlatformInventory
 from cloudfall.observation import load_observations
-from cloudfall.validation import StateValidationError, validate_state
+from cloudfall.validation import ConfigValidationError, validate_config
 
 ROOT = Path(__file__).parents[2]
-SCHEMAS = ROOT / "state" / "schemas" / "v1"
-EXAMPLES = ROOT / "state" / "examples"
-COMPLIANT = ROOT / "state" / "tests" / "observed" / "compliant"
+SCHEMAS = ROOT / "config" / "schemas" / "v1"
+EXAMPLES = ROOT / "config" / "examples"
+COMPLIANT = ROOT / "config" / "tests" / "observed" / "compliant"
 
 
 def _audit(observation_directory: Path) -> AuditReport:
-    inventory = PlatformInventory.from_state(validate_state(EXAMPLES, SCHEMAS))
+    inventory = PlatformInventory.from_state(validate_config(EXAMPLES, SCHEMAS))
     observations = load_observations(observation_directory, SCHEMAS)
     return audit_inventory(inventory, observations)
 
@@ -389,7 +389,7 @@ def test_invalid_observation_fails_before_audit(tmp_path: Path) -> None:
     )
     (observations / "h1.json").write_text(invalid, encoding="utf-8")
 
-    with pytest.raises(StateValidationError) as error:
+    with pytest.raises(ConfigValidationError) as error:
         load_observations(observations, SCHEMAS)
 
     assert error.value.issue.code == "observation_schema_validation_failed"
@@ -428,7 +428,7 @@ def _audit_with_receipts(
     observation_directory: Path, receipts: dict[str, str]
 ) -> AuditReport:
     inventory = PlatformInventory.from_state(
-        validate_state(EXAMPLES, SCHEMAS)
+        validate_config(EXAMPLES, SCHEMAS)
     )
     observations = load_observations(observation_directory, SCHEMAS)
     return audit_inventory(inventory, observations, receipts)

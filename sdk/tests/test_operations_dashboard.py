@@ -19,20 +19,20 @@ from cloudfall.operations import (
     build_operations_view,
 )
 from cloudfall.service_evidence import DeploymentReceiptSet, DomainObservationSet
-from cloudfall.validation import validate_state
+from cloudfall.validation import validate_config
 
 ROOT = Path(__file__).parents[2]
-SCHEMAS = ROOT / "state" / "schemas" / "v1"
-EXAMPLES = ROOT / "state" / "examples"
-COMPLIANT = ROOT / "state" / "tests" / "observed" / "compliant"
+SCHEMAS = ROOT / "config" / "schemas" / "v1"
+EXAMPLES = ROOT / "config" / "examples"
+COMPLIANT = ROOT / "config" / "tests" / "observed" / "compliant"
 GENERATED_AT = UtcTimestamp(datetime(2026, 7, 15, 11, tzinfo=UTC))
 
 
 def _view(
-    observation_directory: Path, state_directory: Path = EXAMPLES
+    observation_directory: Path, config_directory: Path = EXAMPLES
 ) -> FleetOperations:
     inventory = PlatformInventory.from_state(
-        validate_state(state_directory, SCHEMAS)
+        validate_config(config_directory, SCHEMAS)
     )
     observations = load_observations(observation_directory, SCHEMAS)
     return build_operations_view(
@@ -45,10 +45,10 @@ def _view(
 
 
 def _domainless_examples(tmp_path: Path) -> Path:
-    state_directory = tmp_path / "state"
-    shutil.copytree(EXAMPLES, state_directory)
-    shutil.rmtree(state_directory / "domains")
-    return state_directory
+    config_directory = tmp_path / "config"
+    shutil.copytree(EXAMPLES, config_directory)
+    shutil.rmtree(config_directory / "domains")
+    return config_directory
 
 
 def test_compliant_evidence_produces_healthy_operations_view(

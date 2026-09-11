@@ -22,7 +22,7 @@ def _service() -> dict[str, object]:
         "postgresql": {
             "majorVersion": "17",
             "databases": [
-                {"name": "crm", "project": "crm", "owner": "crm"},
+                {"name": "crm", "application": "crm", "owner": "crm"},
             ],
         },
         "backup": {

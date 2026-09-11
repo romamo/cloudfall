@@ -6,12 +6,12 @@ from pathlib import Path
 
 import yaml
 from cloudfall.inventory import PlatformInventory
-from cloudfall.validation import validate_state
+from cloudfall.validation import validate_config
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 ROOT = Path(__file__).parents[2]
-SCHEMAS = ROOT / "state" / "schemas" / "v1"
-EXAMPLES = ROOT / "state" / "examples"
+SCHEMAS = ROOT / "config" / "schemas" / "v1"
+EXAMPLES = ROOT / "config" / "examples"
 BACKEND_TEMPLATES = (
     ROOT / "engine" / "ansible" / "roles" / "cloudfall_logging_backend" / "templates"
 )
@@ -21,19 +21,19 @@ COLLECTOR_TEMPLATES = (
 
 
 def _logging_stack() -> dict[str, object]:
-    inventory = PlatformInventory.from_state(validate_state(EXAMPLES, SCHEMAS))
+    inventory = PlatformInventory.from_state(validate_config(EXAMPLES, SCHEMAS))
     assert len(inventory.logging_stacks) == 1
     return inventory.logging_stacks[0].as_dict()
 
 
 def _services() -> list[dict[str, object]]:
-    inventory = PlatformInventory.from_state(validate_state(EXAMPLES, SCHEMAS))
+    inventory = PlatformInventory.from_state(validate_config(EXAMPLES, SCHEMAS))
     assert len(inventory.services) == 2
     return [service.as_dict() for service in inventory.services]
 
 
 def _alert_rules() -> list[dict[str, object]]:
-    inventory = PlatformInventory.from_state(validate_state(EXAMPLES, SCHEMAS))
+    inventory = PlatformInventory.from_state(validate_config(EXAMPLES, SCHEMAS))
     assert len(inventory.alert_rules) == 1
     return [rule.as_dict() for rule in inventory.alert_rules]
 
@@ -126,7 +126,7 @@ def test_collector_template_renders_mtls_and_bounded_labels() -> None:
     assert rendered.count('min_version = "TLS12"') == 2
     assert rendered.count('environment = "production"') == 2
     assert rendered.count('server      = "h1"') == 2
-    assert '"project"  = "crm"' in rendered
+    assert '"application"  = "crm"' in rendered
     assert '"component" = "crm-backend"' in rendered
     assert "request_id" not in rendered
     assert "/etc/alloy/cloudfall.alloy" in override

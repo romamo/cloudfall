@@ -15,8 +15,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from cloudfall.validation import (
+    ConfigValidationError,
     SchemaCatalog,
-    StateValidationError,
     ValidationIssue,
 )
 from jsonschema.exceptions import ValidationError
@@ -155,7 +155,7 @@ def build_artifact(
             code="artifact_metadata_invalid",
             message=error.message,
         )
-        raise StateValidationError(issue) from error
+        raise ConfigValidationError(issue) from error
     metadata_path = archive_path.with_suffix("").with_suffix(".json")
     metadata_path.write_text(
         f"{json.dumps(metadata, indent=2, sort_keys=True)}\n",

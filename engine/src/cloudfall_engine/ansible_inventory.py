@@ -12,12 +12,12 @@ if TYPE_CHECKING:
     from cloudfall.domain import ResourceId
     from cloudfall.inventory import (
         AlertRuleInventory,
+        ApplicationInventory,
         ComponentInventory,
-        HostProfileInventory,
         LoggingStackInventory,
         PlatformInventory,
-        ProjectInventory,
         ServerInventory,
+        ServerTypeInventory,
     )
 
 
@@ -37,19 +37,19 @@ def render_ansible_inventory(inventory: PlatformInventory) -> dict[str, object]:
             )
         }
 
-    project_groups: dict[str, object] = {}
-    for project in inventory.projects:
-        project_components = frozenset(project.component_ids)
-        project_hosts = sorted(
+    application_groups: dict[str, object] = {}
+    for application in inventory.applications:
+        application_components = frozenset(application.component_ids)
+        application_hosts = sorted(
             {
                 server_id.value
                 for component in inventory.components
-                if component.resource_id in project_components
+                if component.resource_id in application_components
                 for server_id in component.server_ids
             }
         )
-        project_groups[_group_name("project", project.resource_id)] = {
-            "hosts": _empty_host_entries(project_hosts)
+        application_groups[_group_name("application", application.resource_id)] = {
+            "hosts": _empty_host_entries(application_hosts)
         }
 
     component_groups = {
@@ -79,7 +79,7 @@ def render_ansible_inventory(inventory: PlatformInventory) -> dict[str, object]:
                 "ungrouped": {"hosts": {}},
                 "cloudfall_servers": {"hosts": _host_variables(inventory)},
                 "cloudfall_environments": {"children": environment_groups},
-                "cloudfall_projects": {"children": project_groups},
+                "cloudfall_applications": {"children": application_groups},
                 "cloudfall_components": {"children": component_groups},
                 "cloudfall_logging_backends": {"hosts": logging_backend_hosts},
                 "cloudfall_logging_collectors": {"hosts": logging_collector_hosts},
@@ -90,8 +90,12 @@ def render_ansible_inventory(inventory: PlatformInventory) -> dict[str, object]:
 
 
 def _host_variables(inventory: PlatformInventory) -> dict[str, object]:
-    projects_by_id = {project.resource_id: project for project in inventory.projects}
-    profiles_by_id = {profile.resource_id: profile for profile in inventory.profiles}
+    applications_by_id = {
+        application.resource_id: application for application in inventory.applications
+    }
+    server_types_by_id = {
+        server_type.resource_id: server_type for server_type in inventory.server_types
+    }
     return {
         server.resource_id.value: {
             "ansible_host": server.address.value,
@@ -110,16 +114,18 @@ def _host_variables(inventory: PlatformInventory) -> dict[str, object]:
                 if key.environment == server.environment and key.is_active
             ],
             **_host_infrastructure(server),
-            **_host_firewall(server, profiles_by_id[server.profile_id]),
+            **_host_firewall(server, server_types_by_id[server.server_type_id]),
             **_host_logging(server, inventory.logging_stacks, inventory.alert_rules),
-            "cloudfall_host_profile": profiles_by_id[server.profile_id].as_dict(),
-            "cloudfall_projects": [
-                _host_project(project)
-                for project in inventory.projects
-                if _project_is_on_server(project, server, inventory)
+            "cloudfall_server_type": server_types_by_id[
+                server.server_type_id
+            ].as_dict(),
+            "cloudfall_applications": [
+                _host_application(application)
+                for application in inventory.applications
+                if _application_is_on_server(application, server, inventory)
             ],
             "cloudfall_components": [
-                _host_component(component, projects_by_id[component.project_id])
+                _host_component(component, applications_by_id[component.application_id])
                 for component in inventory.components
                 if server.resource_id in component.server_ids
             ],
@@ -153,14 +159,14 @@ def _host_infrastructure(server: ServerInventory) -> dict[str, object]:
 
 
 def _host_firewall(
-    server: ServerInventory, profile: HostProfileInventory
+    server: ServerInventory, server_type: ServerTypeInventory
 ) -> dict[str, object]:
-    if profile.firewall is None:
+    if server_type.firewall is None:
         return {}
-    rules = firewall_rules_for_server(profile.firewall, server.ssh_port)
+    rules = firewall_rules_for_server(server_type.firewall, server.ssh_port)
     return {
         "cloudfall_firewall": {
-            "policy": profile.firewall.policy.value,
+            "policy": server_type.firewall.policy.value,
             "allowedInbound": [rule.as_dict() for rule in rules],
         }
     }
@@ -202,21 +208,21 @@ def _host_logging(
     return variables
 
 
-def _host_project(project: ProjectInventory) -> dict[str, object]:
+def _host_application(application: ApplicationInventory) -> dict[str, object]:
     return {
-        "id": project.resource_id.value,
-        "user": project.linux_user.value,
-        "approval": project.approval.value,
+        "id": application.resource_id.value,
+        "user": application.linux_user.value,
+        "approval": application.approval.value,
     }
 
 
 def _host_component(
-    component: ComponentInventory, project: ProjectInventory
+    component: ComponentInventory, application: ApplicationInventory
 ) -> dict[str, object]:
     return {
         "id": component.resource_id.value,
-        "project": component.project_id.value,
-        "project_user": project.linux_user.value,
+        "application": component.application_id.value,
+        "application_user": application.linux_user.value,
         "install_root": component.install_root.value,
         "repository": component.repository.as_dict(),
         "runtime": component.runtime.as_dict(),
@@ -226,14 +232,14 @@ def _host_component(
     }
 
 
-def _project_is_on_server(
-    project: ProjectInventory,
+def _application_is_on_server(
+    application: ApplicationInventory,
     server: ServerInventory,
     inventory: PlatformInventory,
 ) -> bool:
-    project_components = frozenset(project.component_ids)
+    application_components = frozenset(application.component_ids)
     return any(
-        component.resource_id in project_components
+        component.resource_id in application_components
         and server.resource_id in component.server_ids
         for component in inventory.components
     )

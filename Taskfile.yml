@@ -2,8 +2,8 @@
 version: "3"
 
 vars:
-  STATE_DIR: '{{ .STATE_DIR | default "state/examples" }}'
-  SCHEMA_DIR: '{{ .SCHEMA_DIR | default "state/schemas/v1" }}'
+  CONFIG_DIR: '{{ .CONFIG_DIR | default "config/examples" }}'
+  SCHEMA_DIR: '{{ .SCHEMA_DIR | default "config/schemas/v1" }}'
   INVENTORY_FILE: '{{ .INVENTORY_FILE | default "tmp/ansible-inventory.json" }}'
   OBSERVATION_DIR: '{{ .OBSERVATION_DIR | default "tmp/observed" }}'
   SERVICE_OBSERVATION_DIR: '{{ .SERVICE_OBSERVATION_DIR | default "tmp/observed-services" }}'
@@ -12,17 +12,17 @@ vars:
 
 tasks:
   validate:
-    desc: Validate declarative Cloudfall state
+    desc: Validate the declarative Cloudfall config
     cmds:
-      - uv run cloudfall state validate {{ .STATE_DIR }} --schemas {{ .SCHEMA_DIR }}
+      - uv run cloudfall config validate {{ .CONFIG_DIR }} --schemas {{ .SCHEMA_DIR }}
 
   inventory:
-    desc: Render validated state as Ansible JSON inventory
+    desc: Render the validated config as Ansible JSON inventory
     deps:
       - validate
     cmds:
       - >-
-        uv run cloudfall-engine inventory render {{ .STATE_DIR }}
+        uv run cloudfall-engine inventory render {{ .CONFIG_DIR }}
         --schemas {{ .SCHEMA_DIR }} --output {{ .INVENTORY_FILE }}
 
   ansible:inventory:
@@ -46,17 +46,17 @@ tasks:
         --extra-vars
         cloudfall_inspect_output_directory={{ .ROOT_DIR }}/{{ .OBSERVATION_DIR }}
       - >-
-        uv run cloudfall dashboard build {{ .STATE_DIR }}
+        uv run cloudfall dashboard build {{ .CONFIG_DIR }}
         --schemas {{ .SCHEMA_DIR }} --observed {{ .OBSERVATION_DIR }}
         --output {{ .ROOT_DIR }}/tmp/dashboard
 
   audit:
-    desc: Compare desired state with previously collected observations
+    desc: Compare the config with previously collected observations
     deps:
       - validate
     cmds:
       - >-
-        uv run cloudfall audit {{ .STATE_DIR }} --schemas {{ .SCHEMA_DIR }}
+        uv run cloudfall audit {{ .CONFIG_DIR }} --schemas {{ .SCHEMA_DIR }}
         --observed {{ .OBSERVATION_DIR }}
 
   services:inspect:
@@ -65,7 +65,7 @@ tasks:
       - validate
     cmds:
       - >-
-        uv run cloudfall services inspect {{ .STATE_DIR }}
+        uv run cloudfall services inspect {{ .CONFIG_DIR }}
         --schemas {{ .SCHEMA_DIR }} --output {{ .SERVICE_OBSERVATION_DIR }}
 
   services:status:
@@ -74,7 +74,7 @@ tasks:
       - validate
     cmds:
       - >-
-        uv run cloudfall services status {{ .STATE_DIR }}
+        uv run cloudfall services status {{ .CONFIG_DIR }}
         --schemas {{ .SCHEMA_DIR }} --observed {{ .OBSERVATION_DIR }}
         --service-observed {{ .SERVICE_OBSERVATION_DIR }}
         --deployments {{ .DEPLOYMENT_DIR }}
@@ -136,7 +136,7 @@ tasks:
         msg: Set REF to the git branch, tag, or commit to package
     cmds:
       - >-
-        uv run cloudfall-engine artifact build {{ .STATE_DIR }}
+        uv run cloudfall-engine artifact build {{ .CONFIG_DIR }}
         {{ .COMPONENT }} --ref {{ .REF }} --schemas {{ .SCHEMA_DIR }}
         --output-dir {{ .ARTIFACT_DIR | default "tmp/artifacts" }}
 
@@ -149,7 +149,7 @@ tasks:
         msg: Set RELEASE to a release id produced by artifact:build
     cmds:
       - >-
-        uv run cloudfall deploy {{ .STATE_DIR }} {{ .COMPONENT }}
+        uv run cloudfall deploy {{ .CONFIG_DIR }} {{ .COMPONENT }}
         --release {{ .RELEASE }} --schemas {{ .SCHEMA_DIR }}
         --artifacts {{ .ARTIFACT_DIR | default "tmp/artifacts" }}
         --receipts {{ .ROOT_DIR }}/tmp/releases
@@ -164,7 +164,7 @@ tasks:
         msg: Set RELEASE to an existing release id on the servers
     cmds:
       - >-
-        uv run cloudfall rollback {{ .STATE_DIR }} {{ .COMPONENT }}
+        uv run cloudfall rollback {{ .CONFIG_DIR }} {{ .COMPONENT }}
         --release {{ .RELEASE }} --schemas {{ .SCHEMA_DIR }}
 
   restart:
@@ -174,7 +174,7 @@ tasks:
         msg: Set COMPONENT to the component id to restart
     cmds:
       - >-
-        uv run cloudfall restart {{ .STATE_DIR }} {{ .COMPONENT }}
+        uv run cloudfall restart {{ .CONFIG_DIR }} {{ .COMPONENT }}
         --schemas {{ .SCHEMA_DIR }}
 
   health:
@@ -184,7 +184,7 @@ tasks:
         msg: Set COMPONENT to the component id to probe
     cmds:
       - >-
-        uv run cloudfall health {{ .STATE_DIR }} {{ .COMPONENT }}
+        uv run cloudfall health {{ .CONFIG_DIR }} {{ .COMPONENT }}
         --schemas {{ .SCHEMA_DIR }}
 
   domains:deploy:check:
@@ -269,7 +269,7 @@ tasks:
       - validate
     cmds:
       - >-
-        uv run cloudfall dashboard build {{ .STATE_DIR }}
+        uv run cloudfall dashboard build {{ .CONFIG_DIR }}
         --schemas {{ .SCHEMA_DIR }} --observed {{ .OBSERVATION_DIR }}
         --service-observed {{ .SERVICE_OBSERVATION_DIR }}
         --deployments {{ .DEPLOYMENT_DIR }}
@@ -281,7 +281,7 @@ tasks:
       - validate
     cmds:
       - >-
-        uv run cloudfall dashboard serve {{ .STATE_DIR }}
+        uv run cloudfall dashboard serve {{ .CONFIG_DIR }}
         --schemas {{ .SCHEMA_DIR }} --observed {{ .OBSERVATION_DIR }}
         --service-observed {{ .SERVICE_OBSERVATION_DIR }}
         --deployments {{ .DEPLOYMENT_DIR }}

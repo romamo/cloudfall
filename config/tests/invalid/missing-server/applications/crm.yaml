@@ -1,0 +1,10 @@
+---
+apiVersion: cloudfall/v1
+kind: Application
+metadata:
+  id: crm
+spec:
+  linuxUser: crm
+  approval: manual
+  components:
+    - crm-backend

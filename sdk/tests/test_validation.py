@@ -9,14 +9,14 @@ from pathlib import Path
 import pytest
 from cloudfall.cli import main
 from cloudfall.domain import ResourceId, ResourceKind
-from cloudfall.validation import StateValidationError, validate_state
+from cloudfall.validation import ConfigValidationError, validate_config
 
 ROOT = Path(__file__).parents[2]
-SCHEMAS = ROOT / "state" / "schemas" / "v1"
+SCHEMAS = ROOT / "config" / "schemas" / "v1"
 
 
 def test_example_state_validates_and_builds_typed_index() -> None:
-    state = validate_state(ROOT / "state" / "examples", SCHEMAS)
+    state = validate_config(ROOT / "config" / "examples", SCHEMAS)
 
     assert state.resource_count == 12
     assert state.counts_by_kind() == {
@@ -24,9 +24,9 @@ def test_example_state_validates_and_builds_typed_index() -> None:
         "OperatorPolicy": 1,
         "Component": 1,
         "Domain": 1,
-        "HostProfile": 1,
+        "ServerType": 1,
         "LoggingStack": 1,
-        "Project": 1,
+        "Application": 1,
         "Server": 2,
         "Service": 2,
         "SshPublicKey": 1,
@@ -38,65 +38,65 @@ def test_example_state_validates_and_builds_typed_index() -> None:
 
 
 def test_unknown_component_field_fails_schema_validation() -> None:
-    invalid_state = ROOT / "state" / "tests" / "invalid" / "schema"
+    invalid_state = ROOT / "config" / "tests" / "invalid" / "schema"
 
-    with pytest.raises(StateValidationError) as error:
-        validate_state(invalid_state, SCHEMAS)
+    with pytest.raises(ConfigValidationError) as error:
+        validate_config(invalid_state, SCHEMAS)
 
     assert error.value.issue.code == "schema_validation_failed"
     assert "unsupportedField" in error.value.issue.message
 
 
 def test_missing_server_reference_fails_semantic_validation() -> None:
-    invalid_state = ROOT / "state" / "tests" / "invalid" / "missing-server"
+    invalid_state = ROOT / "config" / "tests" / "invalid" / "missing-server"
 
-    with pytest.raises(StateValidationError) as error:
-        validate_state(invalid_state, SCHEMAS)
+    with pytest.raises(ConfigValidationError) as error:
+        validate_config(invalid_state, SCHEMAS)
 
     assert error.value.issue.code == "resource_reference_missing"
     assert "Server/h9" in error.value.issue.message
 
 
-def test_component_install_root_must_stay_below_project_root(
+def test_component_install_root_must_stay_below_application_root(
     tmp_path: Path,
 ) -> None:
-    state_directory = tmp_path / "state"
-    shutil.copytree(ROOT / "state" / "examples", state_directory)
-    component_path = state_directory / "components" / "crm-backend.yaml"
+    config_directory = tmp_path / "config"
+    shutil.copytree(ROOT / "config" / "examples", config_directory)
+    component_path = config_directory / "components" / "crm-backend.yaml"
     component = component_path.read_text(encoding="utf-8").replace(
         "/srv/apps/crm/backend", "/opt/crm/backend"
     )
     component_path.write_text(component, encoding="utf-8")
 
-    with pytest.raises(StateValidationError) as error:
-        validate_state(state_directory, SCHEMAS)
+    with pytest.raises(ConfigValidationError) as error:
+        validate_config(config_directory, SCHEMAS)
 
     assert error.value.issue.code == "component_install_root_invalid"
 
 
-def test_host_profile_rejects_duplicate_configuration_paths(
+def test_server_type_rejects_duplicate_configuration_paths(
     tmp_path: Path,
 ) -> None:
-    state_directory = tmp_path / "state"
-    shutil.copytree(ROOT / "state" / "examples", state_directory)
-    profile_path = state_directory / "host-profiles" / "debian-application.yaml"
-    duplicated = profile_path.read_text(encoding="utf-8") + (
+    config_directory = tmp_path / "config"
+    shutil.copytree(ROOT / "config" / "examples", config_directory)
+    server_type_path = config_directory / "server-types" / "debian-application.yaml"
+    duplicated = server_type_path.read_text(encoding="utf-8") + (
         "      - path: /etc/ssh/sshd_config\n        capture: metadata\n"
     )
-    profile_path.write_text(duplicated, encoding="utf-8")
+    server_type_path.write_text(duplicated, encoding="utf-8")
 
-    with pytest.raises(StateValidationError) as error:
-        validate_state(state_directory, SCHEMAS)
+    with pytest.raises(ConfigValidationError) as error:
+        validate_config(config_directory, SCHEMAS)
 
-    assert error.value.issue.code == "host_profile_entry_duplicate"
+    assert error.value.issue.code == "server_type_entry_duplicate"
 
 
 def test_ssh_public_key_algorithm_must_match_wire_payload(
     tmp_path: Path,
 ) -> None:
-    state_directory = tmp_path / "state"
-    shutil.copytree(ROOT / "state" / "examples", state_directory)
-    key_directory = state_directory / "ssh-public-keys"
+    config_directory = tmp_path / "config"
+    shutil.copytree(ROOT / "config" / "examples", config_directory)
+    key_directory = config_directory / "ssh-public-keys"
     example_key = (
         key_directory / "example-admin.yaml"
     ).read_text(encoding="utf-8")
@@ -105,61 +105,61 @@ def test_ssh_public_key_algorithm_must_match_wire_payload(
     )
     (key_directory / "mismatched.yaml").write_text(mismatched, encoding="utf-8")
 
-    with pytest.raises(StateValidationError) as error:
-        validate_state(state_directory, SCHEMAS)
+    with pytest.raises(ConfigValidationError) as error:
+        validate_config(config_directory, SCHEMAS)
 
     assert error.value.issue.code == "ssh_public_key_invalid"
 
 
-def test_host_profile_rejects_duplicate_firewall_rules(
+def test_server_type_rejects_duplicate_firewall_rules(
     tmp_path: Path,
 ) -> None:
-    state_directory = tmp_path / "state"
-    shutil.copytree(ROOT / "state" / "examples", state_directory)
-    profile_path = state_directory / "host-profiles" / "debian-application.yaml"
-    duplicated = profile_path.read_text(encoding="utf-8").replace(
+    config_directory = tmp_path / "config"
+    shutil.copytree(ROOT / "config" / "examples", config_directory)
+    server_type_path = config_directory / "server-types" / "debian-application.yaml"
+    duplicated = server_type_path.read_text(encoding="utf-8").replace(
         "      - port: 443\n        protocol: tcp\n        description: https",
         "      - port: 80\n        protocol: tcp\n        description: duplicate",
     )
-    profile_path.write_text(duplicated, encoding="utf-8")
+    server_type_path.write_text(duplicated, encoding="utf-8")
 
-    with pytest.raises(StateValidationError) as error:
-        validate_state(state_directory, SCHEMAS)
+    with pytest.raises(ConfigValidationError) as error:
+        validate_config(config_directory, SCHEMAS)
 
     assert error.value.issue.code == "firewall_rule_duplicate"
 
 
-def test_service_database_must_reference_a_declared_project(
+def test_service_database_must_reference_a_declared_application(
     tmp_path: Path,
 ) -> None:
-    state_directory = tmp_path / "state"
-    shutil.copytree(ROOT / "state" / "examples", state_directory)
-    service_path = state_directory / "services" / "postgresql-main.yaml"
+    config_directory = tmp_path / "config"
+    shutil.copytree(ROOT / "config" / "examples", config_directory)
+    service_path = config_directory / "services" / "postgresql-main.yaml"
     invalid = service_path.read_text(encoding="utf-8").replace(
-        "project: crm", "project: billing"
+        "application: crm", "application: billing"
     )
     service_path.write_text(invalid, encoding="utf-8")
 
-    with pytest.raises(StateValidationError) as error:
-        validate_state(state_directory, SCHEMAS)
+    with pytest.raises(ConfigValidationError) as error:
+        validate_config(config_directory, SCHEMAS)
 
     assert error.value.issue.code == "resource_reference_missing"
-    assert "Project/billing" in error.value.issue.message
+    assert "Application/billing" in error.value.issue.message
 
 
 def test_service_rejects_duplicate_database_names(tmp_path: Path) -> None:
-    state_directory = tmp_path / "state"
-    shutil.copytree(ROOT / "state" / "examples", state_directory)
-    service_path = state_directory / "services" / "postgresql-main.yaml"
+    config_directory = tmp_path / "config"
+    shutil.copytree(ROOT / "config" / "examples", config_directory)
+    service_path = config_directory / "services" / "postgresql-main.yaml"
     duplicated = service_path.read_text(encoding="utf-8").replace(
-        "      - name: crm\n        project: crm",
-        "      - name: crm\n        project: crm\n"
-        "      - name: crm\n        project: billing",
+        "      - name: crm\n        application: crm",
+        "      - name: crm\n        application: crm\n"
+        "      - name: crm\n        application: billing",
     )
     service_path.write_text(duplicated, encoding="utf-8")
 
-    with pytest.raises(StateValidationError) as error:
-        validate_state(state_directory, SCHEMAS)
+    with pytest.raises(ConfigValidationError) as error:
+        validate_config(config_directory, SCHEMAS)
 
     assert error.value.issue.code == "service_database_duplicate"
 
@@ -167,18 +167,18 @@ def test_service_rejects_duplicate_database_names(tmp_path: Path) -> None:
 def test_second_service_of_one_kind_per_server_is_rejected(
     tmp_path: Path,
 ) -> None:
-    state_directory = tmp_path / "state"
-    shutil.copytree(ROOT / "state" / "examples", state_directory)
-    original = state_directory / "services" / "postgresql-main.yaml"
+    config_directory = tmp_path / "config"
+    shutil.copytree(ROOT / "config" / "examples", config_directory)
+    original = config_directory / "services" / "postgresql-main.yaml"
     second = original.read_text(encoding="utf-8").replace(
         "id: postgresql-main", "id: postgresql-second"
     ).replace("port: 5432", "port: 5433")
-    (state_directory / "services" / "postgresql-second.yaml").write_text(
+    (config_directory / "services" / "postgresql-second.yaml").write_text(
         second, encoding="utf-8"
     )
 
-    with pytest.raises(StateValidationError) as error:
-        validate_state(state_directory, SCHEMAS)
+    with pytest.raises(ConfigValidationError) as error:
+        validate_config(config_directory, SCHEMAS)
 
     assert error.value.issue.code == "service_placement_conflict"
 
@@ -186,16 +186,16 @@ def test_second_service_of_one_kind_per_server_is_rejected(
 def test_logging_stack_rejects_conflicting_listener_ports(
     tmp_path: Path,
 ) -> None:
-    state_directory = tmp_path / "state"
-    shutil.copytree(ROOT / "state" / "examples", state_directory)
-    logging_path = state_directory / "logging-stacks" / "operations.yaml"
+    config_directory = tmp_path / "config"
+    shutil.copytree(ROOT / "config" / "examples", config_directory)
+    logging_path = config_directory / "logging-stacks" / "operations.yaml"
     conflicting = logging_path.read_text(encoding="utf-8").replace(
         "port: 9090", "port: 3100", 1
     )
     logging_path.write_text(conflicting, encoding="utf-8")
 
-    with pytest.raises(StateValidationError) as error:
-        validate_state(state_directory, SCHEMAS)
+    with pytest.raises(ConfigValidationError) as error:
+        validate_config(config_directory, SCHEMAS)
 
     assert error.value.issue.code == "logging_port_conflict"
 
@@ -203,16 +203,16 @@ def test_logging_stack_rejects_conflicting_listener_ports(
 def test_logging_collector_must_reference_an_existing_server(
     tmp_path: Path,
 ) -> None:
-    state_directory = tmp_path / "state"
-    shutil.copytree(ROOT / "state" / "examples", state_directory)
-    logging_path = state_directory / "logging-stacks" / "operations.yaml"
+    config_directory = tmp_path / "config"
+    shutil.copytree(ROOT / "config" / "examples", config_directory)
+    logging_path = config_directory / "logging-stacks" / "operations.yaml"
     invalid = logging_path.read_text(encoding="utf-8").replace(
         "      - h2", "      - h9", 1
     )
     logging_path.write_text(invalid, encoding="utf-8")
 
-    with pytest.raises(StateValidationError) as error:
-        validate_state(state_directory, SCHEMAS)
+    with pytest.raises(ConfigValidationError) as error:
+        validate_config(config_directory, SCHEMAS)
 
     assert error.value.issue.code == "resource_reference_missing"
     assert "Server/h9" in error.value.issue.message
@@ -221,16 +221,16 @@ def test_logging_collector_must_reference_an_existing_server(
 def test_logging_migration_cannot_disable_legacy_agents(
     tmp_path: Path,
 ) -> None:
-    state_directory = tmp_path / "state"
-    shutil.copytree(ROOT / "state" / "examples", state_directory)
-    logging_path = state_directory / "logging-stacks" / "operations.yaml"
+    config_directory = tmp_path / "config"
+    shutil.copytree(ROOT / "config" / "examples", config_directory)
+    logging_path = config_directory / "logging-stacks" / "operations.yaml"
     invalid = logging_path.read_text(encoding="utf-8").replace(
         "preserveLegacyAgents: true", "preserveLegacyAgents: false"
     )
     logging_path.write_text(invalid, encoding="utf-8")
 
-    with pytest.raises(StateValidationError) as error:
-        validate_state(state_directory, SCHEMAS)
+    with pytest.raises(ConfigValidationError) as error:
+        validate_config(config_directory, SCHEMAS)
 
     assert error.value.issue.code == "schema_validation_failed"
 
@@ -238,16 +238,16 @@ def test_logging_migration_cannot_disable_legacy_agents(
 def test_logging_secret_paths_stay_in_managed_directory(
     tmp_path: Path,
 ) -> None:
-    state_directory = tmp_path / "state"
-    shutil.copytree(ROOT / "state" / "examples", state_directory)
-    logging_path = state_directory / "logging-stacks" / "operations.yaml"
+    config_directory = tmp_path / "config"
+    shutil.copytree(ROOT / "config" / "examples", config_directory)
+    logging_path = config_directory / "logging-stacks" / "operations.yaml"
     invalid = logging_path.read_text(encoding="utf-8").replace(
         "/etc/cloudfall/logging/server.key", "/var/lib/cloudfall-unsafe/server.key"
     )
     logging_path.write_text(invalid, encoding="utf-8")
 
-    with pytest.raises(StateValidationError) as error:
-        validate_state(state_directory, SCHEMAS)
+    with pytest.raises(ConfigValidationError) as error:
+        validate_config(config_directory, SCHEMAS)
 
     assert error.value.issue.code == "logging_secret_path_invalid"
 
@@ -257,9 +257,9 @@ def test_cli_emits_structured_success(
 ) -> None:
     exit_code = main(
         [
-            "state",
+            "config",
             "validate",
-            str(ROOT / "state" / "examples"),
+            str(ROOT / "config" / "examples"),
             "--schemas",
             str(SCHEMAS),
         ]
@@ -275,9 +275,9 @@ def test_cli_emits_structured_success(
             "OperatorPolicy": 1,
             "Component": 1,
             "Domain": 1,
-            "HostProfile": 1,
+            "ServerType": 1,
             "LoggingStack": 1,
-            "Project": 1,
+            "Application": 1,
             "Server": 2,
             "Service": 2,
             "SshPublicKey": 1,
@@ -289,10 +289,10 @@ def test_cli_emits_structured_success(
 def test_cli_emits_structured_failure(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    invalid_state = ROOT / "state" / "tests" / "invalid" / "missing-server"
+    invalid_state = ROOT / "config" / "tests" / "invalid" / "missing-server"
     exit_code = main(
         [
-            "state",
+            "config",
             "validate",
             str(invalid_state),
             "--schemas",

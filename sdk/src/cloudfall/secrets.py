@@ -20,7 +20,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, cast
 
 from cloudfall.inventory import PlatformInventory
-from cloudfall.validation import SchemaCatalog, validate_state
+from cloudfall.validation import SchemaCatalog, validate_config
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -107,15 +107,15 @@ def render_environment(
     receipt_directory: Path | None = None,
 ) -> dict[str, object]:
     """Resolve a component's references into one 0600 environment file."""
-    state = validate_state(context.state_directory, context.schema_directory)
+    state = validate_config(context.config_directory, context.schema_directory)
     inventory = PlatformInventory.from_state(state)
     component = _declared_component(inventory, component_id)
-    project = next(
-        project
-        for project in inventory.projects
-        if project.resource_id == component.project_id
+    application = next(
+        application
+        for application in inventory.applications
+        if application.resource_id == component.application_id
     )
-    references = (*project.secret_refs, *component.secret_refs)
+    references = (*application.secret_refs, *component.secret_refs)
     declared = dict(component.environment)
     merged: dict[str, str] = dict(declared)
     for reference in references:

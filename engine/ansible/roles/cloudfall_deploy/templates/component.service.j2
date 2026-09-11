@@ -9,8 +9,8 @@ After=network.target
 
 [Service]
 Type=exec
-User={{ cloudfall_deploy_component.project_user }}
-Group={{ cloudfall_deploy_component.project_user }}
+User={{ cloudfall_deploy_component.application_user }}
+Group={{ cloudfall_deploy_component.application_user }}
 WorkingDirectory={{ cloudfall_deploy_component.install_root }}/current
 EnvironmentFile=-{{ cloudfall_deploy_component.install_root }}/shared/env/{{ cloudfall_deploy_component.id }}.env
 ExecStart={{ executable }}{% for argument in command[1:] %} "{{ argument }}"{% endfor %}

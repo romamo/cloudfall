@@ -67,8 +67,8 @@ class ResourceKind(StrEnum):
     """Resource kinds supported by the v1 state contract."""
 
     SERVER = "Server"
-    HOST_PROFILE = "HostProfile"
-    PROJECT = "Project"
+    HOST_PROFILE = "ServerType"
+    APPLICATION = "Application"
     COMPONENT = "Component"
     DOMAIN = "Domain"
     SSH_PUBLIC_KEY = "SshPublicKey"
@@ -365,7 +365,7 @@ class ServerLifecycle(StrEnum):
 
 
 class DeploymentApproval(StrEnum):
-    """Deployment approval policy owned by a project."""
+    """Deployment approval policy owned by an application."""
 
     AUTOMATIC = "automatic"
     MANUAL = "manual"
@@ -734,7 +734,7 @@ class SecretScope(StrEnum):
     """Ownership scope of one declared secret reference."""
 
     PLATFORM = "platform"
-    PROJECT = "project"
+    APPLICATION = "application"
     COMPONENT = "component"
 
     @classmethod

@@ -26,12 +26,12 @@ from cloudfall.inventory import PlatformInventory
 from cloudfall.observation import load_observations
 from cloudfall.operations import FleetOperations, UtcTimestamp, build_operations_view
 from cloudfall.service_evidence import DeploymentReceiptSet, DomainObservationSet
-from cloudfall.validation import StateValidationError, validate_state
+from cloudfall.validation import ConfigValidationError, validate_config
 
 ROOT = Path(__file__).parents[2]
-SCHEMAS = ROOT / "state" / "schemas" / "v1"
-EXAMPLES = ROOT / "state" / "examples"
-COMPLIANT = ROOT / "state" / "tests" / "observed" / "compliant"
+SCHEMAS = ROOT / "config" / "schemas" / "v1"
+EXAMPLES = ROOT / "config" / "examples"
+COMPLIANT = ROOT / "config" / "tests" / "observed" / "compliant"
 
 
 class ManualClock:
@@ -47,7 +47,7 @@ class ManualClock:
 
 
 def _view(generated_at: UtcTimestamp) -> FleetOperations:
-    inventory = PlatformInventory.from_state(validate_state(EXAMPLES, SCHEMAS))
+    inventory = PlatformInventory.from_state(validate_config(EXAMPLES, SCHEMAS))
     observations = load_observations(COMPLIANT, SCHEMAS)
     return build_operations_view(
         inventory,
@@ -62,7 +62,7 @@ def _sources(tmp_path: Path) -> EvidenceSources:
     observed = tmp_path / "observed"
     shutil.copytree(COMPLIANT, observed)
     return EvidenceSources(
-        state_directory=EXAMPLES,
+        config_directory=EXAMPLES,
         schema_directory=SCHEMAS,
         observed_directory=observed,
         service_observed_directory=tmp_path / "observed-services",
@@ -184,7 +184,7 @@ def test_eager_first_snapshot_fails_fast(tmp_path: Path) -> None:
     sources = _sources(tmp_path)
     shutil.rmtree(sources.observed_directory)
 
-    with pytest.raises(StateValidationError):
+    with pytest.raises(ConfigValidationError):
         create_dashboard_server(
             sources,
             ListenEndpoint(host="127.0.0.1", port=0),

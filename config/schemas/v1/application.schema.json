@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cloudfall.internal/schemas/v1/application.schema.json",
+  "title": "Cloudfall application",
+  "x-cloudfall-kind": "Application",
+  "type": "object",
+  "properties": {
+    "apiVersion": {
+      "$ref": "common.schema.json#/$defs/apiVersion"
+    },
+    "kind": {
+      "const": "Application"
+    },
+    "metadata": {
+      "$ref": "common.schema.json#/$defs/metadata"
+    },
+    "spec": {
+      "type": "object",
+      "properties": {
+        "linuxUser": {
+          "$ref": "common.schema.json#/$defs/linuxUser"
+        },
+        "approval": {
+          "enum": [
+            "automatic",
+            "manual"
+          ]
+        },
+        "components": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/resourceId"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "secretRefs": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/secretReference"
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "linuxUser",
+        "approval",
+        "components"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "apiVersion",
+    "kind",
+    "metadata",
+    "spec"
+  ],
+  "additionalProperties": false
+}

@@ -15,11 +15,11 @@ from cloudfall.importer import (
     RenderImportResult,
     import_render_blueprint,
 )
-from cloudfall.validation import validate_state
+from cloudfall.validation import validate_config
 
 ROOT = Path(__file__).parents[2]
-SCHEMAS = ROOT / "state" / "schemas" / "v1"
-EXAMPLES = ROOT / "state" / "examples"
+SCHEMAS = ROOT / "config" / "schemas" / "v1"
+EXAMPLES = ROOT / "config" / "examples"
 
 BLUEPRINT = """\
 services:
@@ -74,9 +74,9 @@ databases:
 
 def _targets(tmp_path: Path) -> ImportTargets:
     return ImportTargets(
-        project_id=ResourceId("acme"),
+        application_id=ResourceId("acme"),
         server_id=ResourceId("h1"),
-        state_directory=tmp_path / "state",
+        config_directory=tmp_path / "config",
         environment_directory=tmp_path / "env",
     )
 
@@ -92,14 +92,14 @@ def _import(tmp_path: Path) -> tuple[ImportTargets, RenderImportResult]:
 def test_imported_state_merges_into_a_valid_directory(tmp_path: Path) -> None:
     targets, result = _import(tmp_path)
 
-    for base in ("servers", "host-profiles", "ssh-public-keys"):
+    for base in ("servers", "server-types", "ssh-public-keys"):
         shutil.copytree(
-            EXAMPLES / base, targets.state_directory / base
+            EXAMPLES / base, targets.config_directory / base
         )
-    state = validate_state(targets.state_directory, SCHEMAS)
+    state = validate_config(targets.config_directory, SCHEMAS)
 
     counts = state.counts_by_kind()
-    assert counts["Project"] == 1
+    assert counts["Application"] == 1
     assert counts["Component"] == 2
     assert counts["Service"] == 1
     assert counts["Domain"] == 1
@@ -113,14 +113,14 @@ def test_importer_maps_ports_health_and_worker_semantics(
 ) -> None:
     targets, _result = _import(tmp_path)
 
-    api = (targets.state_directory / "components" / "acme-api.yaml").read_text(
+    api = (targets.config_directory / "components" / "acme-api.yaml").read_text(
         encoding="utf-8"
     )
     worker = (
-        targets.state_directory / "components" / "acme-worker.yaml"
+        targets.config_directory / "components" / "acme-worker.yaml"
     ).read_text(encoding="utf-8")
     domain = (
-        targets.state_directory / "domains" / "acme-example-test.yaml"
+        targets.config_directory / "domains" / "acme-example-test.yaml"
     ).read_text(encoding="utf-8")
 
     assert "type: http" in api
@@ -147,7 +147,7 @@ def test_importer_writes_environment_files_outside_state(
     assert "SECRET_KEY=" in content
     assert "DATABASE_URL=postgresql:///acme?host=/var/run/postgresql" in content
     assert "TZ=UTC" in content
-    assert not list(targets.state_directory.rglob("*.env"))
+    assert not list(targets.config_directory.rglob("*.env"))
     assert result.environment_files == (env_path,)
 
 
@@ -174,22 +174,22 @@ def test_importer_reports_gaps_for_unsupported_services(
     assert "## Required actions" in report
 
 
-def test_importer_rejects_a_project_that_cannot_own_a_linux_user(
+def test_importer_rejects_a_application_that_cannot_own_a_linux_user(
     tmp_path: Path,
 ) -> None:
     blueprint = tmp_path / "render.yaml"
     blueprint.write_text(BLUEPRINT, encoding="utf-8")
     targets = ImportTargets(
-        project_id=ResourceId("a" * 40),
+        application_id=ResourceId("a" * 40),
         server_id=ResourceId("h1"),
-        state_directory=tmp_path / "state",
+        config_directory=tmp_path / "config",
         environment_directory=tmp_path / "env",
     )
 
     with pytest.raises(RenderImportError) as error:
         import_render_blueprint(blueprint, targets, SCHEMAS)
 
-    assert error.value.code == "import_project_invalid"
+    assert error.value.code == "import_application_invalid"
 
 
 def test_cli_import_render_emits_structured_output(
@@ -204,12 +204,12 @@ def test_cli_import_render_emits_structured_output(
             "import",
             "render",
             str(blueprint),
-            "--project",
+            "--application",
             "acme",
             "--server",
             "h1",
             "--output",
-            str(tmp_path / "state"),
+            str(tmp_path / "config"),
             "--env-dir",
             str(tmp_path / "env"),
             "--schemas",

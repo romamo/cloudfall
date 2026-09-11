@@ -50,7 +50,7 @@ argument_specs:
                   name:
                     type: str
                     required: true
-                  project:
+                  application:
                     type: str
                     required: true
                   owner:

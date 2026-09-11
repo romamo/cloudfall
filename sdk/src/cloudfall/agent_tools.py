@@ -75,13 +75,13 @@ from cloudfall.service_evidence import (
     load_deployment_receipts,
     load_domain_observations,
 )
-from cloudfall.validation import SchemaCatalog, StateValidationError, validate_state
+from cloudfall.validation import ConfigValidationError, SchemaCatalog, validate_config
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
     from cloudfall.operator import AlertFeed
-    from cloudfall.validation import ValidatedState
+    from cloudfall.validation import ValidatedConfig
 
 _CODE_INVALID_ARGUMENT = "invalid_argument"
 
@@ -90,7 +90,7 @@ _CODE_INVALID_ARGUMENT = "invalid_argument"
 class AgentConfig:
     """Filesystem contract for one agent-facing server instance."""
 
-    state_directory: Path
+    config_directory: Path
     schema_directory: Path
     engine_directory: Path
     inventory_file: Path
@@ -112,7 +112,7 @@ class AgentConfig:
     def context(self) -> EngineContext:
         """Return the engine execution context shared by mutating tools."""
         return EngineContext(
-            state_directory=self.state_directory,
+            config_directory=self.config_directory,
             schema_directory=self.schema_directory,
             engine_directory=self.engine_directory,
             inventory_file=self.inventory_file,
@@ -130,14 +130,14 @@ class AgentToolset:
         """Validate declared state and return the structured summary."""
         try:
             return self._state().as_dict()
-        except StateValidationError as error:
+        except ConfigValidationError as error:
             return error.as_dict()
 
     def inventory(self) -> dict[str, object]:
         """Return the non-secret platform inventory."""
         try:
             state = self._state()
-        except StateValidationError as error:
+        except ConfigValidationError as error:
             return error.as_dict()
         return {
             "status": "ok",
@@ -151,7 +151,7 @@ class AgentToolset:
             observations = load_observations(
                 self._config.observed_directory, self._config.schema_directory
             )
-        except StateValidationError as error:
+        except ConfigValidationError as error:
             return error.as_dict()
         report = audit_inventory(
             PlatformInventory.from_state(state),
@@ -170,7 +170,7 @@ class AgentToolset:
             observations = load_observations(
                 self._config.observed_directory, self._config.schema_directory
             )
-        except StateValidationError as error:
+        except ConfigValidationError as error:
             return error.as_dict()
         receipts = (
             load_deployment_receipts(
@@ -229,7 +229,7 @@ class AgentToolset:
         """Collect DNS, TLS, origin, and public route evidence."""
         try:
             state = self._state()
-        except StateValidationError as error:
+        except ConfigValidationError as error:
             return error.as_dict()
         paths = inspect_domains(
             PlatformInventory.from_state(state),
@@ -245,17 +245,17 @@ class AgentToolset:
     def import_render(
         self,
         blueprint: str,
-        project: str,
+        application: str,
         server: str,
         output_directory: str,
         environment_directory: str,
     ) -> dict[str, object]:
-        """Map a Render blueprint onto Cloudfall state fragments."""
+        """Map a Render blueprint onto Cloudfall config fragments."""
         try:
             targets = ImportTargets(
-                project_id=ResourceId.from_boundary(project),
+                application_id=ResourceId.from_boundary(application),
                 server_id=ResourceId.from_boundary(server),
-                state_directory=self._path(output_directory),
+                config_directory=self._path(output_directory),
                 environment_directory=self._path(environment_directory),
             )
         except (TypeError, ValueError) as error:
@@ -264,24 +264,24 @@ class AgentToolset:
             result = import_render_blueprint(
                 self._path(blueprint), targets, self._config.schema_directory
             )
-        except (RenderImportError, StateValidationError) as error:
+        except (RenderImportError, ConfigValidationError) as error:
             return error.as_dict()
         return result.as_dict()
 
     def import_render_api(
         self,
         api_key_file: str,
-        project: str,
+        application: str,
         server: str,
         output_directory: str,
         environment_directory: str,
     ) -> dict[str, object]:
-        """Map a live Render workspace onto Cloudfall state fragments."""
+        """Map a live Render workspace onto Cloudfall config fragments."""
         try:
             targets = ImportTargets(
-                project_id=ResourceId.from_boundary(project),
+                application_id=ResourceId.from_boundary(application),
                 server_id=ResourceId.from_boundary(server),
-                state_directory=self._path(output_directory),
+                config_directory=self._path(output_directory),
                 environment_directory=self._path(environment_directory),
             )
         except (TypeError, ValueError) as error:
@@ -293,7 +293,7 @@ class AgentToolset:
             result = render_api_import(
                 client, targets, self._config.schema_directory
             )
-        except (RenderImportError, StateValidationError) as error:
+        except (RenderImportError, ConfigValidationError) as error:
             return error.as_dict()
         return result.as_dict()
 
@@ -511,7 +511,7 @@ class AgentToolset:
         )
         try:
             result = execute_migration(self._config, options)
-        except (MigrateError, StateValidationError) as error:
+        except (MigrateError, ConfigValidationError) as error:
             return error.as_dict()
         if not confirm:
             result["instruction"] = (
@@ -539,7 +539,7 @@ class AgentToolset:
                     self._config.environment_receipts_directory
                 ),
             )
-        except (SecretsError, StateValidationError) as error:
+        except (SecretsError, ConfigValidationError) as error:
             return error.as_dict()
 
     def backup_service(
@@ -594,7 +594,7 @@ class AgentToolset:
                 service_id,
                 self._config.backups_directory,
             )
-        except (LifecycleError, StateValidationError) as error:
+        except (LifecycleError, ConfigValidationError) as error:
             return error.as_dict()
 
     def operator_proposals(self) -> dict[str, object]:
@@ -612,7 +612,7 @@ class AgentToolset:
         """Run one watch pass: fetch alerts, optionally audit for drift."""
         try:
             state = self._state()
-        except StateValidationError as error:
+        except ConfigValidationError as error:
             return error.as_dict()
         inventory = PlatformInventory.from_state(state)
         try:
@@ -637,7 +637,7 @@ class AgentToolset:
         """Execute one proposal after confirmation and verify its trigger."""
         try:
             state = self._state()
-        except StateValidationError as error:
+        except ConfigValidationError as error:
             return error.as_dict()
         inventory = PlatformInventory.from_state(state)
         try:
@@ -728,9 +728,9 @@ class AgentToolset:
             return error.as_dict()
         return {"status": "ok", "action": action}
 
-    def _state(self) -> ValidatedState:
-        return validate_state(
-            self._config.state_directory, self._config.schema_directory
+    def _state(self) -> ValidatedConfig:
+        return validate_config(
+            self._config.config_directory, self._config.schema_directory
         )
 
     def _path(self, value: str) -> Path:

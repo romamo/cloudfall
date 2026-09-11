@@ -31,7 +31,7 @@ validated observations, never inferred.
 
 Cloudfall is a monorepo with three architectural modules:
 
-- [`state/`](state/README.md) — the config: declarative YAML resources and
+- [`config/`](config/README.md) — the config: declarative YAML resources and
   their JSON Schemas
 - [`sdk/`](sdk/README.md) — the `cloudfall` CLI and Python API consumed by
   agents and tooling
@@ -60,7 +60,7 @@ by systemd via `EnvironmentFile`.
 
 ## Application and component model
 
-An application (declared as a `Project` resource) is an independent SaaS
+An application is an independent SaaS
 product that composes components; a component (frontend, backend, worker,
 scheduler) owns its own deployment. Components are named `crm-backend` style
 rather than by path, and each may deploy to one or more servers.
@@ -100,7 +100,7 @@ fits the model.
 ## Infrastructure model
 
 Servers are traditional long-lived Debian hosts (not immutable), described
-by reusable server types (`HostProfile` resources); bare-metal server types
+by reusable `ServerType` resources; bare-metal server types
 add software RAID1 and the hybrid storage layout, while cloud VPS types do
 not. Any server can run any declared service or component:
 

@@ -19,8 +19,8 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
 
 ROOT = Path(__file__).parents[2]
-SCHEMAS = ROOT / "state" / "schemas" / "v1"
-EXAMPLES = ROOT / "state" / "examples"
+SCHEMAS = ROOT / "config" / "schemas" / "v1"
+EXAMPLES = ROOT / "config" / "examples"
 ENGINE = ROOT / "engine"
 
 EXPECTED_STEPS = [
@@ -42,7 +42,7 @@ EXPECTED_STEPS = [
 
 def _config(tmp_path: Path) -> AgentConfig:
     return AgentConfig(
-        state_directory=EXAMPLES,
+        config_directory=EXAMPLES,
         schema_directory=SCHEMAS,
         engine_directory=ENGINE,
         inventory_file=tmp_path / "inventory.json",

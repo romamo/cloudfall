@@ -59,7 +59,7 @@ def _evidence_registrations(
 ) -> tuple[_Registration, ...]:
     read_only = ToolAnnotations(read_only_hint=True)
 
-    def validate_state() -> str:
+    def validate_config() -> str:
         return _dump(toolset.validate())
 
     def show_inventory() -> str:
@@ -82,9 +82,9 @@ def _evidence_registrations(
 
     return (
         (
-            validate_state,
-            "validate_state",
-            "Validate declared platform state and resource references",
+            validate_config,
+            "validate_config",
+            "Validate declared config and resource references",
             read_only,
         ),
         (
@@ -129,15 +129,15 @@ def _evidence_registrations(
 def _build_registrations(toolset: AgentToolset) -> tuple[_Registration, ...]:
     def import_render(
         blueprint: str,
-        project: str,
+        application: str,
         server_id: str,
-        output_directory: str = "tmp/import/state",
+        output_directory: str = "tmp/import/config",
         environment_directory: str = "tmp/import/env",
     ) -> str:
         return _dump(
             toolset.import_render(
                 blueprint,
-                project,
+                application,
                 server_id,
                 output_directory,
                 environment_directory,
@@ -146,15 +146,15 @@ def _build_registrations(toolset: AgentToolset) -> tuple[_Registration, ...]:
 
     def import_render_api(
         api_key_file: str,
-        project: str,
+        application: str,
         server_id: str,
-        output_directory: str = "tmp/import/state",
+        output_directory: str = "tmp/import/config",
         environment_directory: str = "tmp/import/env",
     ) -> str:
         return _dump(
             toolset.import_render_api(
                 api_key_file,
-                project,
+                application,
                 server_id,
                 output_directory,
                 environment_directory,
@@ -171,14 +171,14 @@ def _build_registrations(toolset: AgentToolset) -> tuple[_Registration, ...]:
         (
             import_render,
             "import_render",
-            "Map a render.yaml blueprint onto Cloudfall state fragments "
+            "Map a render.yaml blueprint onto Cloudfall config fragments "
             "with a structured gap report",
             None,
         ),
         (
             import_render_api,
             "import_render_api",
-            "Map a live Render workspace onto Cloudfall state fragments "
+            "Map a live Render workspace onto Cloudfall config fragments "
             "through the Render API; the api_key_file is a controller-side "
             "file containing only the API key",
             None,
@@ -454,7 +454,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--schemas",
         type=Path,
-        default=Path("state/schemas/v1"),
+        default=Path("config/schemas/v1"),
         help="JSON Schema directory used to validate state (default:"
         " %(default)s)",
     )
@@ -571,7 +571,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Run the MCP server over stdio."""
     arguments = _parser().parse_args(argv)
     config = AgentConfig(
-        state_directory=Path(arguments.state),
+        config_directory=Path(arguments.state),
         schema_directory=Path(arguments.schemas),
         engine_directory=Path(arguments.engine),
         inventory_file=Path(arguments.inventory_file),

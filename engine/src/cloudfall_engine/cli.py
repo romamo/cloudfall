@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from cloudfall.inventory import PlatformInventory
-from cloudfall.validation import StateValidationError, validate_state
+from cloudfall.validation import ConfigValidationError, validate_config
 
 from cloudfall_engine.ansible_inventory import render_ansible_inventory
 from cloudfall_engine.artifact import ArtifactBuildError, build_artifact
@@ -31,12 +31,12 @@ def _parser() -> argparse.ArgumentParser:
     render_parser = inventory_commands.add_parser(
         "render", help="render Ansible JSON inventory"
     )
-    render_parser.add_argument("state_directory", type=Path)
+    render_parser.add_argument("config_directory", type=Path)
     render_parser.add_argument(
         "--schemas",
         type=Path,
-        default=Path("state/schemas/v1"),
-        help="versioned schema directory (default: state/schemas/v1)",
+        default=Path("config/schemas/v1"),
+        help="versioned schema directory (default: config/schemas/v1)",
     )
     render_parser.add_argument(
         "--output",
@@ -53,7 +53,7 @@ def _parser() -> argparse.ArgumentParser:
     build_parser = artifact_commands.add_parser(
         "build", help="clone, package, and hash one component release"
     )
-    build_parser.add_argument("state_directory", type=Path)
+    build_parser.add_argument("config_directory", type=Path)
     build_parser.add_argument("component")
     build_parser.add_argument(
         "--ref",
@@ -63,8 +63,8 @@ def _parser() -> argparse.ArgumentParser:
     build_parser.add_argument(
         "--schemas",
         type=Path,
-        default=Path("state/schemas/v1"),
-        help="versioned schema directory (default: state/schemas/v1)",
+        default=Path("config/schemas/v1"),
+        help="versioned schema directory (default: config/schemas/v1)",
     )
     build_parser.add_argument(
         "--output-dir",
@@ -77,8 +77,10 @@ def _parser() -> argparse.ArgumentParser:
 
 def _render_inventory(arguments: argparse.Namespace) -> int:
     try:
-        state = validate_state(Path(arguments.state_directory), Path(arguments.schemas))
-    except StateValidationError as error:
+        state = validate_config(
+            Path(arguments.config_directory), Path(arguments.schemas)
+        )
+    except ConfigValidationError as error:
         sys.stderr.write(f"{json.dumps(error.as_dict(), sort_keys=True)}\n")
         return 2
 
@@ -98,8 +100,10 @@ def _render_inventory(arguments: argparse.Namespace) -> int:
 
 def _build_artifact(arguments: argparse.Namespace) -> int:
     try:
-        state = validate_state(Path(arguments.state_directory), Path(arguments.schemas))
-    except StateValidationError as error:
+        state = validate_config(
+            Path(arguments.config_directory), Path(arguments.schemas)
+        )
+    except ConfigValidationError as error:
         sys.stderr.write(f"{json.dumps(error.as_dict(), sort_keys=True)}\n")
         return 2
 
@@ -115,7 +119,7 @@ def _build_artifact(arguments: argparse.Namespace) -> int:
     except ArtifactBuildError as error:
         sys.stderr.write(f"{json.dumps(error.as_dict(), sort_keys=True)}\n")
         return 2
-    except StateValidationError as error:
+    except ConfigValidationError as error:
         sys.stderr.write(f"{json.dumps(error.as_dict(), sort_keys=True)}\n")
         return 2
     sys.stdout.write(f"{json.dumps(built.as_dict(), sort_keys=True)}\n")

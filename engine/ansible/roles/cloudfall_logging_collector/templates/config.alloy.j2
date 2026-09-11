@@ -108,8 +108,8 @@ local.file_match "{{ item.id | replace('-', '_') }}" {
       "__path__" = "{{ item.path }}",
       "source"   = "file",
       "job"      = "{{ item.id }}",
-{% if item.project is defined %}
-      "project"  = "{{ item.project }}",
+{% if item.application is defined %}
+      "application"  = "{{ item.application }}",
 {% endif %}
 {% if item.component is defined %}
       "component" = "{{ item.component }}",

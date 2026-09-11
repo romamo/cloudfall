@@ -8,6 +8,20 @@ Notable changes to Cloudfall. The format follows
 
 ### Changed
 
+- **Breaking: common-vocabulary rename across schemas, CLI, and layout.**
+  Resource kinds `Project` → `Application` and `HostProfile` → `ServerType`
+  (schema files renamed to match); the `Server` spec field `profile` →
+  `serverType`; the `Component` spec field `project` → `application`; the
+  top-level `state/` directory → `config/` with resource directories
+  `projects/` → `applications/` and `host-profiles/` → `server-types/`;
+  `cloudfall state validate` → `cloudfall config validate`; importer flag
+  `--project` → `--application`; Python API `validate_state` →
+  `validate_config`, `ValidatedState` → `ValidatedConfig`,
+  `StateValidationError` → `ConfigValidationError`; Taskfile variable
+  `STATE_DIR` → `CONFIG_DIR`; inventory payload key `hostProfiles` →
+  `serverTypes` and observed-server key `profile` → `serverType`. Existing
+  config directories must be migrated by renaming the directories and the
+  `kind`/`profile`/`project` fields; no compatibility aliases are provided
 - `cloudfall-mcp --help` now documents every option and the confirmation
   handshake
 - README quickstart covers cloning, `uv sync`, and automatic Python 3.14

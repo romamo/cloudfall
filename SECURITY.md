@@ -9,7 +9,7 @@ Use GitHub's private vulnerability reporting on this repository ("Report a
 vulnerability" under the Security tab). Do not open a public issue for
 security-sensitive findings.
 
-Please include the affected component (`state/`, `sdk/`, `engine/`), a
+Please include the affected component (`config/`, `sdk/`, `engine/`), a
 reproduction, and the impact you believe it has.
 
 ## Scope notes

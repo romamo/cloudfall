@@ -23,7 +23,7 @@ from cloudfall.service_evidence import (
     load_deployment_receipts,
     load_domain_observations,
 )
-from cloudfall.validation import StateValidationError, validate_state
+from cloudfall.validation import ConfigValidationError, validate_config
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -55,7 +55,7 @@ class ListenEndpoint:
 class EvidenceSources:
     """Filesystem locations the dashboard re-derives its view from."""
 
-    state_directory: Path
+    config_directory: Path
     schema_directory: Path
     observed_directory: Path
     service_observed_directory: Path
@@ -64,7 +64,7 @@ class EvidenceSources:
 
     def operations_view(self) -> FleetOperations:
         """Re-validate state and evidence, then build a fresh projection."""
-        state = validate_state(self.state_directory, self.schema_directory)
+        state = validate_config(self.config_directory, self.schema_directory)
         inventory = PlatformInventory.from_state(state)
         if self.inspect_services:
             inspect_domains(
@@ -161,7 +161,7 @@ class _DashboardRequestHandler(BaseHTTPRequestHandler):
             return
         try:
             snapshot = self._cache().current()
-        except StateValidationError as error:
+        except ConfigValidationError as error:
             body = json.dumps(error.as_dict(), sort_keys=True)
             self._respond(
                 HTTPStatus.INTERNAL_SERVER_ERROR, "application/json", f"{body}\n"

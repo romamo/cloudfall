@@ -19,15 +19,15 @@ from cloudfall.inventory import (
     PlatformInventory,
     firewall_rules_for_server,
 )
-from cloudfall.validation import validate_state
+from cloudfall.validation import validate_config
 
 ROOT = Path(__file__).parents[2]
-SCHEMAS = ROOT / "state" / "schemas" / "v1"
-EXAMPLES = ROOT / "state" / "examples"
+SCHEMAS = ROOT / "config" / "schemas" / "v1"
+EXAMPLES = ROOT / "config" / "examples"
 
 
 def _inventory() -> PlatformInventory:
-    return PlatformInventory.from_state(validate_state(EXAMPLES, SCHEMAS))
+    return PlatformInventory.from_state(validate_config(EXAMPLES, SCHEMAS))
 
 
 def test_effective_firewall_rules_guarantee_the_ssh_port_once() -> None:
@@ -95,22 +95,22 @@ def test_inventory_rejects_unknown_query_targets() -> None:
 def test_inventory_serialization_excludes_secret_references() -> None:
     payload = _inventory().as_dict()
     servers = payload["servers"]
-    profiles = payload["hostProfiles"]
-    projects = payload["projects"]
+    server_types = payload["serverTypes"]
+    applications = payload["applications"]
     components = payload["components"]
     domains = payload["domains"]
     ssh_public_keys = payload["sshPublicKeys"]
     logging_stacks = payload["loggingStacks"]
 
     assert isinstance(servers, list)
-    assert isinstance(profiles, list)
-    assert isinstance(projects, list)
+    assert isinstance(server_types, list)
+    assert isinstance(applications, list)
     assert isinstance(components, list)
     assert isinstance(domains, list)
     assert isinstance(ssh_public_keys, list)
     assert len(servers) == 2
-    assert len(profiles) == 1
-    assert len(projects) == 1
+    assert len(server_types) == 1
+    assert len(applications) == 1
     assert len(components) == 1
     assert len(domains) == 1
     assert domains[0]["id"] == "crm-site"
@@ -173,7 +173,7 @@ def test_inventory_serialization_excludes_secret_references() -> None:
             },
         ],
     }
-    assert profiles[0]["id"] == "debian-application"
+    assert server_types[0]["id"] == "debian-application"
     serialized = json.dumps(payload).lower()
     assert "private key" not in serialized
     assert "passwordvalue" not in serialized
@@ -187,7 +187,7 @@ def test_inventory_serialization_covers_declared_services() -> None:
     assert services[0]["id"] == "postgresql-main"
     assert services[0]["bind"] == {"address": "127.0.0.1", "port": 5432}
     assert services[0]["postgresql"]["databases"] == [
-        {"name": "crm", "project": "crm", "owner": "crm"}
+        {"name": "crm", "application": "crm", "owner": "crm"}
     ]
     assert "packageVersion" not in services[0]["postgresql"]
     assert services[0]["metrics"] == {"enabled": True}

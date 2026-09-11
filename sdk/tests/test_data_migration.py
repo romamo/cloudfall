@@ -18,14 +18,14 @@ from cloudfall.lifecycle import (
 from cloudfall.migrate import MigrateError, MigrateOptions, execute_migration
 
 ROOT = Path(__file__).parents[2]
-SCHEMAS = ROOT / "state" / "schemas" / "v1"
-EXAMPLES = ROOT / "state" / "examples"
+SCHEMAS = ROOT / "config" / "schemas" / "v1"
+EXAMPLES = ROOT / "config" / "examples"
 ENGINE = ROOT / "engine"
 
 
 def _context(tmp_path: Path) -> EngineContext:
     return EngineContext(
-        state_directory=EXAMPLES,
+        config_directory=EXAMPLES,
         schema_directory=SCHEMAS,
         engine_directory=ENGINE,
         inventory_file=tmp_path / "inventory.json",
@@ -102,7 +102,7 @@ def test_data_migration_rejects_an_empty_source_url_file(
 
 def _agent_config(tmp_path: Path) -> AgentConfig:
     return AgentConfig(
-        state_directory=EXAMPLES,
+        config_directory=EXAMPLES,
         schema_directory=SCHEMAS,
         engine_directory=ENGINE,
         inventory_file=tmp_path / "inventory.json",

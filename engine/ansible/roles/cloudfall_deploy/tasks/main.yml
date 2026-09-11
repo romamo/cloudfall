@@ -69,8 +69,8 @@
   ansible.builtin.file:
     path: "{{ item }}"
     state: directory
-    owner: "{{ cloudfall_deploy_component.project_user }}"
-    group: "{{ cloudfall_deploy_component.project_user }}"
+    owner: "{{ cloudfall_deploy_component.application_user }}"
+    group: "{{ cloudfall_deploy_component.application_user }}"
     mode: "0755"
   loop:
     - "{{ cloudfall_deploy_component.install_root }}/releases"
@@ -107,8 +107,8 @@
     src: "{{ cloudfall_deploy_staging_archive }}"
     dest: "{{ cloudfall_deploy_release_directory }}"
     remote_src: true
-    owner: "{{ cloudfall_deploy_component.project_user }}"
-    group: "{{ cloudfall_deploy_component.project_user }}"
+    owner: "{{ cloudfall_deploy_component.application_user }}"
+    group: "{{ cloudfall_deploy_component.application_user }}"
 
 - name: Remove the staged archive
   ansible.builtin.file:
@@ -123,7 +123,7 @@
         cloudfall_deploy_component.id
       }}.env
     owner: root
-    group: "{{ cloudfall_deploy_component.project_user }}"
+    group: "{{ cloudfall_deploy_component.application_user }}"
     mode: "0640"
   when: cloudfall_deploy_environment_file | length > 0
 
@@ -136,7 +136,7 @@
       - --no-dev
     chdir: "{{ cloudfall_deploy_release_directory }}"
   become: true
-  become_user: "{{ cloudfall_deploy_component.project_user }}"
+  become_user: "{{ cloudfall_deploy_component.application_user }}"
   environment:
     HOME: "{{ cloudfall_deploy_shared_directory }}"
     UV_CACHE_DIR: "{{ cloudfall_deploy_shared_directory }}/uv/cache"

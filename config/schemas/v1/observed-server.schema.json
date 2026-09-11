@@ -1,0 +1,627 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cloudfall.internal/schemas/v1/observed-server.schema.json",
+  "title": "Cloudfall observed server snapshot",
+  "$defs": {
+    "nullableString": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "timerName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "pattern": "^[A-Za-z0-9@_.:\\\\-]+\\.timer$"
+    },
+    "observedServiceName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "pattern": "^[A-Za-z0-9@_.:\\\\-]+\\.service$"
+    },
+    "nullableInteger": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "blockDevice": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fstype": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "mountpoint": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "pkname": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "model": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "serial": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "rota": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "children": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/blockDevice"
+          }
+        }
+      },
+      "required": [
+        "name",
+        "path",
+        "type",
+        "size",
+        "fstype",
+        "mountpoint",
+        "pkname",
+        "model",
+        "serial",
+        "rota"
+      ],
+      "additionalProperties": false
+    },
+    "smartDevice": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "$ref": "common.schema.json#/$defs/absolutePath"
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1
+        },
+        "serial": {
+          "type": "string",
+          "minLength": 1
+        },
+        "firmware": {
+          "type": "string",
+          "minLength": 1
+        },
+        "smartctlExitCode": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "overallHealth": {
+          "enum": [
+            "passed",
+            "failed"
+          ]
+        },
+        "criticalWarning": {
+          "type": "string",
+          "pattern": "^0x[0-9A-Fa-f]+$"
+        },
+        "reliabilityDegraded": {
+          "type": "boolean"
+        },
+        "temperatureCelsius": {
+          "type": "integer"
+        },
+        "availableSparePercent": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "availableSpareThresholdPercent": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "percentageUsed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "dataUnitsRead": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "dataUnitsWritten": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "powerCycles": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "powerOnHours": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unsafeShutdowns": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "mediaAndDataIntegrityErrors": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "errorInformationLogEntries": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "path",
+        "model",
+        "serial",
+        "firmware",
+        "smartctlExitCode",
+        "overallHealth",
+        "criticalWarning",
+        "reliabilityDegraded",
+        "temperatureCelsius",
+        "availableSparePercent",
+        "availableSpareThresholdPercent",
+        "percentageUsed",
+        "dataUnitsRead",
+        "dataUnitsWritten",
+        "powerCycles",
+        "powerOnHours",
+        "unsafeShutdowns",
+        "mediaAndDataIntegrityErrors",
+        "errorInformationLogEntries"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "type": "object",
+  "properties": {
+    "apiVersion": {
+      "$ref": "common.schema.json#/$defs/apiVersion"
+    },
+    "kind": {
+      "const": "ObservedServer"
+    },
+    "metadata": {
+      "$ref": "common.schema.json#/$defs/metadata"
+    },
+    "spec": {
+      "type": "object",
+      "properties": {
+        "server": {
+          "$ref": "common.schema.json#/$defs/resourceId"
+        },
+        "serverType": {
+          "$ref": "common.schema.json#/$defs/resourceId"
+        },
+        "observedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "collectorVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "os": {
+          "type": "object",
+          "properties": {
+            "distribution": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            },
+            "majorVersion": {
+              "type": "string"
+            },
+            "release": {
+              "type": "string"
+            },
+            "kernel": {
+              "type": "string"
+            },
+            "architecture": {
+              "type": "string"
+            },
+            "serviceManager": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "distribution",
+            "version",
+            "majorVersion",
+            "release",
+            "kernel",
+            "architecture",
+            "serviceManager"
+          ],
+          "additionalProperties": false
+        },
+        "hardware": {
+          "type": "object",
+          "properties": {
+            "processorCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "processorCores": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "processorVcpus": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "memoryBytes": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "processorCount",
+            "processorCores",
+            "processorVcpus",
+            "memoryBytes"
+          ],
+          "additionalProperties": false
+        },
+        "storage": {
+          "type": "object",
+          "properties": {
+            "blockDevices": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/blockDevice"
+              }
+            },
+            "filesystems": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "target": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string"
+                  },
+                  "fstype": {
+                    "type": "string"
+                  },
+                  "options": {
+                    "type": "string"
+                  },
+                  "size": {
+                    "$ref": "#/$defs/nullableInteger"
+                  },
+                  "used": {
+                    "$ref": "#/$defs/nullableInteger"
+                  },
+                  "avail": {
+                    "$ref": "#/$defs/nullableInteger"
+                  }
+                },
+                "required": [
+                  "target",
+                  "source",
+                  "fstype",
+                  "options",
+                  "size",
+                  "used",
+                  "avail"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "softwareRaid": {
+              "type": "object",
+              "properties": {
+                "mdstat": {
+                  "type": "string"
+                },
+                "mdadmScan": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "mdstat",
+                "mdadmScan"
+              ],
+              "additionalProperties": false
+            },
+            "smart": {
+              "type": "object",
+              "properties": {
+                "available": {
+                  "type": "boolean"
+                },
+                "smartctlVersion": {
+                  "$ref": "#/$defs/nullableString"
+                },
+                "devices": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/smartDevice"
+                  }
+                }
+              },
+              "required": [
+                "available",
+                "smartctlVersion",
+                "devices"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "blockDevices",
+            "filesystems",
+            "softwareRaid",
+            "smart"
+          ],
+          "additionalProperties": false
+        },
+        "packages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "$ref": "common.schema.json#/$defs/packageName"
+              },
+              "version": {
+                "type": "string"
+              },
+              "source": {
+                "type": "string"
+              },
+              "arch": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "version",
+              "source",
+              "arch"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "services": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/observedServiceName"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "$ref": "#/$defs/observedServiceName"
+              },
+              "state": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "source": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "state",
+              "status",
+              "source"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "network": {
+          "type": "object",
+          "properties": {
+            "listeningSockets": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "listeningSockets"
+          ],
+          "additionalProperties": false
+        },
+        "timers": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/timerName"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "$ref": "#/$defs/timerName"
+              },
+              "state": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "source": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "state",
+              "status",
+              "source"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "firewall": {
+          "type": "object",
+          "properties": {
+            "nftAvailable": {
+              "type": "boolean"
+            },
+            "managedTableJson": {
+              "$ref": "#/$defs/nullableString"
+            }
+          },
+          "required": [
+            "nftAvailable",
+            "managedTableJson"
+          ],
+          "additionalProperties": false
+        },
+        "componentEnvironment": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "component": {
+                "$ref": "common.schema.json#/$defs/resourceId"
+              },
+              "path": {
+                "$ref": "common.schema.json#/$defs/absolutePath"
+              },
+              "exists": {
+                "type": "boolean"
+              },
+              "sha256": {
+                "anyOf": [
+                  {
+                    "$ref": "common.schema.json#/$defs/sha256"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "component",
+              "path",
+              "exists",
+              "sha256"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "alerting": {
+          "type": "object",
+          "properties": {
+            "prometheusAvailable": {
+              "type": "boolean"
+            },
+            "rulesJson": {
+              "$ref": "#/$defs/nullableString"
+            },
+            "alertsJson": {
+              "$ref": "#/$defs/nullableString"
+            }
+          },
+          "required": [
+            "prometheusAvailable",
+            "rulesJson",
+            "alertsJson"
+          ],
+          "additionalProperties": false
+        },
+        "configuration": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "$ref": "common.schema.json#/$defs/absolutePath"
+              },
+              "capture": {
+                "enum": [
+                  "metadata",
+                  "hash"
+                ]
+              },
+              "exists": {
+                "type": "boolean"
+              },
+              "owner": {
+                "$ref": "#/$defs/nullableString"
+              },
+              "group": {
+                "$ref": "#/$defs/nullableString"
+              },
+              "mode": {
+                "$ref": "#/$defs/nullableString"
+              },
+              "size": {
+                "$ref": "#/$defs/nullableInteger"
+              },
+              "sha256": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            },
+            "required": [
+              "path",
+              "capture",
+              "exists",
+              "owner",
+              "group",
+              "mode",
+              "size",
+              "sha256"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "server",
+        "serverType",
+        "observedAt",
+        "collectorVersion",
+        "os",
+        "hardware",
+        "storage",
+        "packages",
+        "services",
+        "timers",
+        "firewall",
+        "network",
+        "configuration"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "apiVersion",
+    "kind",
+    "metadata",
+    "spec"
+  ],
+  "additionalProperties": false
+}

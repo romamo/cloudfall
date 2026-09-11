@@ -15,14 +15,14 @@ from cloudfall.secrets import (
 )
 
 ROOT = Path(__file__).parents[2]
-SCHEMAS = ROOT / "state" / "schemas" / "v1"
-EXAMPLES = ROOT / "state" / "examples"
+SCHEMAS = ROOT / "config" / "schemas" / "v1"
+EXAMPLES = ROOT / "config" / "examples"
 ENGINE = ROOT / "engine"
 
 
 def _context(tmp_path: Path) -> EngineContext:
     return EngineContext(
-        state_directory=EXAMPLES,
+        config_directory=EXAMPLES,
         schema_directory=SCHEMAS,
         engine_directory=ENGINE,
         inventory_file=tmp_path / "inventory.json",
@@ -37,7 +37,7 @@ def _provider(tmp_path: Path) -> SopsSecretProvider:
         encoding="utf-8",
     )
     (secrets / "production" / "crm.env").write_text(
-        "# project-wide\nLOG_LEVEL=info\n", encoding="utf-8"
+        "# application-wide\nLOG_LEVEL=info\n", encoding="utf-8"
     )
     (secrets / "production" / "crm" / "backend.env").parent.mkdir(
         parents=True, exist_ok=True

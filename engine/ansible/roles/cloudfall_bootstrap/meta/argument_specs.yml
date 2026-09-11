@@ -16,7 +16,7 @@ argument_specs:
           - git
           - rsync
           - unzip
-      cloudfall_bootstrap_projects:
+      cloudfall_bootstrap_applications:
         type: list
         elements: dict
         required: true
@@ -41,10 +41,10 @@ argument_specs:
           id:
             type: str
             required: true
-          project:
+          application:
             type: str
             required: true
-          project_user:
+          application_user:
             type: str
             required: true
           install_root:

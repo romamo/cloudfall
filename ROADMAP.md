@@ -171,7 +171,7 @@ routine and widen what it can carry, in rough priority order:
 - **Secrets v2** ✔ — `cloudfall secrets render` (and the
   `render_secrets` MCP tool) resolves declared secret references from a
   sops/age-encrypted secrets directory into per-component 0600 environment
-  files, merging platform → project → component scopes; envelopes carry key
+  files, merging platform → application → component scopes; envelopes carry key
   names and hashes, never values, and the provider boundary admits managed
   backends later — see the [secrets guide](docs/secrets-guide.md)
 - **Bare-metal provisioning** — software RAID and storage layout for

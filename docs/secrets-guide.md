@@ -10,7 +10,7 @@ logs, output envelopes, or the agent surface.
 ## First: prefer secrets that don't exist
 
 The best credential story is elimination. PostgreSQL uses peer
-authentication over the local socket — the app connects as its project's
+authentication over the local socket — the app connects as its application's
 Linux user with `postgresql:///<db>?host=/var/run/postgresql`, no username
 or password anywhere. Redis binds loopback-only with protected mode. Use
 the secrets pipeline only for values that must exist: external API keys,
@@ -44,8 +44,8 @@ A reference `{environment: production, path: /crm/backend}` resolves from
 ```
 secrets/
   production/
-    shared.env        # platform scope, declared on the project
-    crm.env           # project scope
+    shared.env        # platform scope, declared on the application
+    crm.env           # application scope
     crm/
       backend.env     # component scope
 ```
@@ -65,7 +65,7 @@ belong in encrypted fragments — they belong in the component's declared
 like any other state:
 
 ```yaml
-# state/production/components/crm-backend.yaml
+# config/production/components/crm-backend.yaml
 spec:
   environment:
     FEATURE_SIGNUPS: "true"
@@ -80,12 +80,12 @@ shadowing in either direction.
 
 ## Declaring and rendering
 
-Projects declare platform-scope references; components declare project and
+Applications declare platform-scope references; components declare application and
 component scope. Rendering merges them in that order — later scopes
 override earlier keys:
 
 ```sh
-uv run cloudfall secrets render state/production crm-backend \
+uv run cloudfall secrets render config/production crm-backend \
   --secrets-dir secrets
 ```
 
@@ -93,7 +93,7 @@ This writes `tmp/env/crm-backend.env` with mode `0600` and prints an
 envelope carrying the key **names**, the file hash, and the resolved
 references — never a value. Pass that file to `cloudfall deploy
 --env-file` or map it in `cloudfall migrate`; the deploy role installs it
-into the release owned by the project user and the systemd unit loads it
+into the release owned by the application user and the systemd unit loads it
 with `EnvironmentFile=`.
 
 A missing source fails fast with the exact expected path; a malformed line

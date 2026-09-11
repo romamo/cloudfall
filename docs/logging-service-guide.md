@@ -36,7 +36,7 @@ storage and included in capacity monitoring and backup policy.
 ## 1. Prepare placement and names
 
 Add the dedicated logging host as a `Server` and give it an accurate
-`HostProfile`. Do not use the capacity-constrained public proxy or a host with
+`ServerType`. Do not use the capacity-constrained public proxy or a host with
 an unresolved storage finding.
 
 Choose an internal gateway name, such as `logs.internal.example`, whose A/AAAA
@@ -77,13 +77,13 @@ ownership and modes.
 ## 3. Declare the stack and sources
 
 Copy the synthetic
-[`operations` example](../state/examples/logging-stacks/operations.yaml) into
-`state/production/logging-stacks/`, then replace every example host, name,
+[`operations` example](../config/examples/logging-stacks/operations.yaml) into
+`config/production/logging-stacks/`, then replace every example host, name,
 version, path, and retention value.
 
 Declare every journald collector host and every application file glob. A file
 source can attach only the bounded labels `environment`, `server`, `source`,
-`job`, `project`, and `component`; request IDs, user IDs, URLs, and other
+`job`, `application`, and `component`; request IDs, user IDs, URLs, and other
 unbounded values are not part of the state contract.
 
 Alloy runs as the `alloy` account. Grant read and traversal access only to the
@@ -100,9 +100,9 @@ Do not recursively broaden unrelated `/var/log` permissions.
 ## 4. Validate and inspect the plan
 
 ```console
-uv run cloudfall state validate state/production
-uv run cloudfall inventory show state/production
-uv run cloudfall-engine inventory render state/production \
+uv run cloudfall config validate config/production
+uv run cloudfall inventory show config/production
+uv run cloudfall-engine inventory render config/production \
   --output tmp/ansible-inventory.json
 uv run ansible-inventory --inventory tmp/ansible-inventory.json \
   --graph cloudfall_logging_backends
@@ -120,8 +120,8 @@ The check run still requires the pre-provisioned secret files because that is a
 deployment precondition:
 
 ```console
-task logging:check STATE_DIR=state/production
-task logging:deploy STATE_DIR=state/production
+task logging:check CONFIG_DIR=config/production
+task logging:deploy CONFIG_DIR=config/production
 ```
 
 The deployment order is backend first and collectors second, one host at a
@@ -152,7 +152,7 @@ ssh -L 3000:127.0.0.1:3000 cloudfall@logging-host
 ```
 
 Then inspect `http://127.0.0.1:3000`, confirm the provisioned `Cloudfall Loki` data
-source, and query each declared `server`, `source`, `job`, `project`, and
+source, and query each declared `server`, `source`, `job`, `application`, and
 `component`. Compare counts, timestamps, multiline behavior, ingestion delay,
 and alert coverage with the legacy Elastic path for the full proving window.
 

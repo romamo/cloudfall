@@ -28,7 +28,7 @@ from cloudfall.operator import (
     parse_prometheus_alerts,
     run_once,
 )
-from cloudfall.validation import SchemaCatalog, validate_state
+from cloudfall.validation import SchemaCatalog, validate_config
 
 _FAST_APPROVE = ApproveOptions(
     verify_timeout_seconds=2.0,
@@ -37,8 +37,8 @@ _FAST_APPROVE = ApproveOptions(
 )
 
 ROOT = Path(__file__).parents[2]
-SCHEMAS = ROOT / "state" / "schemas" / "v1"
-EXAMPLES = ROOT / "state" / "examples"
+SCHEMAS = ROOT / "config" / "schemas" / "v1"
+EXAMPLES = ROOT / "config" / "examples"
 
 _LABELS = {
     "alertname": "postgresql_down",
@@ -86,7 +86,7 @@ class FakeFeed:
 
 
 def _inventory() -> PlatformInventory:
-    return PlatformInventory.from_state(validate_state(EXAMPLES, SCHEMAS))
+    return PlatformInventory.from_state(validate_config(EXAMPLES, SCHEMAS))
 
 
 def _store(tmp_path: Path) -> ProposalStore:
@@ -284,7 +284,7 @@ def _audit_report(*checks: tuple[str, AuditStatus]) -> AuditReport:
     )
     server = ServerAudit(
         server_id="h1",
-        profile_id="debian-application",
+        server_type_id="debian-application",
         status=status,
         observation="synthetic",
         observed_at="2026-09-10T15:00:00Z",

@@ -7,5 +7,5 @@ cloudfall_bootstrap_packages:
   - git
   - rsync
   - unzip
-cloudfall_bootstrap_projects: []
+cloudfall_bootstrap_applications: []
 cloudfall_bootstrap_components: []

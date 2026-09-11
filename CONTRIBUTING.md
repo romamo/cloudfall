@@ -22,7 +22,7 @@ Every change must pass the same suite CI runs:
 uv run ruff check .
 uv run mypy
 uv run pytest
-uv run cloudfall state validate state/examples
+uv run cloudfall config validate config/examples
 uv run ansible-lint engine/ansible
 ```
 
@@ -38,7 +38,7 @@ uv run ansible-lint engine/ansible
 - **Synthetic fixtures only.** Example state, tests, and docs must never
   contain real hostnames, addresses, provider identifiers, credentials, or
   hardware serials. Playbooks and roles in this repository may reference only
-  resources that exist in `state/examples`
+  resources that exist in `config/examples`
 - **Evidence over inference.** Status is derived from validated observations
   and receipts; nothing reports success it cannot prove
 

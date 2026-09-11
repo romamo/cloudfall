@@ -21,16 +21,16 @@
     group: root
     mode: "0755"
 
-- name: Create project groups
+- name: Create application groups
   ansible.builtin.group:
     name: "{{ item.user }}"
     state: present
     system: true
-  loop: "{{ cloudfall_bootstrap_projects }}"
+  loop: "{{ cloudfall_bootstrap_applications }}"
   loop_control:
     label: "{{ item.id }}"
 
-- name: Create project service accounts
+- name: Create application service accounts
   ansible.builtin.user:
     name: "{{ item.user }}"
     group: "{{ item.user }}"
@@ -39,29 +39,29 @@
     create_home: false
     system: true
     state: present
-  loop: "{{ cloudfall_bootstrap_projects }}"
+  loop: "{{ cloudfall_bootstrap_applications }}"
   loop_control:
     label: "{{ item.id }}"
 
-- name: Create project roots
+- name: Create application roots
   ansible.builtin.file:
     path: "{{ cloudfall_bootstrap_apps_root }}/{{ item.id }}"
     state: directory
     owner: "{{ item.user }}"
     group: "{{ item.user }}"
     mode: "0750"
-  loop: "{{ cloudfall_bootstrap_projects }}"
+  loop: "{{ cloudfall_bootstrap_applications }}"
   loop_control:
     label: "{{ item.id }}"
 
-- name: Create project shared directories
+- name: Create application shared directories
   ansible.builtin.file:
     path: "{{ cloudfall_bootstrap_apps_root }}/{{ item.id }}/shared"
     state: directory
     owner: "{{ item.user }}"
     group: "{{ item.user }}"
     mode: "0750"
-  loop: "{{ cloudfall_bootstrap_projects }}"
+  loop: "{{ cloudfall_bootstrap_applications }}"
   loop_control:
     label: "{{ item.id }}"
 
@@ -69,8 +69,8 @@
   ansible.builtin.file:
     path: "{{ item.install_root }}"
     state: directory
-    owner: "{{ item.project_user }}"
-    group: "{{ item.project_user }}"
+    owner: "{{ item.application_user }}"
+    group: "{{ item.application_user }}"
     mode: "0750"
   loop: "{{ cloudfall_bootstrap_components }}"
   loop_control:
@@ -80,8 +80,8 @@
   ansible.builtin.file:
     path: "{{ item.install_root }}/releases"
     state: directory
-    owner: "{{ item.project_user }}"
-    group: "{{ item.project_user }}"
+    owner: "{{ item.application_user }}"
+    group: "{{ item.application_user }}"
     mode: "0750"
   loop: "{{ cloudfall_bootstrap_components }}"
   loop_control:
@@ -91,8 +91,8 @@
   ansible.builtin.file:
     path: "{{ item.install_root }}/shared"
     state: directory
-    owner: "{{ item.project_user }}"
-    group: "{{ item.project_user }}"
+    owner: "{{ item.application_user }}"
+    group: "{{ item.application_user }}"
     mode: "0750"
   loop: "{{ cloudfall_bootstrap_components }}"
   loop_control:

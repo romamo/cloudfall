@@ -1,0 +1,146 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cloudfall.internal/schemas/v1/server.schema.json",
+  "title": "Cloudfall server",
+  "x-cloudfall-kind": "Server",
+  "type": "object",
+  "properties": {
+    "apiVersion": {
+      "$ref": "common.schema.json#/$defs/apiVersion"
+    },
+    "kind": {
+      "const": "Server"
+    },
+    "metadata": {
+      "$ref": "common.schema.json#/$defs/metadata"
+    },
+    "spec": {
+      "type": "object",
+      "properties": {
+        "hostname": {
+          "type": "string",
+          "format": "hostname"
+        },
+        "address": {
+          "type": "string",
+          "anyOf": [
+            {
+              "format": "hostname"
+            },
+            {
+              "format": "ipv4"
+            },
+            {
+              "format": "ipv6"
+            }
+          ]
+        },
+        "environment": {
+          "$ref": "common.schema.json#/$defs/resourceId"
+        },
+        "serverType": {
+          "$ref": "common.schema.json#/$defs/resourceId"
+        },
+        "provider": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "$ref": "common.schema.json#/$defs/resourceId"
+            },
+            "serverId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9._:-]+$"
+            },
+            "datacenter": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        "network": {
+          "type": "object",
+          "properties": {
+            "ipv4": {
+              "type": "string",
+              "format": "ipv4"
+            },
+            "ipv6Cidr": {
+              "type": "string",
+              "pattern": "^[0-9A-Fa-f:]+/[0-9]{1,3}$"
+            },
+            "reverseDns": {
+              "type": "string",
+              "format": "hostname"
+            }
+          },
+          "required": [
+            "ipv4",
+            "ipv6Cidr",
+            "reverseDns"
+          ],
+          "additionalProperties": false
+        },
+        "lifecycle": {
+          "enum": [
+            "active",
+            "maintenance",
+            "retired"
+          ]
+        },
+        "ssh": {
+          "type": "object",
+          "properties": {
+            "user": {
+              "$ref": "common.schema.json#/$defs/linuxUser"
+            },
+            "port": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535
+            }
+          },
+          "required": [
+            "user",
+            "port"
+          ],
+          "additionalProperties": false
+        },
+        "labels": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "common.schema.json#/$defs/resourceId"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          }
+        }
+      },
+      "required": [
+        "hostname",
+        "address",
+        "environment",
+        "serverType",
+        "lifecycle",
+        "ssh"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "apiVersion",
+    "kind",
+    "metadata",
+    "spec"
+  ],
+  "additionalProperties": false
+}
