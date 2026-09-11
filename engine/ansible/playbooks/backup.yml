@@ -1,0 +1,86 @@
+---
+- name: Run one declared backup operation with a controller receipt
+  hosts: cloudfall_servers
+  become: true
+  gather_facts: true
+  any_errors_fatal: true
+  serial: 1
+  tasks:
+    - name: Select the requested service on this host
+      ansible.builtin.set_fact:
+        cloudfall_backup_matched: >-
+          {{
+            cloudfall_services | default([])
+            | selectattr('id', 'equalto', cloudfall_backup_service)
+            | list
+          }}
+
+    - name: Execute the requested backup action as the service user
+      ansible.builtin.command:
+        argv:
+          - >-
+            /usr/local/sbin/cloudfall-{{ cloudfall_backup_item.serviceKind
+            }}-{{
+              'backup'
+              if cloudfall_backup_action == 'backup'
+              else 'restore-check'
+            }}
+      become: true
+      become_user: >-
+        {{
+          'postgres'
+          if cloudfall_backup_item.serviceKind == 'postgresql'
+          else 'redis'
+        }}
+      loop: "{{ cloudfall_backup_matched }}"
+      loop_control:
+        loop_var: cloudfall_backup_item
+        label: "{{ cloudfall_backup_item.id }}"
+      register: cloudfall_backup_execution
+      changed_when: cloudfall_backup_action == 'backup'
+
+    - name: Ensure the controller receipt directory exists
+      ansible.builtin.file:
+        path: "{{ cloudfall_backup_receipt_directory }}"
+        state: directory
+        mode: "0755"
+      delegate_to: localhost
+      become: false
+      when: cloudfall_backup_matched | length > 0
+
+    - name: Write the backup receipt on the controller
+      ansible.builtin.copy:
+        content: >-
+          {{
+            {
+              'apiVersion': 'cloudfall/v1',
+              'kind': 'BackupReceipt',
+              'metadata': {
+                'id': cloudfall_backup_result.cloudfall_backup_item.id
+                  ~ '-' ~ cloudfall_backup_action,
+                'description':
+                  'Backup operation receipt written by backup.yml',
+              },
+              'spec': {
+                'service': cloudfall_backup_result.cloudfall_backup_item.id,
+                'server': cloudfall_server_id,
+                'action': cloudfall_backup_action,
+                'executedAt': ansible_facts['date_time']['iso8601'],
+                'summary': (
+                  (cloudfall_backup_result.stdout_lines | default([]))[-5:]
+                  | join(' | ')
+                )[:2000] or 'completed',
+              },
+            } | to_nice_json
+          }}
+        dest: >-
+          {{ cloudfall_backup_receipt_directory }}/{{
+            cloudfall_backup_result.cloudfall_backup_item.id
+          }}-{{ cloudfall_backup_action }}.json
+        mode: "0644"
+      delegate_to: localhost
+      become: false
+      loop: "{{ cloudfall_backup_execution.results | default([]) }}"
+      loop_control:
+        loop_var: cloudfall_backup_result
+        label: "{{ cloudfall_backup_result.cloudfall_backup_item.id }}"

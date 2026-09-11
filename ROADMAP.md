@@ -174,8 +174,11 @@ routine and widen what it can carry, in rough priority order:
   dedicated servers per the
   [hybrid storage design](docs/hybrid-storage-design.md), the one part of
   the server model still unexercised live
-- **Backup and restore as first-class operations** — declared backup
-  policies with restore-proof commands on the CLI and MCP surface
+- **Backup and restore as first-class operations** ✔ — `cloudfall
+  backup run|verify` and the confirm-gated `backup_service` /
+  `verify_backup` MCP tools execute the declared backup and restore-proof
+  scripts on the service's server as its service user, each writing a
+  schema-valid `BackupReceipt`
 
 Exit: a second real application migrated by someone other than the author,
 using only the public documentation.

@@ -211,3 +211,46 @@ def test_operator_approve_gates_before_executing(tmp_path: Path) -> None:
 
     assert gate["status"] == "confirmation-required"
     assert "baseline.yml" in str(gate["wouldRun"])
+
+
+def test_backup_tools_gate_and_reject_unknown_services(
+    tmp_path: Path,
+) -> None:
+    toolset = AgentToolset(_config(tmp_path))
+
+    gate = toolset.backup_service("postgresql-main")
+    verify_gate = toolset.verify_backup("postgresql-main")
+    unknown = toolset.backup_service("mystery-service", confirm=True)
+
+    assert gate["status"] == "confirmation-required"
+    assert "run the declared backup" in str(gate["wouldRun"])
+    assert verify_gate["status"] == "confirmation-required"
+    assert "prove the newest backup restores" in str(verify_gate["wouldRun"])
+    assert unknown["status"] == "error"
+    error = unknown["error"]
+    assert isinstance(error, dict)
+    assert error["code"] == "lifecycle_service_missing"
+
+
+def test_backup_receipt_schema_accepts_the_playbook_shape() -> None:
+    from cloudfall.validation import SchemaCatalog  # noqa: PLC0415
+
+    receipt = {
+        "apiVersion": "cloudfall/v1",
+        "kind": "BackupReceipt",
+        "metadata": {
+            "id": "postgresql-main-restore-check",
+            "description": "Backup operation receipt written by backup.yml",
+        },
+        "spec": {
+            "service": "postgresql-main",
+            "server": "h1",
+            "action": "restore-check",
+            "executedAt": "2026-09-11T10:00:00Z",
+            "summary": "restore check passed for crm: latest.dump",
+        },
+    }
+
+    SchemaCatalog(SCHEMAS).validate_named(
+        "backup-receipt.schema.json", receipt
+    )

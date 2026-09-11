@@ -36,11 +36,13 @@ from cloudfall.lifecycle import (
     DeployOptions,
     EngineContext,
     LifecycleError,
+    backup_service,
     deploy,
     health,
     migrate_data,
     restart,
     rollback,
+    verify_backup,
 )
 from cloudfall.migrate import MigrateError, MigrateOptions, execute_migration
 from cloudfall.observation import load_observations
@@ -137,6 +139,7 @@ def _parser() -> argparse.ArgumentParser:
     )
 
     _add_operator_parsers(commands)
+    _add_backup_parsers(commands)
 
     services_parser = commands.add_parser(
         "services", help="inspect and report public service lifecycles"
@@ -662,6 +665,37 @@ def _add_operator_parsers(
     )
 
 
+def _add_backup_parsers(
+    commands: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    backup_parser = commands.add_parser(
+        "backup", help="run and prove declared service backups"
+    )
+    backup_commands = backup_parser.add_subparsers(
+        dest="backup_command", required=True
+    )
+    for name, description in (
+        ("run", "run the declared backup for one service"),
+        ("verify", "prove the newest backup restores for one service"),
+    ):
+        subparser = backup_commands.add_parser(name, help=description)
+        subparser.add_argument("state_directory", type=Path)
+        subparser.add_argument("service")
+        subparser.add_argument(
+            "--schemas",
+            type=Path,
+            default=Path("state/schemas/v1"),
+            help="versioned schema directory (default: state/schemas/v1)",
+        )
+        subparser.add_argument(
+            "--receipts",
+            type=Path,
+            default=Path("tmp/backups"),
+            help="backup receipt directory (default: tmp/backups)",
+        )
+        _add_operator_engine_arguments(subparser)
+
+
 def _add_operator_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("state_directory", type=Path)
     parser.add_argument(
@@ -781,6 +815,8 @@ def _dispatch(
 ) -> int:
     handlers: dict[str, Callable[[Namespace, ValidatedState, Path], int]] = {
         "audit": _run_audit,
+        "backup:run": _run_backup_run,
+        "backup:verify": _run_backup_verify,
         "data:migrate": _run_data_migrate,
         "dashboard:build": _run_dashboard_build,
         "dashboard:serve": _run_dashboard_serve,
@@ -845,6 +881,35 @@ def _run_audit(
     if report.status is AuditStatus.DRIFT:
         return 1
     return 3
+
+
+def _run_backup_run(
+    arguments: Namespace, _state: ValidatedState, schema_directory: Path
+) -> int:
+    return _run_backup_operation(arguments, schema_directory, backup_service)
+
+
+def _run_backup_verify(
+    arguments: Namespace, _state: ValidatedState, schema_directory: Path
+) -> int:
+    return _run_backup_operation(arguments, schema_directory, verify_backup)
+
+
+def _run_backup_operation(
+    arguments: Namespace,
+    schema_directory: Path,
+    operation: Callable[[EngineContext, ResourceId, Path], dict[str, object]],
+) -> int:
+    try:
+        result = operation(
+            _engine_context(arguments, schema_directory),
+            ResourceId.from_boundary(arguments.service),
+            Path(arguments.receipts),
+        )
+    except LifecycleError as error:
+        return _lifecycle_exit(error)
+    _write_json(result)
+    return 0
 
 
 def _operator_store(

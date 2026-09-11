@@ -581,6 +581,73 @@ def migrate_data(
     return result
 
 
+def backup_service(
+    context: EngineContext,
+    service_id: ResourceId,
+    receipt_directory: Path,
+) -> dict[str, object]:
+    """Run the declared backup for one service and return its receipt."""
+    return _backup_operation(context, service_id, receipt_directory, "backup")
+
+
+def verify_backup(
+    context: EngineContext,
+    service_id: ResourceId,
+    receipt_directory: Path,
+) -> dict[str, object]:
+    """Run the restore-proof check for one service, receipted."""
+    return _backup_operation(
+        context, service_id, receipt_directory, "restore-check"
+    )
+
+
+def _backup_operation(
+    context: EngineContext,
+    service_id: ResourceId,
+    receipt_directory: Path,
+    action: str,
+) -> dict[str, object]:
+    state = validate_state(context.state_directory, context.schema_directory)
+    inventory = PlatformInventory.from_state(state)
+    declared = next(
+        (
+            service
+            for service in inventory.services
+            if service.resource_id == service_id
+        ),
+        None,
+    )
+    if declared is None:
+        detail = f"declared service does not exist: {service_id}"
+        raise LifecycleError(_ERROR_SERVICE_MISSING, detail)
+    run_engine_playbook(
+        context,
+        "backup.yml",
+        {
+            "cloudfall_backup_service": service_id.value,
+            "cloudfall_backup_action": action,
+            "cloudfall_backup_receipt_directory": str(
+                receipt_directory.resolve()
+            ),
+        },
+    )
+    receipt_path = receipt_directory / f"{service_id.value}-{action}.json"
+    if not receipt_path.is_file():
+        detail = (
+            f"no {action} receipt was written for {service_id}; the "
+            "service's server produced no result"
+        )
+        raise LifecycleError(_ERROR_SERVICE_MISSING, detail)
+    receipt = cast(
+        "dict[str, object]",
+        json.loads(receipt_path.read_text(encoding="utf-8")),
+    )
+    SchemaCatalog(context.schema_directory).validate_named(
+        "backup-receipt.schema.json", receipt
+    )
+    return {"status": "ok", "receipt": receipt, "path": str(receipt_path)}
+
+
 def _postgresql_service(
     context: EngineContext, service_id: ResourceId
 ) -> ServiceInventory:

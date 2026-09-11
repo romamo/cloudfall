@@ -24,6 +24,7 @@ from cloudfall.lifecycle import (
     DeployOptions,
     EngineContext,
     LifecycleError,
+    backup_service,
     build_release_artifact,
     deploy,
     health,
@@ -31,6 +32,7 @@ from cloudfall.lifecycle import (
     restart,
     rollback,
     run_engine_playbook,
+    verify_backup,
 )
 from cloudfall.migrate import MigrateError, MigrateOptions, execute_migration
 from cloudfall.observation import load_observations
@@ -70,6 +72,8 @@ from cloudfall.service_evidence import (
 from cloudfall.validation import SchemaCatalog, StateValidationError, validate_state
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from cloudfall.operator import AlertFeed
     from cloudfall.validation import ValidatedState
 
@@ -90,6 +94,7 @@ class AgentConfig:
     releases_directory: Path
     artifacts_directory: Path
     data_migrations_directory: Path = Path("tmp/data-migrations")
+    backups_directory: Path = Path("tmp/backups")
     proposals_directory: Path = Path("tmp/operator/proposals")
     gateway_ca_path: Path | None = None
     gateway_certificate_path: Path | None = None
@@ -500,6 +505,61 @@ class AgentToolset:
                 "to execute it; interrupted runs resume automatically"
             )
         return result
+
+    def backup_service(
+        self, service: str, *, confirm: bool = False
+    ) -> dict[str, object]:
+        """Run the declared backup for one service, receipted."""
+        return self._backup_operation(
+            service,
+            confirm=confirm,
+            action="backup-service",
+            detail_prefix="run the declared backup for",
+            operation=backup_service,
+        )
+
+    def verify_backup(
+        self, service: str, *, confirm: bool = False
+    ) -> dict[str, object]:
+        """Prove the newest backup of one service restores, receipted."""
+        return self._backup_operation(
+            service,
+            confirm=confirm,
+            action="verify-backup",
+            detail_prefix="prove the newest backup restores for",
+            operation=verify_backup,
+        )
+
+    def _backup_operation(
+        self,
+        service: str,
+        *,
+        confirm: bool,
+        action: str,
+        detail_prefix: str,
+        operation: Callable[
+            [EngineContext, ResourceId, Path], dict[str, object]
+        ],
+    ) -> dict[str, object]:
+        try:
+            service_id = ResourceId.from_boundary(service)
+        except (TypeError, ValueError) as error:
+            return _invalid_argument(error)
+        gate = _confirmation_gate(
+            confirm,
+            action,
+            f"{detail_prefix} {service_id.value} on its declared server",
+        )
+        if gate is not None:
+            return gate
+        try:
+            return operation(
+                self._config.context(),
+                service_id,
+                self._config.backups_directory,
+            )
+        except (LifecycleError, StateValidationError) as error:
+            return error.as_dict()
 
     def operator_proposals(self) -> dict[str, object]:
         """List every operator proposal receipt with its status."""

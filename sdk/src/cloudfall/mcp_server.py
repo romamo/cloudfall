@@ -41,6 +41,7 @@ def create_server(config: AgentConfig) -> MCPServer:
         *_evidence_registrations(toolset),
         *_build_registrations(toolset),
         *_mutation_registrations(toolset),
+        *_backup_registrations(toolset),
         *_operator_registrations(toolset),
     )
     for handler, name, description, tool_annotations in registrations:
@@ -338,6 +339,42 @@ def _mutation_registrations(
     )
 
 
+def _backup_registrations(
+    toolset: AgentToolset,
+) -> tuple[_Registration, ...]:
+    destructive = ToolAnnotations(read_only_hint=False, destructive_hint=True)
+
+    def backup_service(
+        service: str,
+        confirm: bool = False,  # noqa: FBT001, FBT002 - explicit agent gate.
+    ) -> str:
+        return _dump(toolset.backup_service(service, confirm=confirm))
+
+    def verify_backup(
+        service: str,
+        confirm: bool = False,  # noqa: FBT001, FBT002 - explicit agent gate.
+    ) -> str:
+        return _dump(toolset.verify_backup(service, confirm=confirm))
+
+    return (
+        (
+            backup_service,
+            "backup_service",
+            "Run the declared backup for one service on its server, "
+            "writing a schema-valid receipt; requires confirm=true",
+            destructive,
+        ),
+        (
+            verify_backup,
+            "verify_backup",
+            "Prove the newest backup of one service restores (dump "
+            "restore-check or snapshot integrity), receipted; requires "
+            "confirm=true",
+            destructive,
+        ),
+    )
+
+
 def _operator_registrations(
     toolset: AgentToolset,
 ) -> tuple[_Registration, ...]:
@@ -467,6 +504,13 @@ def _parser() -> argparse.ArgumentParser:
         " %(default)s)",
     )
     parser.add_argument(
+        "--backups",
+        type=Path,
+        default=Path("tmp/backups"),
+        help="directory holding backup operation receipts (default:"
+        " %(default)s)",
+    )
+    parser.add_argument(
         "--proposals",
         type=Path,
         default=Path("tmp/operator/proposals"),
@@ -508,6 +552,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         releases_directory=Path(arguments.releases),
         artifacts_directory=Path(arguments.artifacts),
         data_migrations_directory=Path(arguments.data_migrations),
+        backups_directory=Path(arguments.backups),
         proposals_directory=Path(arguments.proposals),
         gateway_ca_path=arguments.gateway_ca,
         gateway_certificate_path=arguments.gateway_cert,
