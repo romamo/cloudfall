@@ -301,6 +301,9 @@ formation: one primary, one hot standby, one witness. This amends the
 architecture stance that failover is manual — at the database layer only,
 and below the operator: the formation may promote automatically, but the
 operator still never initiates a promotion without explicit confirmation.
+The declaration surface is the `availability` block specified in the
+[availability design](docs/availability-design.md), which covers every
+service kind and lands with this milestone.
 
 - **Streaming replication** — a declared two-node formation with native
   WAL streaming over a private network with TLS, replacing the
