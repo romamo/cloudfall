@@ -293,3 +293,35 @@ Exit: on a proving host, a scheduled backup is restore-verified by the
 timer-driven drill with a schema-valid `BackupReceipt`, and an induced
 failure produces an alert that arrives at a real external destination —
 both trails visible in `cloudfall audit` alongside everything else.
+
+## M11 — PostgreSQL high availability: replication, failover, PITR
+
+The first infrastructure service graduates from single-host to a declared
+formation: one primary, one hot standby, one witness. This amends the
+architecture stance that failover is manual — at the database layer only,
+and below the operator: the formation may promote automatically, but the
+operator still never initiates a promotion without explicit confirmation.
+
+- **Streaming replication** — a declared two-node formation with native
+  WAL streaming over a private network with TLS, replacing the
+  loopback-only binding; synchronous or asynchronous as declared config
+- **Automatic failover** — `pg_auto_failover` with the monitor on a
+  minimal witness host as the tiebreaker; formation state (primary,
+  secondary, single) audited as evidence like any other unit
+- **Connection routing** — PgBouncer on each data node with multi-host
+  client connection strings (`target_session_attrs=read-write`), so
+  applications follow the primary with no extra routing layer
+- **Continuous archiving** — `pgBackRest` with WAL archiving to object
+  storage, upgrading recovery from last-dump to point-in-time; backups
+  taken from the standby, and the M10 restore drill extended to a
+  receipted PITR drill
+- **Multi-host alerting exercised** — replication lag, formation
+  degradation, and archiving failure become declared alert rules, the
+  forcing function for alerting across more than one host
+
+Exit: on a three-host proving formation, killing the primary promotes the
+standby and the application recovers with zero human involvement, the
+receipt trail shows detection, promotion, and verified recovery, and a
+PITR drill restores the database to a declared point in time with a
+schema-valid `BackupReceipt` — while `cloudfall audit` reports formation
+compliance across all three hosts.
