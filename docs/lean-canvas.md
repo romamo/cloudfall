@@ -3,14 +3,17 @@
 > One-pager business model. The **evidence-based control plane** for moving a
 > SaaS off cloud PaaS onto one self-hosted Debian server — hardened, monitored,
 > and deployed with rollback. Under an hour as proven in the live M1–M5 runs;
-> a cold first run pre-1.0 is closer to an afternoon. No Kubernetes.
+> a cold first run pre-1.0 is closer to an afternoon. No Kubernetes. Once
+> migrated, an always-on operator watches declared alerts, proposes
+> evidence-backed remediations, and acts autonomously within declared policy
+> where reversibility is proven — the full loop live-proven in the M7–M10 runs.
 
 | | |
 | --- | --- |
-| **Stage** | Pre-1.0 · Open source |
+| **Stage** | Pre-1.0 · Open source · Operator proven live (M7–M10) |
 | **License** | AGPL-3.0 (commercial exception reserved) |
 | **Wedge** | Render → Hetzner |
-| **As of** | 2026-09-08 |
+| **As of** | 2026-09-11 |
 
 The blocks below are numbered in canonical Lean Canvas fill order.
 
@@ -44,6 +47,8 @@ No skills leak through: the typed state is the whole interface, the agent mediat
 - **One resumable migrate.** Baseline → services → deploy → TLS → DNS cutover, persisted and restartable.
 - **systemd, not containers.** Artifact releases with symlink rollback on long-lived Debian hosts.
 - **Render importer.** Blueprint → state with an explicit gap report; nothing guessed silently.
+- **Always-on operator.** Watches declared alerts and audited drift, writes every diagnosis as a receipted proposal, and executes autonomously only for operation classes licensed by declared policy and earned receipt history; DNS cutover, data deletion, and promotion confirm forever.
+- **Proven promises.** Backups are restore-drilled on a timer with schema-valid receipts, and alert delivery to a real external destination is exercised evidence, not configuration.
 
 ## 5 · Channels
 
@@ -56,8 +61,12 @@ No skills leak through: the typed state is the whole interface, the agent mediat
 
 - **Autonomous operator subscription** (core stream, pricing hypothesis to
   validate): the always-on agent that manages the fleet 24/7 —
-  evidence-backed, confirm-gated. The AGPL tool and migration stay free: the
-  importer is the acquisition motion, the operator is the monetization
+  evidence-backed, confirm-gated. The product side is no longer a hypothesis:
+  the operator shipped and was proven live on 2026-09-10 (an induced failure
+  remediated with one approval, then an identical failure remediated
+  autonomously under declared policy in 2m06s). The AGPL tool and migration
+  stay free: the importer is the acquisition motion, the operator is the
+  monetization
 - **Migration & support engagements** for teams that want the cutover done for
   them
 - **Commercial license exception** for teams who can't ship AGPL
@@ -87,6 +96,7 @@ No skills leak through: the typed state is the whole interface, the agent mediat
 ## 9 · Unfair Advantage
 
 - **Proof of outcome, not gated actions.** Rivals gate what an agent may do (RBAC, confirm flags, plan approval); only Cloudfall proves what happened: per-deploy receipts, status from validated observations, desired-vs-observed drift. It is the foundation of the status model — near-impossible to bolt on after the fact.
+- **Autonomy downstream of evidence.** Autonomy is granted per operation class, licensed by declared policy and earned receipt history, never a global switch — competitors bolting agents onto imperative tools can offer autonomy only as recklessness. Proven live: the first failure required one approval (the receipt that earned the trust), the second identical failure was remediated with zero human involvement.
 - **The unclaimed migration axis.** No competitor productizes PaaS exit; PaaS tools start from an empty server, and incumbents are structurally disincentivized (Render pays up to $10K in credits to pull workloads *in*).
 - **State the user owns.** Typed, schema-validated YAML of the whole server: versionable, diffable, agent-readable. Category rivals are imperative dashboards.
 - **Dual license.** AGPL-3.0 for the community, commercial exception reserved to the holder. Separates Cloudfall from its closest operational twin (Devopness, closed SaaS).
