@@ -1,8 +1,9 @@
 # Cloudfall
 
-Cloudfall is an open-source, AI-native control plane for moving SaaS applications
-off cloud PaaS platforms onto self-hosted bare metal or VPS servers — and
-operating them there without Kubernetes.
+Cloudfall is an open-source, evidence-based control plane for moving SaaS
+applications off cloud PaaS platforms onto self-hosted bare metal or VPS
+servers — plus an always-on AI operator that runs them there, without
+Kubernetes, and never reports success it cannot prove.
 
 The target workflow: take one fresh Debian host, run Cloudfall, and get a hardened
 baseline, firewall, monitoring, logging, your infrastructure services, and

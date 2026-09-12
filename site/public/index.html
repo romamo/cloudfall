@@ -4,10 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cloudfall — leave PaaS, keep the PaaS feel</title>
-<meta name="description" content="Cloudfall is an open-source, evidence-based control plane for moving a SaaS off Render onto a Debian server you own: hardened, monitored, with rollback deploys.">
+<meta name="description" content="Cloudfall is an open-source, evidence-based control plane for moving a SaaS off Render onto a Debian server you own, plus an always-on AI operator that runs it there with receipts for every action.">
 <link rel="canonical" href="https://cloudfall.dev/">
 <meta property="og:title" content="Cloudfall — leave PaaS, keep the PaaS feel">
-<meta property="og:description" content="Open-source, evidence-based control plane for moving a SaaS off Render onto a server you own. No Kubernetes.">
+<meta property="og:description" content="Open-source control plane for moving a SaaS off Render onto a server you own, plus an always-on AI operator that can't fake success. No Kubernetes.">
 <meta property="og:url" content="https://cloudfall.dev/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Cloudfall">
@@ -18,7 +18,7 @@
 <meta property="og:image:alt" content="Cloudfall — leave PaaS, keep the PaaS feel">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Cloudfall — leave PaaS, keep the PaaS feel">
-<meta name="twitter:description" content="Open-source, evidence-based control plane for moving a SaaS off Render onto a server you own. No Kubernetes.">
+<meta name="twitter:description" content="Open-source control plane for moving a SaaS off Render onto a server you own, plus an always-on AI operator that can't fake success. No Kubernetes.">
 <meta name="twitter:image" content="https://cloudfall.dev/og.png">
 <meta name="theme-color" content="#0b1017">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -216,7 +216,7 @@
   "@type": "SoftwareApplication",
   "name": "Cloudfall",
   "url": "https://cloudfall.dev/",
-  "description": "Open-source, evidence-based control plane for moving a SaaS off Render onto a Debian server you own: hardened, monitored, with rollback deploys. No Kubernetes.",
+  "description": "Open-source, evidence-based control plane for moving a SaaS off Render onto a Debian server you own, plus an always-on AI operator that runs it there with receipts for every action. No Kubernetes.",
   "applicationCategory": "DeveloperApplication",
   "operatingSystem": "Linux",
   "license": "https://www.gnu.org/licenses/agpl-3.0.html",
@@ -250,13 +250,15 @@
 <main>
   <div class="hero">
     <div class="wrap">
-      <div class="badge"><span class="dot"></span>Every layer proven live · open source · AGPL-3.0</div>
+      <div class="badge"><span class="dot"></span>Migration and operator proven live · open source · AGPL-3.0</div>
       <h1>Leave PaaS.<br>Keep the <span class="accent">PaaS feel</span>.</h1>
       <p class="sub">
         Cloudfall moves your SaaS off Render onto one Debian server you own:
         hardened baseline, firewall, monitoring, PostgreSQL, TLS, health-gated
         deploys with rollback, and a real DNS cutover. Plain systemd and nginx.
-        No Kubernetes.
+        No Kubernetes. Then an always-on operator watches your declared
+        alerts, fixes what its receipts prove reversible, and asks you only
+        about what can't be undone.
       </p>
       <div class="cta">
         <a class="btn btn-primary" href="https://github.com/romamo/cloudfall">View on GitHub</a>
@@ -295,7 +297,11 @@
         with its data and a real TTL-lowered DNS flip on an owned domain, resuming to
         byte-identical responses from the Cloudfall host, with a bad release rolled back
         automatically along the way. The entire run was driven by an AI agent through
-        <code>cloudfall-mcp</code> alone.
+        <code>cloudfall-mcp</code> alone. On 2026-09-10 the operator followed: an induced
+        failure was remediated with a single approval, and a second identical failure was
+        remediated autonomously under declared policy in 2m06s, receipts throughout. On
+        2026-09-11 a timer-driven drill proved a real backup restorable, and an induced
+        failure delivered its alert to a second machine across the public network.
         <a href="https://github.com/romamo/cloudfall/tree/main/docs/proving-runs">Read the proving-run reports</a>
       </p>
     </div>
@@ -304,7 +310,7 @@
   <section id="why">
     <div class="wrap">
       <div class="kicker">Why Cloudfall</div>
-      <h2>An agent that can't fake success</h2>
+      <h2>An operator that can't fake success</h2>
       <p class="section-sub">
         Every claim Cloudfall makes about your servers is backed by evidence
         collected from the servers themselves.
@@ -329,13 +335,13 @@
           </p>
         </div>
         <div class="card">
-          <h3>AI-agent native</h3>
+          <h3>Autonomy earned, never assumed</h3>
           <p>
-            Agents operate through a stable CLI and Python API with structured
-            JSON results instead of inventing shell commands over SSH. The
-            <code>cloudfall-mcp</code> server exposes read-only evidence tools
-            freely and gates every server-changing tool behind an explicit
-            confirmation handshake.
+            The always-on operator diagnoses from evidence and proposes fixes
+            you approve through the <code>cloudfall-mcp</code> confirmation
+            handshake. Autonomy is granted per operation class, licensed by
+            declared policy and earned receipt history; DNS cutover, data
+            deletion, and promotion always require your confirmation.
           </p>
         </div>
         <div class="card">
@@ -382,9 +388,10 @@
           <div class="num">3</div>
           <h3>Operate</h3>
           <p>
-            Cut DNS and stop paying PaaS margins. Audit drift, watch the
-            evidence-derived dashboard, and let an agent run day-two operations
-            through MCP with receipts for every action.
+            Cut DNS and stop paying PaaS margins. The always-on operator
+            watches declared alerts and audited drift, remediates what its
+            receipts prove reversible, and delivers a receipt for every
+            action; you approve only what can't be undone.
           </p>
         </div>
       </div>
@@ -403,21 +410,23 @@
           <h3>Implemented and proven live</h3>
           <ul>
             <li>Hardened Debian baseline, nftables firewall, UTC time</li>
-            <li>Loki / Grafana / Alloy logging with host metrics over mTLS</li>
-            <li>Loopback PostgreSQL with peer-auth databases and backup checks</li>
+            <li>Loki / Grafana / Alloy logging with metrics and declared alert rules over mTLS</li>
+            <li>Loopback PostgreSQL and Redis with timer-driven restore drills</li>
             <li>Health-gated deploys with automatic rollback of bad releases</li>
             <li>Let's Encrypt TLS and nginx routes from declared domains</li>
-            <li>Render blueprint importer and guided data migration</li>
+            <li>Render blueprint and live-API importers with guided data migration</li>
             <li>Resumable migrate with a real DNS cutover on an owned domain</li>
             <li><code>cloudfall-mcp</code> agent server with confirm-gated writes</li>
+            <li>sops/age secret references rendered to per-component env files</li>
+            <li>Always-on operator: receipted proposals, policy-bounded autonomy</li>
           </ul>
         </div>
         <div class="status-card next">
           <h3>Not there yet</h3>
           <ul>
             <li>Bare-metal RAID and storage provisioning</li>
-            <li>Broader service catalog: Redis, MySQL, Elasticsearch, Node runtimes</li>
-            <li>Reference-driven secrets management</li>
+            <li>Broader service catalog: MySQL, Elasticsearch, RabbitMQ, Node runtimes</li>
+            <li>Enforced per-component resource limits for shared nodes</li>
             <li>Importers beyond Render</li>
           </ul>
         </div>

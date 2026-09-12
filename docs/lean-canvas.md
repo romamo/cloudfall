@@ -35,7 +35,7 @@ The blocks below are numbered in canonical Lean Canvas fill order.
 
 ## 3 · Unique Value Proposition
 
-**Leave PaaS in an afternoon and keep the PaaS feel — your own server, a tenth of the cost, no special skills, operated by an AI agent that can't fake success.**
+**Leave PaaS in an afternoon and keep the PaaS feel: your own server, a tenth of the cost, no special skills, run by an always-on operator that can't fake success — and you are never the on-call again.**
 
 No skills leak through: the typed state is the whole interface, the agent mediates it in plain language, and the founder never opens an SSH session. Evidence over inference: every deploy produces receipts, status is derived from validated observations, and Cloudfall never reports success it cannot prove — proof of outcome is the claim no one else makes. And because it is all plain systemd + nginx + Postgres on stock Debian, any Linux admin can take over without Cloudfall: no special skills required, no lock-in if you ever hire them.
 
