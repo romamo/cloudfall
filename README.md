@@ -125,6 +125,42 @@ uv run cloudfall inventory show config/examples
 uv run cloudfall-engine inventory render config/examples
 ```
 
+### Run it from your own fleet repository
+
+Your fleet config, evidence, and any fleet-specific playbooks belong in a
+repository of their own. Cloudfall's wheel bundles the schema catalog and the
+Ansible engine, so that repository needs no checkout of this one. Declare the
+package with `uv` and pin an exact revision:
+
+```toml
+[project]
+name = "my-fleet"
+version = "0"
+requires-python = ">=3.14"
+dependencies = ["cloudfall"]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+cloudfall = { git = "https://github.com/romamo/cloudfall.git", rev = "<commit>" }
+```
+
+Every command then runs from the fleet directory with bundled defaults, and
+playbooks run through the engine with its own Ansible configuration:
+
+```console
+uv sync
+uv run cloudfall config validate config/production
+uv run cloudfall-engine inventory render config/production --output tmp/ansible-inventory.json
+uv run cloudfall-engine playbook run inspect --extra-vars cloudfall_inspect_output_directory=$PWD/tmp/observed
+uv run cloudfall-engine playbook run engine/ansible/playbooks/proxy.yml --roles engine/ansible/roles
+```
+
+Bundled playbooks are addressed by name (`cloudfall-engine playbook list`
+shows them); fleet playbooks by path, with `--roles` directories searched
+before the bundled roles.
+
 ## Migrate from Render
 
 Map a `render.yaml` blueprint onto Cloudfall config:

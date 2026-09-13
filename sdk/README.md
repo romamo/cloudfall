@@ -44,7 +44,7 @@ would run; only a second call with `confirm=true` executes. Deployments
 through MCP always write release receipts.
 
 ```console
-uv run cloudfall-mcp --state config/examples --engine engine
+uv run cloudfall-mcp --state config/examples
 ```
 
 Every tool returns a structured JSON envelope, including errors, so agents

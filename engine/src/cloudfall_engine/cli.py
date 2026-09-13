@@ -9,10 +9,18 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from cloudfall.inventory import PlatformInventory
+from cloudfall.resources import default_engine_directory, default_schema_directory
 from cloudfall.validation import ConfigValidationError, validate_config
 
 from cloudfall_engine.ansible_inventory import render_ansible_inventory
 from cloudfall_engine.artifact import ArtifactBuildError, build_artifact
+from cloudfall_engine.playbook import (
+    PlaybookError,
+    PlaybookRun,
+    bundled_playbooks,
+    execute_playbook,
+    resolve_playbook,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -35,8 +43,8 @@ def _parser() -> argparse.ArgumentParser:
     render_parser.add_argument(
         "--schemas",
         type=Path,
-        default=Path("config/schemas/v1"),
-        help="versioned schema directory (default: config/schemas/v1)",
+        default=default_schema_directory(),
+        help="versioned schema directory (default: bundled schemas)",
     )
     render_parser.add_argument(
         "--output",
@@ -44,9 +52,7 @@ def _parser() -> argparse.ArgumentParser:
         help="write inventory JSON to this file instead of stdout",
     )
 
-    artifact_parser = commands.add_parser(
-        "artifact", help="build release artifacts"
-    )
+    artifact_parser = commands.add_parser("artifact", help="build release artifacts")
     artifact_commands = artifact_parser.add_subparsers(
         dest="artifact_command", required=True
     )
@@ -63,8 +69,8 @@ def _parser() -> argparse.ArgumentParser:
     build_parser.add_argument(
         "--schemas",
         type=Path,
-        default=Path("config/schemas/v1"),
-        help="versioned schema directory (default: config/schemas/v1)",
+        default=default_schema_directory(),
+        help="versioned schema directory (default: bundled schemas)",
     )
     build_parser.add_argument(
         "--output-dir",
@@ -72,7 +78,68 @@ def _parser() -> argparse.ArgumentParser:
         default=Path("tmp/artifacts"),
         help="artifact output directory (default: tmp/artifacts)",
     )
+
+    playbook_parser = commands.add_parser(
+        "playbook", help="run Ansible playbooks with the engine configuration"
+    )
+    playbook_commands = playbook_parser.add_subparsers(
+        dest="playbook_command", required=True
+    )
+    list_parser = playbook_commands.add_parser(
+        "list", help="list the playbooks bundled with the engine"
+    )
+    _add_engine_argument(list_parser)
+    run_parser = playbook_commands.add_parser(
+        "run", help="run one bundled playbook or a playbook file"
+    )
+    run_parser.add_argument(
+        "playbook",
+        help="bundled playbook name (see `playbook list`) or a playbook path",
+    )
+    _add_engine_argument(run_parser)
+    run_parser.add_argument(
+        "--inventory",
+        type=Path,
+        default=Path("tmp/ansible-inventory.json"),
+        help="rendered inventory path (default: tmp/ansible-inventory.json)",
+    )
+    run_parser.add_argument(
+        "--roles",
+        type=Path,
+        action="append",
+        default=[],
+        help="role directory searched before the bundled roles (repeatable)",
+    )
+    run_parser.add_argument(
+        "--extra-vars",
+        action="append",
+        default=[],
+        help="passed through to ansible-playbook unchanged (repeatable)",
+    )
+    run_parser.add_argument(
+        "--tags",
+        action="append",
+        default=[],
+        help="only run plays and tasks tagged with this value (repeatable)",
+    )
+    run_parser.add_argument("--limit", help="restrict the run to a host pattern")
+    run_parser.add_argument("--check", action="store_true", help="run in check mode")
+    run_parser.add_argument("--diff", action="store_true", help="show file diffs")
+    run_parser.add_argument(
+        "--syntax-check",
+        action="store_true",
+        help="only check the playbook syntax",
+    )
     return parser
+
+
+def _add_engine_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--engine",
+        type=Path,
+        default=default_engine_directory(),
+        help="engine directory containing ansible contracts (default: bundled engine)",
+    )
 
 
 def _render_inventory(arguments: argparse.Namespace) -> int:
@@ -126,6 +193,37 @@ def _build_artifact(arguments: argparse.Namespace) -> int:
     return 0
 
 
+def _list_playbooks(arguments: argparse.Namespace) -> int:
+    try:
+        names = bundled_playbooks(Path(arguments.engine))
+    except PlaybookError as error:
+        sys.stderr.write(f"{json.dumps(error.as_dict(), sort_keys=True)}\n")
+        return 2
+    result = {"engine": str(arguments.engine), "playbooks": list(names)}
+    sys.stdout.write(f"{json.dumps(result, sort_keys=True)}\n")
+    return 0
+
+
+def _run_playbook(arguments: argparse.Namespace) -> int:
+    engine_directory = Path(arguments.engine)
+    try:
+        run = PlaybookRun(
+            playbook=resolve_playbook(arguments.playbook, engine_directory),
+            inventory_file=Path(arguments.inventory),
+            role_directories=tuple(Path(role) for role in arguments.roles),
+            extra_vars=tuple(arguments.extra_vars),
+            tags=tuple(arguments.tags),
+            limit=arguments.limit,
+            check=arguments.check,
+            diff=arguments.diff,
+            syntax_check=arguments.syntax_check,
+        )
+        return execute_playbook(run, engine_directory)
+    except PlaybookError as error:
+        sys.stderr.write(f"{json.dumps(error.as_dict(), sort_keys=True)}\n")
+        return 2
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Run one engine command and return a process exit code."""
     arguments = _parser().parse_args(argv)
@@ -133,6 +231,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _render_inventory(arguments)
     if arguments.command == "artifact":
         return _build_artifact(arguments)
+    if arguments.command == "playbook":
+        if arguments.playbook_command == "list":
+            return _list_playbooks(arguments)
+        return _run_playbook(arguments)
     message = "argparse accepted an unsupported engine command"
     raise RuntimeError(message)
 

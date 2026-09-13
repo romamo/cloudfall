@@ -8,6 +8,15 @@ Notable changes to Cloudfall. The format follows
 
 ### Added
 
+- Fleet repositories consume Cloudfall as a package: the wheel bundles the
+  v1 schema catalog and the Ansible engine, and every `--schemas` and
+  `--engine` default resolves to the bundled copies (or to the source tree
+  when run from a checkout), so no submodule or sibling checkout is needed
+- `cloudfall-engine playbook run` executes a bundled playbook by name or a
+  fleet playbook by path under the engine's Ansible configuration, with
+  `--roles` directories searched before the bundled roles and `--check`,
+  `--diff`, `--syntax-check`, `--limit`, `--tags`, and `--extra-vars`
+  passed through; `cloudfall-engine playbook list` names the bundled ones
 - Timer-driven restore drill: an optional `backup.restoreCheckOnCalendar`
   schedule installs an audited restore-check service and timer for
   PostgreSQL and Redis, so backup restorability is verified continuously
@@ -16,6 +25,8 @@ Notable changes to Cloudfall. The format follows
 
 ### Changed
 
+- `ansible-core` is a runtime dependency rather than a development one, so
+  an installed `cloudfall` package can run its engine
 - **Breaking: common-vocabulary rename across schemas, CLI, and layout.**
   Resource kinds `Project` → `Application` and `HostProfile` → `ServerType`
   (schema files renamed to match); the `Server` spec field `profile` →

@@ -40,6 +40,27 @@ secret references.
 Active environment-scoped SSH public keys are rendered as
 `cloudfall_ssh_public_keys`. Rendering alone does not change authorized keys.
 
+## Running playbooks
+
+The engine's `ansible.cfg`, playbooks, and roles ship inside the installed
+package. `cloudfall-engine playbook run` executes a bundled playbook by name
+or any playbook file by path under that configuration, and always searches
+the bundled roles last:
+
+```console
+uv run cloudfall-engine playbook list
+uv run cloudfall-engine playbook run inspect --inventory tmp/ansible-inventory.json \
+  --extra-vars cloudfall_inspect_output_directory=$PWD/tmp/observed
+uv run cloudfall-engine playbook run engine/ansible/playbooks/proxy.yml \
+  --roles engine/ansible/roles --limit proxy --tags nginx
+```
+
+`--check`, `--diff`, `--syntax-check`, `--limit`, `--tags`, and `--extra-vars`
+pass through to `ansible-playbook`. A fleet repository uses this instead of
+setting `ANSIBLE_CONFIG` against a checkout; the `task` targets in this
+repository still call `ansible-playbook` directly because they run from the
+source tree.
+
 ## UTC time baseline
 
 `ansible/playbooks/time.yml` enforces `Etc/UTC`, keeps the hardware clock in

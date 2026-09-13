@@ -16,13 +16,12 @@ from mcp.server.mcpserver import MCPServer
 from mcp.types import ToolAnnotations
 
 from cloudfall.agent_tools import AgentConfig, AgentToolset
+from cloudfall.resources import default_engine_directory, default_schema_directory
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
-    _Registration = tuple[
-        Callable[..., str], str, str, ToolAnnotations | None
-    ]
+    _Registration = tuple[Callable[..., str], str, str, ToolAnnotations | None]
 
 _INSTRUCTIONS = """\
 Cloudfall manages declarative infrastructure state for dedicated Debian
@@ -223,9 +222,7 @@ def _mutation_registrations(
         release: str,
         confirm: bool = False,  # noqa: FBT001, FBT002 - explicit agent gate.
     ) -> str:
-        return _dump(
-            toolset.rollback_component(component, release, confirm=confirm)
-        )
+        return _dump(toolset.rollback_component(component, release, confirm=confirm))
 
     def restart_component(
         component: str,
@@ -304,8 +301,7 @@ def _mutation_registrations(
         (
             restart_component,
             "restart_component",
-            "Restart one component behind its health check; requires "
-            "confirm=true",
+            "Restart one component behind its health check; requires confirm=true",
             destructive,
         ),
         (
@@ -320,22 +316,19 @@ def _mutation_registrations(
         (
             converge_baseline,
             "converge_baseline",
-            "Converge every server to the managed baseline; requires "
-            "confirm=true",
+            "Converge every server to the managed baseline; requires confirm=true",
             destructive,
         ),
         (
             converge_services,
             "converge_services",
-            "Converge every declared infrastructure service; requires "
-            "confirm=true",
+            "Converge every declared infrastructure service; requires confirm=true",
             destructive,
         ),
         (
             converge_domains,
             "converge_domains",
-            "Converge every declared public domain route; requires "
-            "confirm=true",
+            "Converge every declared public domain route; requires confirm=true",
             destructive,
         ),
         (
@@ -454,14 +447,13 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--schemas",
         type=Path,
-        default=Path("config/schemas/v1"),
-        help="JSON Schema directory used to validate state (default:"
-        " %(default)s)",
+        default=default_schema_directory(),
+        help="JSON Schema directory used to validate state (default: %(default)s)",
     )
     parser.add_argument(
         "--engine",
         type=Path,
-        default=Path("engine"),
+        default=default_engine_directory(),
         help="engine module directory containing the Ansible playbooks"
         " (default: %(default)s)",
     )
@@ -490,29 +482,25 @@ def _parser() -> argparse.ArgumentParser:
         "--deployments",
         type=Path,
         default=Path("tmp/deployments"),
-        help="directory holding domain deployment receipts (default:"
-        " %(default)s)",
+        help="directory holding domain deployment receipts (default: %(default)s)",
     )
     parser.add_argument(
         "--releases",
         type=Path,
         default=Path("tmp/releases"),
-        help="directory holding component release receipts (default:"
-        " %(default)s)",
+        help="directory holding component release receipts (default: %(default)s)",
     )
     parser.add_argument(
         "--artifacts",
         type=Path,
         default=Path("tmp/artifacts"),
-        help="directory holding built release artifacts (default:"
-        " %(default)s)",
+        help="directory holding built release artifacts (default: %(default)s)",
     )
     parser.add_argument(
         "--data-migrations",
         type=Path,
         default=Path("tmp/data-migrations"),
-        help="directory holding data-migration receipts (default:"
-        " %(default)s)",
+        help="directory holding data-migration receipts (default: %(default)s)",
     )
     parser.add_argument(
         "--secrets-dir",
@@ -536,15 +524,13 @@ def _parser() -> argparse.ArgumentParser:
         "--backups",
         type=Path,
         default=Path("tmp/backups"),
-        help="directory holding backup operation receipts (default:"
-        " %(default)s)",
+        help="directory holding backup operation receipts (default: %(default)s)",
     )
     parser.add_argument(
         "--proposals",
         type=Path,
         default=Path("tmp/operator/proposals"),
-        help="directory holding operator proposal receipts (default:"
-        " %(default)s)",
+        help="directory holding operator proposal receipts (default: %(default)s)",
     )
     parser.add_argument(
         "--gateway-ca",

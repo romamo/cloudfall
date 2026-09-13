@@ -257,6 +257,7 @@ name = "cloudfall"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "ansible-core" },
     { name = "jsonschema", extra = ["format"] },
     { name = "pyyaml" },
 ]
@@ -268,7 +269,6 @@ mcp = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "ansible-core" },
     { name = "ansible-lint" },
     { name = "mcp" },
     { name = "mypy" },
@@ -280,6 +280,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "ansible-core", specifier = ">=2.21,<2.22" },
     { name = "jsonschema", extras = ["format"], specifier = ">=4.23,<5" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=2,<3" },
     { name = "pyyaml", specifier = ">=6,<7" },
@@ -288,7 +289,6 @@ provides-extras = ["mcp"]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "ansible-core", specifier = ">=2.21,<2.22" },
     { name = "ansible-lint", specifier = ">=26,<27" },
     { name = "mcp", specifier = ">=2,<3" },
     { name = "mypy", specifier = ">=1.13" },

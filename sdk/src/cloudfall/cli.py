@@ -72,6 +72,7 @@ from cloudfall.render_api import (
     import_render_api,
     read_api_key,
 )
+from cloudfall.resources import default_engine_directory, default_schema_directory
 from cloudfall.secrets import (
     SecretsError,
     SopsSecretProvider,
@@ -106,8 +107,8 @@ def _add_config_parsers(
     validate_parser.add_argument(
         "--schemas",
         type=Path,
-        default=Path("config/schemas/v1"),
-        help="versioned schema directory (default: config/schemas/v1)",
+        default=default_schema_directory(),
+        help="versioned schema directory (default: bundled schemas)",
     )
 
     inventory_parser = commands.add_parser(
@@ -123,8 +124,8 @@ def _add_config_parsers(
     show_parser.add_argument(
         "--schemas",
         type=Path,
-        default=Path("config/schemas/v1"),
-        help="versioned schema directory (default: config/schemas/v1)",
+        default=default_schema_directory(),
+        help="versioned schema directory (default: bundled schemas)",
     )
 
 
@@ -176,8 +177,8 @@ def _parser() -> argparse.ArgumentParser:
     services_inspect_parser.add_argument(
         "--schemas",
         type=Path,
-        default=Path("config/schemas/v1"),
-        help="versioned schema directory (default: config/schemas/v1)",
+        default=default_schema_directory(),
+        help="versioned schema directory (default: bundled schemas)",
     )
     services_status_parser = services_commands.add_parser(
         "status", help="derive service lifecycle status from current evidence"
@@ -204,14 +205,14 @@ def _parser() -> argparse.ArgumentParser:
     services_status_parser.add_argument(
         "--schemas",
         type=Path,
-        default=Path("config/schemas/v1"),
-        help="versioned schema directory (default: config/schemas/v1)",
+        default=default_schema_directory(),
+        help="versioned schema directory (default: bundled schemas)",
     )
     audit_parser.add_argument(
         "--schemas",
         type=Path,
-        default=Path("config/schemas/v1"),
-        help="versioned schema directory (default: config/schemas/v1)",
+        default=default_schema_directory(),
+        help="versioned schema directory (default: bundled schemas)",
     )
 
     dashboard_parser = commands.add_parser(
@@ -251,8 +252,8 @@ def _parser() -> argparse.ArgumentParser:
     dashboard_build_parser.add_argument(
         "--schemas",
         type=Path,
-        default=Path("config/schemas/v1"),
-        help="versioned schema directory (default: config/schemas/v1)",
+        default=default_schema_directory(),
+        help="versioned schema directory (default: bundled schemas)",
     )
 
     dashboard_serve_parser = dashboard_commands.add_parser(
@@ -280,8 +281,8 @@ def _parser() -> argparse.ArgumentParser:
     dashboard_serve_parser.add_argument(
         "--schemas",
         type=Path,
-        default=Path("config/schemas/v1"),
-        help="versioned schema directory (default: config/schemas/v1)",
+        default=default_schema_directory(),
+        help="versioned schema directory (default: bundled schemas)",
     )
     dashboard_serve_parser.add_argument(
         "--host",
@@ -323,14 +324,14 @@ def _add_migrate_parser(
     migrate_parser.add_argument(
         "--schemas",
         type=Path,
-        default=Path("config/schemas/v1"),
-        help="versioned schema directory (default: config/schemas/v1)",
+        default=default_schema_directory(),
+        help="versioned schema directory (default: bundled schemas)",
     )
     migrate_parser.add_argument(
         "--engine",
         type=Path,
-        default=Path("engine"),
-        help="engine directory containing ansible contracts (default: engine)",
+        default=default_engine_directory(),
+        help="engine directory containing ansible contracts (default: bundled engine)",
     )
     migrate_parser.add_argument(
         "--inventory-file",
@@ -424,9 +425,7 @@ def _add_lifecycle_parsers(
     data_parser = commands.add_parser(
         "data", help="migrate data into declared services"
     )
-    data_commands = data_parser.add_subparsers(
-        dest="data_command", required=True
-    )
+    data_commands = data_parser.add_subparsers(dest="data_command", required=True)
     data_migrate_parser = data_commands.add_parser(
         "migrate",
         help=(
@@ -459,14 +458,14 @@ def _add_lifecycle_parsers(
     data_migrate_parser.add_argument(
         "--schemas",
         type=Path,
-        default=Path("config/schemas/v1"),
-        help="versioned schema directory (default: config/schemas/v1)",
+        default=default_schema_directory(),
+        help="versioned schema directory (default: bundled schemas)",
     )
     data_migrate_parser.add_argument(
         "--engine",
         type=Path,
-        default=Path("engine"),
-        help="engine directory containing ansible contracts (default: engine)",
+        default=default_engine_directory(),
+        help="engine directory containing ansible contracts (default: bundled engine)",
     )
     data_migrate_parser.add_argument(
         "--inventory-file",
@@ -529,9 +528,7 @@ def _add_import_parsers(
     import_parser = commands.add_parser(
         "import", help="import external platform definitions"
     )
-    import_commands = import_parser.add_subparsers(
-        dest="import_command", required=True
-    )
+    import_commands = import_parser.add_subparsers(dest="import_command", required=True)
     render_parser = import_commands.add_parser(
         "render", help="map a render.yaml blueprint onto Cloudfall config"
     )
@@ -561,8 +558,8 @@ def _add_import_parsers(
     render_parser.add_argument(
         "--schemas",
         type=Path,
-        default=Path("config/schemas/v1"),
-        help="versioned schema directory (default: config/schemas/v1)",
+        default=default_schema_directory(),
+        help="versioned schema directory (default: bundled schemas)",
     )
     render_api_parser = import_commands.add_parser(
         "render-api",
@@ -604,8 +601,8 @@ def _add_import_parsers(
     render_api_parser.add_argument(
         "--schemas",
         type=Path,
-        default=Path("config/schemas/v1"),
-        help="versioned schema directory (default: config/schemas/v1)",
+        default=default_schema_directory(),
+        help="versioned schema directory (default: bundled schemas)",
     )
 
 
@@ -644,8 +641,7 @@ def _add_operator_parsers(
         type=Path,
         default=Path("tmp/operator/observed"),
         help=(
-            "observation directory for drift checks "
-            "(default: tmp/operator/observed)"
+            "observation directory for drift checks (default: tmp/operator/observed)"
         ),
     )
     operator_list_parser = operator_commands.add_parser(
@@ -699,8 +695,8 @@ def _add_secrets_parsers(
     render_parser.add_argument(
         "--schemas",
         type=Path,
-        default=Path("config/schemas/v1"),
-        help="versioned schema directory (default: config/schemas/v1)",
+        default=default_schema_directory(),
+        help="versioned schema directory (default: bundled schemas)",
     )
     render_parser.add_argument(
         "--secrets-dir",
@@ -712,24 +708,19 @@ def _add_secrets_parsers(
         "--output",
         type=Path,
         default=None,
-        help=(
-            "environment file to write (default: "
-            "tmp/env/<component>.env)"
-        ),
+        help=("environment file to write (default: tmp/env/<component>.env)"),
     )
     render_parser.add_argument(
         "--receipts",
         type=Path,
         default=Path("tmp/env-receipts"),
-        help=(
-            "environment receipt directory (default: tmp/env-receipts)"
-        ),
+        help=("environment receipt directory (default: tmp/env-receipts)"),
     )
     render_parser.add_argument(
         "--engine",
         type=Path,
-        default=Path("engine"),
-        help="engine directory containing ansible contracts (default: engine)",
+        default=default_engine_directory(),
+        help="engine directory containing ansible contracts (default: bundled engine)",
     )
     render_parser.add_argument(
         "--inventory-file",
@@ -745,9 +736,7 @@ def _add_backup_parsers(
     backup_parser = commands.add_parser(
         "backup", help="run and prove declared service backups"
     )
-    backup_commands = backup_parser.add_subparsers(
-        dest="backup_command", required=True
-    )
+    backup_commands = backup_parser.add_subparsers(dest="backup_command", required=True)
     for name, description in (
         ("run", "run the declared backup for one service"),
         ("verify", "prove the newest backup restores for one service"),
@@ -758,8 +747,8 @@ def _add_backup_parsers(
         subparser.add_argument(
             "--schemas",
             type=Path,
-            default=Path("config/schemas/v1"),
-            help="versioned schema directory (default: config/schemas/v1)",
+            default=default_schema_directory(),
+            help="versioned schema directory (default: bundled schemas)",
         )
         subparser.add_argument(
             "--receipts",
@@ -775,8 +764,8 @@ def _add_operator_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--schemas",
         type=Path,
-        default=Path("config/schemas/v1"),
-        help="versioned schema directory (default: config/schemas/v1)",
+        default=default_schema_directory(),
+        help="versioned schema directory (default: bundled schemas)",
     )
     parser.add_argument(
         "--proposals",
@@ -792,10 +781,7 @@ def _add_operator_feed_arguments(
     parser.add_argument(
         "--gateway-url",
         default=None,
-        help=(
-            "alerts endpoint (default: derived from the declared logging "
-            "gateway)"
-        ),
+        help=("alerts endpoint (default: derived from the declared logging gateway)"),
     )
     parser.add_argument("--gateway-ca", type=Path, required=required)
     parser.add_argument("--gateway-cert", type=Path, required=required)
@@ -806,8 +792,8 @@ def _add_operator_engine_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--engine",
         type=Path,
-        default=Path("engine"),
-        help="engine directory containing ansible contracts (default: engine)",
+        default=default_engine_directory(),
+        help="engine directory containing ansible contracts (default: bundled engine)",
     )
     parser.add_argument(
         "--inventory-file",
@@ -823,14 +809,14 @@ def _add_lifecycle_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--schemas",
         type=Path,
-        default=Path("config/schemas/v1"),
-        help="versioned schema directory (default: config/schemas/v1)",
+        default=default_schema_directory(),
+        help="versioned schema directory (default: bundled schemas)",
     )
     parser.add_argument(
         "--engine",
         type=Path,
-        default=Path("engine"),
-        help="engine directory containing ansible contracts (default: engine)",
+        default=default_engine_directory(),
+        help="engine directory containing ansible contracts (default: bundled engine)",
     )
     parser.add_argument(
         "--inventory-file",
@@ -865,12 +851,8 @@ def _run_import_render(arguments: Namespace) -> int:
         )
         if arguments.import_command == "render-api":
             api_key = read_api_key(Path(arguments.api_key_file))
-            client = HttpRenderApiClient(
-                api_key=api_key, base_url=arguments.api_url
-            )
-            result = import_render_api(
-                client, targets, Path(arguments.schemas)
-            )
+            client = HttpRenderApiClient(api_key=api_key, base_url=arguments.api_url)
+            result = import_render_api(client, targets, Path(arguments.schemas))
         else:
             result = import_render_blueprint(
                 Path(arguments.blueprint), targets, Path(arguments.schemas)
@@ -880,8 +862,6 @@ def _run_import_render(arguments: Namespace) -> int:
         return 2
     _write_json(result.as_dict())
     return 0
-
-
 
 
 def _dispatch(
@@ -952,9 +932,7 @@ def _run_audit(
     report = audit_inventory(
         PlatformInventory.from_state(state),
         observations,
-        load_environment_receipts(
-            Path(arguments.env_receipts), schema_directory
-        ),
+        load_environment_receipts(Path(arguments.env_receipts), schema_directory),
     )
     _write_json(report.as_dict())
     if report.status is AuditStatus.COMPLIANT:
@@ -1016,18 +994,14 @@ def _run_backup_operation(
     return 0
 
 
-def _operator_store(
-    arguments: Namespace, schema_directory: Path
-) -> ProposalStore:
+def _operator_store(arguments: Namespace, schema_directory: Path) -> ProposalStore:
     return ProposalStore(
         directory=Path(arguments.proposals),
         catalog=SchemaCatalog(schema_directory),
     )
 
 
-def _operator_feed(
-    arguments: Namespace, inventory: PlatformInventory
-) -> AlertFeed:
+def _operator_feed(arguments: Namespace, inventory: PlatformInventory) -> AlertFeed:
     return gateway_feed(
         inventory,
         ca_path=Path(arguments.gateway_ca),
@@ -1084,9 +1058,7 @@ def _run_operator_run(
         drift_due = 0.0
         while True:
             report = operator_run_once(feed, inventory, store)
-            _write_json(
-                {"status": "ok", "pass": "alerts", **report.as_dict()}
-            )
+            _write_json({"status": "ok", "pass": "alerts", **report.as_dict()})
             if auditor is not None and time.monotonic() >= drift_due:
                 drift_report = drift_pass(auditor, store)
                 _write_json(
@@ -1153,9 +1125,7 @@ def _run_operator_approve(
         context = _engine_context(arguments, schema_directory)
         if pending.trigger_kind is TriggerKind.ALERT:
             _require_gateway_material(arguments)
-            verifier = alert_resolution_verifier(
-                _operator_feed(arguments, inventory)
-            )
+            verifier = alert_resolution_verifier(_operator_feed(arguments, inventory))
         else:
             verifier = drift_resolution_verifier(
                 engine_auditor(context, inventory, Path(arguments.observed))
@@ -1318,9 +1288,7 @@ def _run_deploy(
             Path(arguments.artifacts),
             DeployOptions(
                 environment_file=(
-                    Path(arguments.env_file)
-                    if arguments.env_file is not None
-                    else None
+                    Path(arguments.env_file) if arguments.env_file is not None else None
                 ),
                 receipt_directory=Path(arguments.receipts),
             ),
@@ -1388,9 +1356,7 @@ def _run_migrate(
         }
         data_migrations = {
             database: Path(value)
-            for database, value in _key_value_pairs(
-                arguments.data, "--data"
-            ).items()
+            for database, value in _key_value_pairs(arguments.data, "--data").items()
         }
     except ValueError as error:
         payload = {
