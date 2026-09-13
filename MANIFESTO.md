@@ -8,10 +8,13 @@ accept, not aspirations we advertise.
 ## 1 · You should own your infrastructure
 
 A steady-traffic SaaS pays a PaaS several times the price of the hardware it
-runs on, forever, in exchange for not having to think about servers. That
-trade made sense when the alternative was Kubernetes or hand-rolled SSH
-scripts. It stops making sense the moment the operational feel of a PaaS can
-live on a server you own. The bill should buy computers, not margins.
+runs on, forever, in exchange for not having to think about servers. By the
+month the bill crosses $1,000 you are funding a platform team you never
+hired. That trade made sense when the alternative was Kubernetes or
+hand-rolled SSH scripts. It stops making sense the moment the operational
+feel of a PaaS — health-gated deploys, monitoring, databases that provably
+restore — can live on one or two servers you own. The bill should buy
+computers, not margins.
 
 ## 2 · Evidence over inference
 

@@ -1,52 +1,59 @@
 # Cloudfall
 
-Cloudfall is an open-source, evidence-based control plane for moving SaaS
-applications off cloud PaaS platforms onto self-hosted bare metal or VPS
-servers — plus an always-on AI operator that runs them there, without
-Kubernetes, and never reports success it cannot prove.
+Cloudfall is an open-source control plane that moves your applications and
+databases off cloud PaaS onto one or two servers you own, plus an always-on
+AI operator that runs them there. Every action produces a receipt; Cloudfall
+never reports success it cannot prove. No Kubernetes.
 
-The target workflow: take one fresh Debian host, run Cloudfall, and get a hardened
-baseline, firewall, monitoring, logging, your infrastructure services, and
+It is built for founders and small teams at the scaling stage. The month
+your cloud bill crosses $1,000 you are paying roughly $12,000 a year for
+compute and managed databases that fit on one or two Hetzner-class servers
+at a tenth of the price. Cloudfall's job is to make leaving safe: the
+operational feel of a PaaS on hardware you own, with health-gated deploys,
+rollback, monitoring, and backups that provably restore.
+
+The target workflow: take one fresh Debian host, run Cloudfall, and get a
+hardened baseline, firewall, monitoring, logging, PostgreSQL and Redis, and
 your application deployed with health checks and rollback. Then cut DNS and
-stop paying PaaS margins. See the [roadmap](ROADMAP.md) for the milestone
-plan; the wedge use case is a migration from Render onto a Hetzner-class
-server. The principles behind the project are in the
-[manifesto](MANIFESTO.md).
+stop paying margins. The wedge use case is a migration from Render onto a
+Hetzner-class server; see the [roadmap](ROADMAP.md) for the milestone plan
+and the [manifesto](MANIFESTO.md) for the principles behind the project.
 
-> **Every migration layer proven live.** On 2026-09-08 the full wedge ran
-> on disposable Hetzner Cloud Debian 13 servers: idempotent baseline,
-> compliant audits, host metrics through the mTLS logging stack, loopback
-> PostgreSQL with peer-auth databases, real Let's Encrypt certificates,
-> health-gated deploys with an automatic rollback of a bad release, and an
-> application actually hosted on Render, cut over with its data and a real
-> TTL-lowered DNS record flip on an owned domain, driven by an AI agent
-> through `cloudfall-mcp` alone. On 2026-09-10 the operations layer
-> followed: an induced failure raised a declared alert as evidence, the
-> propose-mode operator remediated it with a single human approval, and a
-> second identical failure was remediated autonomously under declared
-> policy. On 2026-09-11 the untested promises followed: a timer-driven
-> restore drill proved a real backup restorable with a schema-valid
-> receipt, and an induced failure delivered its alert to a separate
-> machine across the public network (see the
-> [proving-run reports](docs/proving-runs/)). Not yet exercised live:
-> bare-metal RAID/storage provisioning (see the [roadmap](ROADMAP.md))
+> **Proven live, not promised.** Everything implemented has run on
+> disposable Hetzner Cloud Debian 13 servers: an application actually hosted
+> on Render was cut over with its data and a real TTL-lowered DNS flip on an
+> owned domain, a deliberately bad release was rolled back automatically
+> along the way, an induced failure was remediated by the operator first
+> with a single human approval and then autonomously under declared policy,
+> a timer-driven drill proved a real backup restorable, and an alert crossed
+> the public network to a second machine. The entire migration was driven by
+> an AI agent through `cloudfall-mcp` alone. Full reports:
+> [proving-runs](docs/proving-runs/). The one layer not yet exercised live
+> is bare-metal RAID/storage provisioning (see the [roadmap](ROADMAP.md))
 
 ## Why Cloudfall
 
-- **Declarative and auditable.** Servers, applications, components, and
-  domains are declared in typed YAML config validated against JSON Schemas.
-  A read-only inspection pipeline collects evidence from hosts, and
-  `cloudfall audit` reports drift between the config and the observed servers
-  with distinct exit codes
+- **The bill buys computers, not margins.** A steady $1,000/mo cloud bill is
+  mostly margin on commodity compute and managed databases. On servers you
+  own, that difference becomes runway, every year
 - **Evidence over inference.** Deployments produce receipts; status is
-  derived from validated observations. Cloudfall never reports success it cannot
-  prove
+  derived from validated observations, and `cloudfall audit` reports drift
+  between the declared config and the observed servers with distinct exit
+  codes. Cloudfall never reports success it cannot prove
+- **Good-enough databases, with proof.** Managed PostgreSQL is mostly
+  insurance. Cloudfall keeps the coverage and drops the premium: loopback
+  PostgreSQL and Redis with receipted backups and timer-driven restore
+  drills that prove a real backup restorable instead of assuming it
+- **An operator, not a pager.** The always-on operator watches declared
+  alerts and audited drift, remediates what its receipts prove reversible
+  under declared policy, and asks you only about what can't be undone
 - **AI-agent native.** Agents operate through a stable CLI and Python API
-  with structured JSON results instead of inventing shell commands over SSH. The
-  `cloudfall-mcp` server exposes read-only evidence tools freely and gates
-  every server-changing tool behind an explicit confirmation handshake
-- **systemd, not containers.** Applications run as native systemd services
-  with artifact releases and symlink rollback on long-lived Debian servers
+  with structured JSON results instead of inventing shell commands over SSH.
+  The `cloudfall-mcp` server exposes read-only evidence tools freely and
+  gates every server-changing tool behind an explicit confirmation handshake
+- **Boring on purpose.** Applications run as native systemd services with
+  artifact releases and symlink rollback, behind nginx, on stock Debian. Any
+  Linux admin can take over the server without Cloudfall installed
 
 ## Architecture
 
@@ -67,26 +74,30 @@ full architecture and the long-term fleet vision.
 
 ## Status
 
-Cloudfall is pre-1.0. Implemented today: config validation, typed inventory,
-deterministic Ansible inventory rendering, read-only server inspection,
-config-versus-observed drift audit, a Debian bootstrap role, a UTC time
-baseline, an nftables firewall, a guarded Loki/Grafana/Alloy logging stack
-with declared alert rules and notification channels, an evidence-derived
-operations dashboard, a service catalog (PostgreSQL, Redis, and Nginx/TLS
-sites), the health-gated deploy slice with artifact releases and symlink
-rollback, sops/age secret rendering, receipted backup and restore-proof
-commands, the `cloudfall-mcp` server, blueprint and live-API Render
-importers, the resumable `cloudfall migrate` orchestrator with explicit
-cutover steps, and the always-on operator with receipted proposals and
-policy-bounded autonomy, and the timer-driven restore drill with external
-alert delivery. Every implemented layer has been validated live on
-disposable Debian targets except bare-metal RAID/storage provisioning
-(see the [proving-run reports](docs/proving-runs/)). Next up: the
-fleet-density track — enforced resource sharing (M11), application
-mobility with node drain (M12), PostgreSQL point-in-time recovery and
-scale readiness (M13), and the demand-gated failover formation (M14) —
-alongside broader catalog breadth and bare-metal storage provisioning.
-See the [roadmap](ROADMAP.md) for the milestone plan.
+Cloudfall is pre-1.0 and honestly labeled. Implemented today, and proven
+live on disposable Debian targets:
+
+- Typed YAML config validated against JSON Schemas, deterministic Ansible
+  inventory rendering, read-only server inspection, and
+  config-versus-observed drift audit with distinct exit codes
+- Hardened Debian baseline, UTC time, nftables firewall, and a guarded
+  Loki/Grafana/Alloy logging stack with declared alert rules and
+  notification channels over mTLS
+- A service catalog (loopback PostgreSQL, Redis, and Nginx/TLS sites) with
+  sops/age secret rendering, receipted backups, and a timer-driven restore
+  drill with external alert delivery
+- Health-gated deploys with artifact releases and symlink rollback, plus an
+  evidence-derived operations dashboard
+- Render blueprint and live-API importers, guided data migration, and the
+  resumable `cloudfall migrate` orchestrator with explicit cutover steps
+- The `cloudfall-mcp` agent server and the always-on operator with receipted
+  proposals and policy-bounded autonomy
+
+The one implemented layer not yet validated live is bare-metal RAID/storage
+provisioning. Next up is the fleet-density track: enforced resource sharing,
+application mobility with node drain, PostgreSQL point-in-time recovery, and
+the demand-gated failover formation, alongside broader catalog breadth. See
+the [roadmap](ROADMAP.md) for the milestone plan.
 
 ## Quickstart
 
