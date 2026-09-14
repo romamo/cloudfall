@@ -13,7 +13,23 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from cloudfall.audit import audit_inventory
-from cloudfall.domain import ReleaseId, ResourceId
+from cloudfall.authoring import (
+    AuthoringError,
+    ServerOptions,
+    ServerTypeOptions,
+    SshKeyOptions,
+    add_server,
+    add_server_type,
+    add_ssh_key,
+)
+from cloudfall.domain import (
+    ConnectionAddress,
+    Hostname,
+    LinuxUser,
+    ReleaseId,
+    ResourceId,
+    TcpPort,
+)
 from cloudfall.importer import (
     ImportTargets,
     RenderImportError,
@@ -242,6 +258,91 @@ class AgentToolset:
             "status": "ok",
             "observations": [str(path) for path in paths],
         }
+
+    def add_ssh_key(
+        self,
+        key_file: str,
+        owner: str,
+        resource_id: str | None = None,
+        environment: str = "production",
+        description: str | None = None,
+    ) -> dict[str, object]:
+        """Declare one SSH public key read from a controller-side key file."""
+        try:
+            options = SshKeyOptions(
+                key_path=self._path(key_file).expanduser(),
+                owner=ResourceId.from_boundary(owner),
+                environment=ResourceId.from_boundary(environment),
+                resource_id=(
+                    ResourceId.from_boundary(resource_id)
+                    if resource_id is not None
+                    else None
+                ),
+                description=description,
+            )
+        except (TypeError, ValueError) as error:
+            return _invalid_argument(error)
+        try:
+            result = add_ssh_key(
+                self._config.project_directory, options, self._config.schema_directory
+            )
+        except (AuthoringError, ConfigValidationError) as error:
+            return error.as_dict()
+        return result.as_dict()
+
+    def add_server_type(
+        self, resource_id: str, description: str | None = None
+    ) -> dict[str, object]:
+        """Declare one server type from the bundled Debian 13 baseline."""
+        try:
+            options = ServerTypeOptions(
+                resource_id=ResourceId.from_boundary(resource_id),
+                description=description,
+            )
+        except (TypeError, ValueError) as error:
+            return _invalid_argument(error)
+        try:
+            result = add_server_type(
+                self._config.project_directory, options, self._config.schema_directory
+            )
+        except (AuthoringError, ConfigValidationError) as error:
+            return error.as_dict()
+        return result.as_dict()
+
+    def add_server(  # noqa: PLR0913 - boundary signature mirrors the CLI.
+        self,
+        resource_id: str,
+        address: str,
+        server_type: str = "debian-application",
+        environment: str = "production",
+        hostname: str | None = None,
+        ssh_user: str = "root",
+        ssh_port: int = 22,
+        description: str | None = None,
+    ) -> dict[str, object]:
+        """Declare one server, creating its server type when the project lacks it."""
+        try:
+            options = ServerOptions(
+                resource_id=ResourceId.from_boundary(resource_id),
+                address=ConnectionAddress.from_boundary(address),
+                server_type=ResourceId.from_boundary(server_type),
+                environment=ResourceId.from_boundary(environment),
+                ssh_user=LinuxUser.from_boundary(ssh_user),
+                ssh_port=TcpPort.from_boundary(ssh_port),
+                hostname=(
+                    Hostname.from_boundary(hostname) if hostname is not None else None
+                ),
+                description=description,
+            )
+        except (TypeError, ValueError) as error:
+            return _invalid_argument(error)
+        try:
+            result = add_server(
+                self._config.project_directory, options, self._config.schema_directory
+            )
+        except (AuthoringError, ConfigValidationError) as error:
+            return error.as_dict()
+        return result.as_dict()
 
     def import_render(
         self,

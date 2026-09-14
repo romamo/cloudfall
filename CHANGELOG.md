@@ -8,6 +8,11 @@ Notable changes to Cloudfall. The format follows
 
 ### Added
 
+- `cloudfall-mcp` exposes `add_ssh_key`, `add_server_type`, and `add_server`
+  so an agent can declare the fleet without writing YAML by hand; each
+  returns the `cloudfall add` envelope, writes into the project only, and
+  re-validates it. `cloudfall init` stays CLI-only because the server runs
+  inside an existing project (#3)
 - `cloudfall init` lays out the secrets setup (`secrets/` and a `.sops.yaml`
   template), runs `git init` unless the directory already lies inside a
   repository, links the secrets guide and the reference examples at the

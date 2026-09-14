@@ -6,7 +6,9 @@ import asyncio
 from pathlib import Path
 
 import pytest
+import yaml
 from cloudfall.agent_tools import AgentConfig, AgentToolset
+from cloudfall.project import GitRevision, InitOptions, ProjectName, init_project
 
 ROOT = Path(__file__).parents[2]
 SCHEMAS = ROOT / "config" / "schemas" / "v1"
@@ -24,9 +26,16 @@ services:
 """
 
 
-def _config(tmp_path: Path, observed: Path | None = None) -> AgentConfig:
+REVISION = "5dea76ae7fdf4f99f5e8eb84b939dfa68b12ef3b"
+
+
+def _config(
+    tmp_path: Path,
+    observed: Path | None = None,
+    project_directory: Path = EXAMPLES,
+) -> AgentConfig:
     return AgentConfig(
-        project_directory=EXAMPLES,
+        project_directory=project_directory,
         schema_directory=SCHEMAS,
         engine_directory=ENGINE,
         inventory_file=tmp_path / "inventory.json",
@@ -126,6 +135,72 @@ def test_path_arguments_must_stay_inside_the_project(tmp_path: Path) -> None:
         assert "leaves the project directory" in str(error["message"])
 
 
+def _fresh_project(tmp_path: Path) -> AgentToolset:
+    directory = tmp_path / "project"
+    init_project(
+        InitOptions(
+            directory=directory,
+            name=ProjectName("project"),
+            revision=GitRevision(REVISION),
+        )
+    )
+    return AgentToolset(_config(tmp_path, project_directory=directory))
+
+
+def _example_key() -> str:
+    document = yaml.safe_load(
+        (EXAMPLES / "ssh-public-keys" / "example-admin.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+    return str(document["spec"]["publicKey"])
+
+
+def test_fleet_tools_write_resources_and_revalidate_the_project(
+    tmp_path: Path,
+) -> None:
+    toolset = _fresh_project(tmp_path)
+    key_file = tmp_path / "id_ed25519.pub"
+    key_file.write_text(f"{_example_key()}\n", encoding="utf-8")
+
+    key = toolset.add_ssh_key(str(key_file), "roman")
+    server = toolset.add_server("h1", "203.0.113.10", description="first host")
+    validated = toolset.validate()
+
+    assert key["status"] == "ok"
+    assert key["added"] == [
+        {"kind": "SshPublicKey", "id": "roman", "path": "ssh-public-keys/roman.yaml"}
+    ]
+    assert server["status"] == "ok"
+    added = server["added"]
+    assert isinstance(added, list)
+    assert [resource["kind"] for resource in added] == ["ServerType", "Server"]
+    assert validated["status"] == "ok"
+    assert validated["resources"] == 3
+
+
+def test_fleet_tools_return_structured_errors_and_never_overwrite(
+    tmp_path: Path,
+) -> None:
+    toolset = _fresh_project(tmp_path)
+
+    missing_key = toolset.add_ssh_key(str(tmp_path / "absent.pub"), "roman")
+    bad_port = toolset.add_server("h1", "203.0.113.10", ssh_port=70000)
+    first = toolset.add_server_type("debian-application")
+    again = toolset.add_server_type("debian-application")
+
+    assert first["status"] == "ok"
+    for result, code in (
+        (missing_key, "ssh_key_file_missing"),
+        (bad_port, "invalid_argument"),
+        (again, "resource_exists"),
+    ):
+        assert result["status"] == "error"
+        error = result["error"]
+        assert isinstance(error, dict)
+        assert error["code"] == code
+
+
 def test_import_render_tool_maps_a_blueprint(tmp_path: Path) -> None:
     blueprint = tmp_path / "render.yaml"
     blueprint.write_text(BLUEPRINT, encoding="utf-8")
@@ -172,6 +247,9 @@ def test_mcp_server_registers_annotated_tools(tmp_path: Path) -> None:
         "validate_config",
         "audit_servers",
         "inspect_servers",
+        "add_ssh_key",
+        "add_server_type",
+        "add_server",
         "import_render",
         "build_artifact",
         "deploy_component",
@@ -184,6 +262,11 @@ def test_mcp_server_registers_annotated_tools(tmp_path: Path) -> None:
     assert tools["deploy_component"].annotations is not None
     assert tools["deploy_component"].annotations.destructive_hint is True
     assert "confirm" in str(tools["deploy_component"].input_schema)
+    assert tools["add_server"].annotations is not None
+    assert tools["add_server"].annotations.read_only_hint is False
+    assert tools["add_server"].annotations.destructive_hint is False
+    assert "ssh_port" in str(tools["add_server"].input_schema)
+    assert "confirm" not in str(tools["add_server"].input_schema)
 
 
 def test_operator_tools_list_gate_and_report_missing_material(

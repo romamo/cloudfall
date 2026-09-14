@@ -73,6 +73,15 @@ first call returns a `confirmation-required` preview describing exactly what
 would run; only a second call with `confirm=true` executes. Deployments
 through MCP always write release receipts.
 
+The fleet-declaring tools `add_ssh_key`, `add_server_type`, and `add_server`
+mirror `cloudfall add`: they write schema-validated resource files into the
+project, re-validate the whole project, remove what they wrote when that
+validation fails, and never overwrite an existing resource. They are
+annotated neither read-only nor destructive, since they change the project
+and not a server. `cloudfall init` stays CLI-only on purpose: the server
+starts inside an existing project and confines every path to it, so an
+agent lays out the project first and then connects.
+
 ```console
 uv run cloudfall-mcp --project config/examples
 ```

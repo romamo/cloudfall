@@ -3,6 +3,15 @@
 Requires the ``cloudfall[mcp]`` extra. Read-only evidence tools carry a
 read-only annotation; anything that changes servers is annotated
 destructive and demands the toolset's explicit confirmation handshake.
+The fleet-declaring tools (``add_ssh_key``, ``add_server_type``,
+``add_server``) write resources into the project and are neither: they
+never touch a server and never overwrite an existing resource.
+
+``cloudfall init`` is deliberately CLI-only. The server is started inside
+a project (``--project``, ``CLOUDFALL_PROJECT``, or the current directory)
+and refuses to start outside one, so by the time an agent can call a tool
+the project already exists; a tool that lays out a new project elsewhere
+would escape the directory every other tool is confined to.
 """
 
 from __future__ import annotations
@@ -41,6 +50,12 @@ servers. Read-only tools validate state and derive evidence; destructive
 tools change servers and require calling twice: the first call returns a
 confirmation-required preview, the second call with confirm=true executes.
 Every mutation writes receipts; nothing reports success it cannot prove.
+The add_ssh_key, add_server_type, and add_server tools declare the fleet:
+they write schema-validated resource files into the project (never onto a
+server), re-validate the whole project afterwards, and remove what they
+wrote when that validation fails. They never overwrite an existing
+resource. The project itself is laid out beforehand with `cloudfall init`
+on the CLI; this server always runs inside an existing project.
 """
 
 
@@ -50,6 +65,7 @@ def create_server(config: AgentConfig) -> MCPServer:
     toolset = AgentToolset(config)
     registrations = (
         *_evidence_registrations(toolset),
+        *_authoring_registrations(toolset),
         *_build_registrations(toolset),
         *_mutation_registrations(toolset),
         *_backup_registrations(toolset),
@@ -133,6 +149,82 @@ def _evidence_registrations(
             "inspect_services",
             "Collect DNS, TLS, origin, and public route evidence",
             read_only,
+        ),
+    )
+
+
+def _authoring_registrations(
+    toolset: AgentToolset,
+) -> tuple[_Registration, ...]:
+    writes_project = ToolAnnotations(
+        read_only_hint=False, destructive_hint=False, idempotent_hint=False
+    )
+
+    def add_ssh_key(
+        key_file: str,
+        owner: str,
+        id: str | None = None,  # noqa: A002 - mirrors `cloudfall add --id`.
+        environment: str = "production",
+        description: str | None = None,
+    ) -> str:
+        return _dump(
+            toolset.add_ssh_key(key_file, owner, id, environment, description)
+        )
+
+    def add_server_type(
+        id: str,  # noqa: A002 - mirrors the `cloudfall add server-type` id.
+        description: str | None = None,
+    ) -> str:
+        return _dump(toolset.add_server_type(id, description))
+
+    def add_server(  # noqa: PLR0913 - boundary signature mirrors the CLI.
+        id: str,  # noqa: A002 - mirrors the `cloudfall add server` id.
+        address: str,
+        type: str = "debian-application",  # noqa: A002 - mirrors `--type`.
+        environment: str = "production",
+        hostname: str | None = None,
+        ssh_user: str = "root",
+        ssh_port: int = 22,
+        description: str | None = None,
+    ) -> str:
+        return _dump(
+            toolset.add_server(
+                id,
+                address,
+                type,
+                environment,
+                hostname,
+                ssh_user,
+                ssh_port,
+                description,
+            )
+        )
+
+    return (
+        (
+            add_ssh_key,
+            "add_ssh_key",
+            "Declare an SshPublicKey resource read from a controller-side "
+            "public key file (e.g. ~/.ssh/id_ed25519.pub); writes into the "
+            "project and re-validates it, never overwrites",
+            writes_project,
+        ),
+        (
+            add_server_type,
+            "add_server_type",
+            "Declare a ServerType resource from the bundled Debian 13 "
+            "baseline (no software RAID, default-deny firewall with "
+            "22/80/443); writes into the project and re-validates it, "
+            "never overwrites",
+            writes_project,
+        ),
+        (
+            add_server,
+            "add_server",
+            "Declare a Server resource reachable at an address, creating "
+            "its baseline ServerType when the project lacks it; writes "
+            "into the project and re-validates it, never overwrites",
+            writes_project,
         ),
     )
 
