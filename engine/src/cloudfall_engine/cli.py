@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
-import argparse
 import json
 import os
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from cloudfall.arguments import (
+    StrictArgumentParser,
+    parse_arguments,
+    project_path_argument,
+)
 from cloudfall.inventory import PlatformInventory
 from cloudfall.project import (
     PROJECT_DIRECTORY_VARIABLE,
@@ -29,6 +33,7 @@ from cloudfall_engine.playbook import (
 )
 
 if TYPE_CHECKING:
+    import argparse
     from collections.abc import Sequence
 
 
@@ -44,8 +49,8 @@ def _add_project_directory_argument(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="cloudfall-engine")
+def _parser() -> StrictArgumentParser:
+    parser = StrictArgumentParser(prog="cloudfall-engine")
     commands = parser.add_subparsers(dest="command", required=True)
 
     inventory_parser = commands.add_parser(
@@ -66,7 +71,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     render_parser.add_argument(
         "--output",
-        type=Path,
+        type=project_path_argument,
         help="write inventory JSON to this file instead of stdout",
     )
 
@@ -92,7 +97,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     build_parser.add_argument(
         "--output-dir",
-        type=Path,
+        type=project_path_argument,
         default=Path("tmp/artifacts"),
         help="artifact output directory (default: tmp/artifacts)",
     )
@@ -117,7 +122,7 @@ def _parser() -> argparse.ArgumentParser:
     _add_engine_argument(run_parser)
     run_parser.add_argument(
         "--inventory",
-        type=Path,
+        type=project_path_argument,
         default=Path("tmp/ansible-inventory.json"),
         help="rendered inventory path (default: tmp/ansible-inventory.json)",
     )
@@ -244,7 +249,7 @@ def _run_playbook(arguments: argparse.Namespace) -> int:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Run one engine command and return a process exit code."""
-    arguments = _parser().parse_args(argv)
+    arguments = parse_arguments(_parser(), argv)
     if arguments.command == "playbook":
         if arguments.playbook_command == "list":
             return _list_playbooks(arguments)

@@ -8,6 +8,15 @@ Notable changes to Cloudfall. The format follows
 
 ### Added
 
+- `cloudfall init` lays out the secrets setup (`secrets/` and a `.sops.yaml`
+  template), runs `git init` unless the directory already lies inside a
+  repository, links the secrets guide and the reference examples at the
+  pinned commit, and takes `--description` for an About section in the
+  README and the `description` in `pyproject.toml`
+- `cloudfall init` from a source checkout refuses to pin `HEAD` when tracked
+  files are modified (`project_revision_uncommitted`) or when `HEAD` is on
+  no remote branch (`project_revision_unpublished`), so a project never pins
+  a commit that is not the running code or that `uv sync` cannot fetch
 - Fleet repositories consume Cloudfall as a package: the wheel bundles the
   v1 schema catalog and the Ansible engine, and every `--schemas` and
   `--engine` default resolves to the bundled copies (or to the source tree
@@ -49,6 +58,38 @@ Notable changes to Cloudfall. The format follows
 - Roadmap gained a forward-looking M6 section (catalog breadth, Render API
   import, cutover generator, secrets v2, bare-metal provisioning, backup and
   restore operations, fleet observability)
+- `cloudfall`, `cloudfall-engine`, and `cloudfall-mcp` match long options
+  exactly and report usage errors as the JSON error envelope
+  (`invalid_argument`, exit 2) instead of argparse prose; unrecognized
+  options are named without their values
+- **Breaking: `cloudfall deploy`, `rollback`, `restart`, and `data migrate`
+  change servers only with `--yes`.** Without it they run every
+  controller-side check (declared component or service, verified artifact,
+  declared database, source URL file) and print a `status: plan` preview
+  naming the target servers, exit `0`, matching `cloudfall migrate` and the
+  MCP confirmation handshake; scripts and Taskfile targets must add `--yes`
+- Runtime path options (`--output`, `--receipts`, `--inventory-file`,
+  `--observed`, `--plan-file`, and the other evidence and receipt
+  directories) on all three entry points, and the MCP tools' output and plan
+  paths, refuse a relative path that climbs out of the project
+  (`tmp/../../x`); a location outside the project must be given as an
+  absolute path
+
+### Fixed
+
+- A guessed `--api-key` or `--source-url` no longer binds to
+  `--api-key-file`/`--source-url-file` and echoes the secret in the
+  resulting file-not-found error
+- Malformed component, service, proposal, application, server, and release
+  ids fail as `invalid_argument` before any work starts instead of crashing
+  with a traceback on exit 1
+- JSON documents are flushed as they are written, so `operator run
+  --interval` under a pipe or journald delivers each pass instead of
+  holding it in the buffer and losing it on termination
+- A missing or unreadable gateway CA, certificate, or key reports
+  `operator_gateway_material_invalid` instead of an uncaught traceback
+- `cloudfall init` suggests `uv run cloudfall config validate` as the next
+  step; the previous `config validate .` hint no longer parsed
 
 ## [0.1.0] — 2026-09-08
 

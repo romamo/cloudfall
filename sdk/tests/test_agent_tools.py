@@ -108,6 +108,24 @@ def test_invalid_identifiers_return_structured_errors(tmp_path: Path) -> None:
     assert error["code"] == "invalid_argument"
 
 
+def test_path_arguments_must_stay_inside_the_project(tmp_path: Path) -> None:
+    blueprint = tmp_path / "render.yaml"
+    blueprint.write_text(BLUEPRINT, encoding="utf-8")
+    toolset = AgentToolset(_config(tmp_path))
+
+    imported = toolset.import_render(
+        str(blueprint), "acme", "h1", "../../config", "tmp/env"
+    )
+    planned = toolset.migrate(plan_file="tmp/../../plan.json")
+
+    for result in (imported, planned):
+        assert result["status"] == "error"
+        error = result["error"]
+        assert isinstance(error, dict)
+        assert error["code"] == "invalid_argument"
+        assert "leaves the project directory" in str(error["message"])
+
+
 def test_import_render_tool_maps_a_blueprint(tmp_path: Path) -> None:
     blueprint = tmp_path / "render.yaml"
     blueprint.write_text(BLUEPRINT, encoding="utf-8")

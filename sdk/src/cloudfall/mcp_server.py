@@ -7,7 +7,6 @@ destructive and demands the toolset's explicit confirmation handshake.
 
 from __future__ import annotations
 
-import argparse
 import json
 import os
 import sys
@@ -18,6 +17,11 @@ from mcp.server.mcpserver import MCPServer
 from mcp.types import ToolAnnotations
 
 from cloudfall.agent_tools import AgentConfig, AgentToolset
+from cloudfall.arguments import (
+    StrictArgumentParser,
+    parse_arguments,
+    project_path_argument,
+)
 from cloudfall.project import (
     PROJECT_DIRECTORY_VARIABLE,
     ProjectError,
@@ -26,6 +30,7 @@ from cloudfall.project import (
 from cloudfall.resources import default_engine_directory, default_schema_directory
 
 if TYPE_CHECKING:
+    import argparse
     from collections.abc import Callable, Sequence
 
     _Registration = tuple[Callable[..., str], str, str, ToolAnnotations | None]
@@ -436,8 +441,8 @@ def _dump(payload: dict[str, object]) -> str:
     return json.dumps(payload, sort_keys=True)
 
 
-def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+def _parser() -> StrictArgumentParser:
+    parser = StrictArgumentParser(
         prog="cloudfall-mcp",
         description=(
             "Expose the Cloudfall agent toolset over MCP stdio. Read-only"
@@ -472,46 +477,46 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--inventory-file",
-        type=Path,
+        type=project_path_argument,
         default=Path("tmp/ansible-inventory.json"),
         help="path where the rendered Ansible inventory is written"
         " (default: %(default)s)",
     )
     parser.add_argument(
         "--observed",
-        type=Path,
+        type=project_path_argument,
         default=Path("tmp/observed"),
         help="directory holding read-only server observation snapshots"
         " (default: %(default)s)",
     )
     parser.add_argument(
         "--service-observed",
-        type=Path,
+        type=project_path_argument,
         default=Path("tmp/observed-services"),
         help="directory holding DNS, TLS, origin, and public route evidence"
         " (default: %(default)s)",
     )
     parser.add_argument(
         "--deployments",
-        type=Path,
+        type=project_path_argument,
         default=Path("tmp/deployments"),
         help="directory holding domain deployment receipts (default: %(default)s)",
     )
     parser.add_argument(
         "--releases",
-        type=Path,
+        type=project_path_argument,
         default=Path("tmp/releases"),
         help="directory holding component release receipts (default: %(default)s)",
     )
     parser.add_argument(
         "--artifacts",
-        type=Path,
+        type=project_path_argument,
         default=Path("tmp/artifacts"),
         help="directory holding built release artifacts (default: %(default)s)",
     )
     parser.add_argument(
         "--data-migrations",
-        type=Path,
+        type=project_path_argument,
         default=Path("tmp/data-migrations"),
         help="directory holding data-migration receipts (default: %(default)s)",
     )
@@ -523,25 +528,25 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--env-dir",
-        type=Path,
+        type=project_path_argument,
         default=Path("tmp/env"),
         help="rendered environment file directory (default: %(default)s)",
     )
     parser.add_argument(
         "--env-receipts",
-        type=Path,
+        type=project_path_argument,
         default=Path("tmp/env-receipts"),
         help="rendered environment receipt directory (default: %(default)s)",
     )
     parser.add_argument(
         "--backups",
-        type=Path,
+        type=project_path_argument,
         default=Path("tmp/backups"),
         help="directory holding backup operation receipts (default: %(default)s)",
     )
     parser.add_argument(
         "--proposals",
-        type=Path,
+        type=project_path_argument,
         default=Path("tmp/operator/proposals"),
         help="directory holding operator proposal receipts (default: %(default)s)",
     )
@@ -568,7 +573,7 @@ def _parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the MCP server over stdio."""
-    arguments = _parser().parse_args(argv)
+    arguments = parse_arguments(_parser(), argv)
     try:
         with project_context(arguments.project, os.environ) as project_directory:
             _serve(arguments, project_directory)

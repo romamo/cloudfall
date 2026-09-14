@@ -13,6 +13,7 @@ from cloudfall.domain import ResourceId
 from cloudfall.inventory import PlatformInventory
 from cloudfall.operator import (
     ApproveOptions,
+    GatewayAlertFeed,
     OperatorAlert,
     OperatorError,
     ProposalStatus,
@@ -115,6 +116,20 @@ def test_parse_prometheus_alerts_rejects_invalid_payload() -> None:
     with pytest.raises(OperatorError) as caught:
         parse_prometheus_alerts("{}")
     assert caught.value.code == "operator_feed_invalid"
+
+
+def test_gateway_feed_reports_missing_tls_material(tmp_path: Path) -> None:
+    feed = GatewayAlertFeed(
+        url="https://127.0.0.1:9/api/v1/alerts",
+        ca_path=tmp_path / "ca.crt",
+        certificate_path=tmp_path / "operator.crt",
+        key_path=tmp_path / "operator.key",
+    )
+
+    with pytest.raises(OperatorError) as caught:
+        feed.fetch()
+
+    assert caught.value.code == "operator_gateway_material_invalid"
 
 
 def test_run_once_writes_a_schema_valid_proposal(tmp_path: Path) -> None:

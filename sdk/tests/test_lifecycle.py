@@ -208,3 +208,115 @@ def test_cli_deploy_reports_a_missing_artifact(
     assert exit_code == 2
     payload = json.loads(captured.err)
     assert payload["error"]["code"] == "lifecycle_artifact_missing"
+
+
+def _cli_lifecycle(
+    argv: list[str], tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> tuple[int, dict[str, object]]:
+    exit_code = main(
+        [
+            *argv,
+            "--project",
+            str(EXAMPLES),
+            "--schemas",
+            str(SCHEMAS),
+            "--engine",
+            str(ENGINE),
+            "--inventory-file",
+            str(tmp_path / "inventory.json"),
+        ]
+    )
+    captured = capsys.readouterr()
+    stream = captured.out if exit_code == 0 else captured.err
+    payload = json.loads(stream)
+    assert isinstance(payload, dict)
+    return exit_code, payload
+
+
+@pytest.mark.parametrize(
+    ("argv", "action"),
+    [
+        (["restart", "crm-backend"], "restart"),
+        (["rollback", "crm-backend", "--release", RELEASE], "rollback"),
+    ],
+)
+def test_cli_server_changes_show_a_plan_without_yes(
+    argv: list[str],
+    action: str,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code, payload = _cli_lifecycle(argv, tmp_path, capsys)
+
+    assert exit_code == 0
+    assert payload["status"] == "plan"
+    assert payload["action"] == action
+    assert payload["component"] == "crm-backend"
+    assert payload["servers"]
+    assert "Id(" not in str(payload["wouldRun"])
+    assert "--yes" in str(payload["instruction"])
+    assert not (tmp_path / "inventory.json").exists()
+
+
+def test_cli_deploy_plan_verifies_the_artifact(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    artifacts = _write_artifact(tmp_path)
+
+    exit_code, payload = _cli_lifecycle(
+        [
+            "deploy",
+            "crm-backend",
+            "--release",
+            RELEASE,
+            "--artifacts",
+            str(artifacts),
+        ],
+        tmp_path,
+        capsys,
+    )
+
+    assert exit_code == 0
+    assert payload["status"] == "plan"
+    assert payload["release"] == RELEASE
+    assert f"release {RELEASE} of component crm-backend" in str(payload["wouldRun"])
+    assert not (tmp_path / "inventory.json").exists()
+
+
+def test_cli_plan_mode_still_rejects_an_undeclared_component(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    exit_code, payload = _cli_lifecycle(["restart", "ghost"], tmp_path, capsys)
+
+    assert exit_code == 2
+    error = payload["error"]
+    assert isinstance(error, dict)
+    assert error["code"] == "lifecycle_component_missing"
+
+
+def test_cli_data_migration_plan_checks_the_source_url_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    source_url_file = tmp_path / "source.url"
+    argv = [
+        "data",
+        "migrate",
+        "postgresql-main",
+        "--database",
+        "crm",
+        "--source-url-file",
+        str(source_url_file),
+    ]
+
+    exit_code, payload = _cli_lifecycle(argv, tmp_path, capsys)
+    assert exit_code == 2
+    error = payload["error"]
+    assert isinstance(error, dict)
+    assert error["code"] == "lifecycle_source_url_missing"
+
+    source_url_file.write_text("postgresql://u:p@db.example.test/crm\n")
+    exit_code, payload = _cli_lifecycle(argv, tmp_path, capsys)
+    assert exit_code == 0
+    assert payload["status"] == "plan"
+    assert payload["service"] == "postgresql-main"
+    assert "u:p@" not in json.dumps(payload)

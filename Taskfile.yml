@@ -153,7 +153,7 @@ tasks:
         --release {{ .RELEASE }} --schemas {{ .SCHEMA_DIR }}
         --artifacts {{ .ARTIFACT_DIR | default "tmp/artifacts" }}
         --receipts {{ .ROOT_DIR }}/tmp/releases
-        {{ if .ENV_FILE }}--env-file {{ .ENV_FILE }}{{ end }}
+        {{ if .ENV_FILE }}--env-file {{ .ENV_FILE }}{{ end }} --yes
 
   rollback:
     desc: Roll COMPONENT back to an existing RELEASE
@@ -165,7 +165,7 @@ tasks:
     cmds:
       - >-
         uv run cloudfall rollback --project {{ .CONFIG_DIR }} {{ .COMPONENT }}
-        --release {{ .RELEASE }} --schemas {{ .SCHEMA_DIR }}
+        --release {{ .RELEASE }} --schemas {{ .SCHEMA_DIR }} --yes
 
   restart:
     desc: Restart COMPONENT behind its declared health check
@@ -175,7 +175,7 @@ tasks:
     cmds:
       - >-
         uv run cloudfall restart --project {{ .CONFIG_DIR }} {{ .COMPONENT }}
-        --schemas {{ .SCHEMA_DIR }}
+        --schemas {{ .SCHEMA_DIR }} --yes
 
   health:
     desc: Probe COMPONENT's declared health check

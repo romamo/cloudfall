@@ -56,6 +56,7 @@ from cloudfall.operator import (
 from cloudfall.operator import (
     run_once as operator_run_once,
 )
+from cloudfall.project import project_path
 from cloudfall.render_api import HttpRenderApiClient, read_api_key
 from cloudfall.render_api import (
     import_render_api as render_api_import,
@@ -255,8 +256,8 @@ class AgentToolset:
             targets = ImportTargets(
                 application_id=ResourceId.from_boundary(application),
                 server_id=ResourceId.from_boundary(server),
-                project_directory=self._path(output_directory),
-                environment_directory=self._path(environment_directory),
+                project_directory=project_path(output_directory),
+                environment_directory=project_path(environment_directory),
             )
         except (TypeError, ValueError) as error:
             return _invalid_argument(error)
@@ -281,8 +282,8 @@ class AgentToolset:
             targets = ImportTargets(
                 application_id=ResourceId.from_boundary(application),
                 server_id=ResourceId.from_boundary(server),
-                project_directory=self._path(output_directory),
-                environment_directory=self._path(environment_directory),
+                project_directory=project_path(output_directory),
+                environment_directory=project_path(environment_directory),
             )
         except (TypeError, ValueError) as error:
             return _invalid_argument(error)
@@ -490,8 +491,12 @@ class AgentToolset:
         confirm: bool = False,
     ) -> dict[str, object]:
         """Preview or execute the resumable end-to-end migration plan."""
+        try:
+            confined_plan_file = project_path(plan_file)
+        except ValueError as error:
+            return _invalid_argument(error)
         options = MigrateOptions(
-            plan_file=self._path(plan_file),
+            plan_file=confined_plan_file,
             builds=builds if builds is not None else {},
             releases=releases if releases is not None else {},
             environment_files={

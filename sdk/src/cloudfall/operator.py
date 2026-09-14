@@ -38,6 +38,7 @@ _PROPOSAL_SCHEMA = "operator-proposal.schema.json"
 _FINGERPRINT_LENGTH = 16
 _ERROR_FEED_UNREACHABLE = "operator_feed_unreachable"
 _ERROR_FEED_INVALID = "operator_feed_invalid"
+_ERROR_GATEWAY_MATERIAL_INVALID = "operator_gateway_material_invalid"
 _ERROR_PROPOSAL_EXISTS = "operator_proposal_exists"
 _ERROR_PROPOSAL_MISSING = "operator_proposal_missing"
 _ERROR_PROPOSAL_NOT_OPEN = "operator_proposal_not_open"
@@ -264,10 +265,18 @@ class GatewayAlertFeed:
 
     def fetch(self) -> tuple[OperatorAlert, ...]:
         """Fetch firing alerts through the gateway."""
-        context = ssl.create_default_context(cafile=str(self.ca_path))
-        context.load_cert_chain(
-            certfile=str(self.certificate_path), keyfile=str(self.key_path)
-        )
+        try:
+            context = ssl.create_default_context(cafile=str(self.ca_path))
+            context.load_cert_chain(
+                certfile=str(self.certificate_path), keyfile=str(self.key_path)
+            )
+        except OSError as error:
+            message = (
+                "gateway TLS material could not be loaded "
+                f"(ca {self.ca_path}, certificate {self.certificate_path}, "
+                f"key {self.key_path}): {error}"
+            )
+            raise OperatorError(_ERROR_GATEWAY_MATERIAL_INVALID, message) from error
         request = urllib.request.Request(self.url)  # noqa: S310 - declared https gateway
         try:
             with urllib.request.urlopen(  # noqa: S310 - declared https gateway

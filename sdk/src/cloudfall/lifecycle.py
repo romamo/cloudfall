@@ -15,6 +15,7 @@ import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import TYPE_CHECKING, cast
 
 from jsonschema.exceptions import ValidationError
@@ -126,6 +127,42 @@ class LifecycleResult:
             result["detail"] = self.detail
         if self.receipt is not None:
             result["receipt"] = str(self.receipt)
+        return result
+
+
+class PreviewSubject(StrEnum):
+    """Kind of declared resource a previewed action targets."""
+
+    COMPONENT = "component"
+    SERVICE = "service"
+
+
+@dataclass(frozen=True, slots=True)
+class LifecyclePreview:
+    """A server-changing action validated against the config, not executed.
+
+    Previews run every controller-side check the action itself runs, so an
+    action that previews cleanly fails only on what the servers report.
+    """
+
+    action: str
+    subject: PreviewSubject
+    subject_id: ResourceId
+    release: ReleaseId | None
+    servers: tuple[ResourceId, ...]
+    effect: str
+
+    def as_dict(self) -> dict[str, object]:
+        """Serialize the preview for agent consumers."""
+        result: dict[str, object] = {
+            "status": "plan",
+            "action": self.action,
+            self.subject.value: self.subject_id.value,
+            "servers": [server.value for server in self.servers],
+            "wouldRun": self.effect,
+        }
+        if self.release is not None:
+            result["release"] = self.release.value
         return result
 
 
@@ -438,6 +475,73 @@ def deploy(
     )
 
 
+def preview_deploy(
+    context: EngineContext,
+    component_id: ResourceId,
+    release: ReleaseId,
+    artifact_directory: Path,
+) -> LifecyclePreview:
+    """Validate a deployment without touching any server."""
+    component = _component(context, component_id)
+    verify_artifact(
+        artifact_directory, component_id, release, context.schema_directory
+    )
+    return LifecyclePreview(
+        action="deploy",
+        subject=PreviewSubject.COMPONENT,
+        subject_id=component_id,
+        release=release,
+        servers=component.server_ids,
+        effect=(
+            f"deploy release {release.value} of component {component_id} to "
+            f"{_server_list(component.server_ids)} behind its health check, "
+            "rolling back automatically if the check fails"
+        ),
+    )
+
+
+def preview_rollback(
+    context: EngineContext, component_id: ResourceId, release: ReleaseId
+) -> LifecyclePreview:
+    """Validate a rollback without touching any server.
+
+    Whether the release is still retained is known only to the servers; the
+    rollback itself fails if it is not.
+    """
+    component = _component(context, component_id)
+    return LifecyclePreview(
+        action="rollback",
+        subject=PreviewSubject.COMPONENT,
+        subject_id=component_id,
+        release=release,
+        servers=component.server_ids,
+        effect=(
+            f"switch component {component_id} on "
+            f"{_server_list(component.server_ids)} back to retained release "
+            f"{release.value} and restart it behind its health check"
+        ),
+    )
+
+
+def preview_restart(
+    context: EngineContext, component_id: ResourceId
+) -> LifecyclePreview:
+    """Validate a restart without touching any server."""
+    component = _component(context, component_id)
+    return LifecyclePreview(
+        action="restart",
+        subject=PreviewSubject.COMPONENT,
+        subject_id=component_id,
+        release=None,
+        servers=component.server_ids,
+        effect=(
+            f"restart component {component_id} on "
+            f"{_server_list(component.server_ids)} and require its declared "
+            "health check"
+        ),
+    )
+
+
 def rollback(
     context: EngineContext,
     component_id: ResourceId,
@@ -543,6 +647,55 @@ def migrate_data(
     receipt_directory: Path | None = None,
 ) -> dict[str, object]:
     """Dump one external database and restore it into a declared service."""
+    service = _checked_data_migration(context, service_id, database, source_url_file)
+    plan = plan_data_migration(
+        context, service_id, database, source_url_file, receipt_directory
+    )
+    execute_plan(plan)
+    result: dict[str, object] = {
+        "status": "ok",
+        "action": "data-migration",
+        "service": service_id.value,
+        "database": database,
+        "servers": [service.server_id.value],
+        "verification": "per-table row counts matched",
+    }
+    if receipt_directory is not None:
+        result["receipt"] = str(
+            receipt_directory / f"{service_id.value}-{database}.json"
+        )
+    return result
+
+
+def preview_data_migration(
+    context: EngineContext,
+    service_id: ResourceId,
+    database: str,
+    source_url_file: Path,
+) -> LifecyclePreview:
+    """Validate a data migration without touching any server."""
+    service = _checked_data_migration(context, service_id, database, source_url_file)
+    return LifecyclePreview(
+        action="data-migration",
+        subject=PreviewSubject.SERVICE,
+        subject_id=service_id,
+        release=None,
+        servers=(service.server_id,),
+        effect=(
+            f"dump the database whose URL is in {source_url_file} on "
+            f"{service.server_id} and restore it into declared database "
+            f"{database} of service {service_id}, refusing a non-empty target "
+            "and verifying per-table row counts"
+        ),
+    )
+
+
+def _checked_data_migration(
+    context: EngineContext,
+    service_id: ResourceId,
+    database: str,
+    source_url_file: Path,
+) -> ServiceInventory:
     service = _postgresql_service(context, service_id)
     postgresql = service.postgresql
     if postgresql is None:
@@ -563,23 +716,7 @@ def migrate_data(
             f"{source_url_file}"
         )
         raise LifecycleError(_ERROR_SOURCE_URL_MISSING, detail)
-    plan = plan_data_migration(
-        context, service_id, database, source_url_file, receipt_directory
-    )
-    execute_plan(plan)
-    result: dict[str, object] = {
-        "status": "ok",
-        "action": "data-migration",
-        "service": service_id.value,
-        "database": database,
-        "servers": [service.server_id.value],
-        "verification": "per-table row counts matched",
-    }
-    if receipt_directory is not None:
-        result["receipt"] = str(
-            receipt_directory / f"{service_id.value}-{database}.json"
-        )
-    return result
+    return service
 
 
 def backup_service(
@@ -687,6 +824,10 @@ def _component(
         detail = f"component does not exist: {component_id}"
         raise LifecycleError(_ERROR_COMPONENT_MISSING, detail)
     return component
+
+
+def _server_list(servers: tuple[ResourceId, ...]) -> str:
+    return ", ".join(server.value for server in servers)
 
 
 def _render_inventory_step(context: EngineContext) -> ExecutionStep:

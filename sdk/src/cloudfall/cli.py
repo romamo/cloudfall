@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import argparse
 import json
 import os
 import sys
@@ -11,6 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    import argparse
     from argparse import Namespace
     from collections.abc import Callable, Sequence
 
@@ -19,6 +19,13 @@ if TYPE_CHECKING:
     from cloudfall.validation import ValidatedConfig
 
 from cloudfall.agent_tools import AgentConfig
+from cloudfall.arguments import (
+    StrictArgumentParser,
+    parse_arguments,
+    project_path_argument,
+    release_id_argument,
+    resource_id_argument,
+)
 from cloudfall.audit import AuditStatus, audit_inventory
 from cloudfall.authoring import (
     AuthoringError,
@@ -39,7 +46,6 @@ from cloudfall.domain import (
     ConnectionAddress,
     Hostname,
     LinuxUser,
-    ReleaseId,
     ResourceId,
     TcpPort,
 )
@@ -53,10 +59,15 @@ from cloudfall.lifecycle import (
     DeployOptions,
     EngineContext,
     LifecycleError,
+    LifecyclePreview,
     backup_service,
     deploy,
     health,
     migrate_data,
+    preview_data_migration,
+    preview_deploy,
+    preview_restart,
+    preview_rollback,
     restart,
     rollback,
     verify_backup,
@@ -90,6 +101,7 @@ from cloudfall.project import (
     GitRevision,
     GitSourceUrl,
     InitOptions,
+    ProjectDescription,
     ProjectError,
     ProjectName,
     init_project,
@@ -125,7 +137,7 @@ from cloudfall.validation import (
 
 
 def _add_config_parsers(
-    commands: argparse._SubParsersAction[argparse.ArgumentParser],
+    commands: argparse._SubParsersAction[StrictArgumentParser],
 ) -> None:
     config_parser = commands.add_parser("config", help="operate on the config")
     config_commands = config_parser.add_subparsers(dest="config_command", required=True)
@@ -171,7 +183,7 @@ def _add_project_directory_argument(parser: argparse.ArgumentParser) -> None:
 
 
 def _add_init_parser(
-    commands: argparse._SubParsersAction[argparse.ArgumentParser],
+    commands: argparse._SubParsersAction[StrictArgumentParser],
 ) -> None:
     init_parser = commands.add_parser(
         "init", help="create a new project: fleet, applications, and operations"
@@ -195,17 +207,23 @@ def _add_init_parser(
         ),
     )
     init_parser.add_argument(
+        "--description",
+        help=(
+            "one line saying what the project manages, written to the README "
+            "and pyproject.toml"
+        ),
+    )
+    init_parser.add_argument(
         "--source",
         default=DEFAULT_SOURCE_URL,
         help=(
-            "git location of Cloudfall to install from "
-            f"(default: {DEFAULT_SOURCE_URL})"
+            f"git location of Cloudfall to install from (default: {DEFAULT_SOURCE_URL})"
         ),
     )
 
 
 def _add_add_parsers(
-    commands: argparse._SubParsersAction[argparse.ArgumentParser],
+    commands: argparse._SubParsersAction[StrictArgumentParser],
 ) -> None:
     add_parser = commands.add_parser(
         "add", help="write a fleet resource into the project"
@@ -249,9 +267,7 @@ def _add_add_parsers(
         "--hostname", help="(default: the address when it is a hostname, else the id)"
     )
     server_parser.add_argument("--ssh-user", default="root", help="(default: root)")
-    server_parser.add_argument(
-        "--ssh-port", type=int, default=22, help="(default: 22)"
-    )
+    server_parser.add_argument("--ssh-port", type=int, default=22, help="(default: 22)")
     server_parser.add_argument("--description")
 
     for subparser in (key_parser, type_parser, server_parser):
@@ -264,8 +280,8 @@ def _add_add_parsers(
         )
 
 
-def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="cloudfall")
+def _parser() -> StrictArgumentParser:
+    parser = StrictArgumentParser(prog="cloudfall")
     commands = parser.add_subparsers(dest="command", required=True)
     _add_init_parser(commands)
     _add_add_parsers(commands)
@@ -277,13 +293,13 @@ def _parser() -> argparse.ArgumentParser:
     _add_project_directory_argument(audit_parser)
     audit_parser.add_argument(
         "--observed",
-        type=Path,
+        type=project_path_argument,
         required=True,
         help="directory containing observed-server JSON snapshots",
     )
     audit_parser.add_argument(
         "--env-receipts",
-        type=Path,
+        type=project_path_argument,
         default=Path("tmp/env-receipts"),
         help=(
             "rendered environment receipt directory used for env-file "
@@ -307,7 +323,7 @@ def _parser() -> argparse.ArgumentParser:
     _add_project_directory_argument(services_inspect_parser)
     services_inspect_parser.add_argument(
         "--output",
-        type=Path,
+        type=project_path_argument,
         default=Path("tmp/observed-services"),
         help="service observation directory (default: tmp/observed-services)",
     )
@@ -323,19 +339,19 @@ def _parser() -> argparse.ArgumentParser:
     _add_project_directory_argument(services_status_parser)
     services_status_parser.add_argument(
         "--observed",
-        type=Path,
+        type=project_path_argument,
         required=True,
         help="directory containing observed-server JSON snapshots",
     )
     services_status_parser.add_argument(
         "--service-observed",
-        type=Path,
+        type=project_path_argument,
         default=Path("tmp/observed-services"),
         help="domain observation directory (default: tmp/observed-services)",
     )
     services_status_parser.add_argument(
         "--deployments",
-        type=Path,
+        type=project_path_argument,
         default=Path("tmp/deployments"),
         help="deployment receipt directory (default: tmp/deployments)",
     )
@@ -364,25 +380,25 @@ def _parser() -> argparse.ArgumentParser:
     _add_project_directory_argument(dashboard_build_parser)
     dashboard_build_parser.add_argument(
         "--observed",
-        type=Path,
+        type=project_path_argument,
         required=True,
         help="directory containing observed-server JSON snapshots",
     )
     dashboard_build_parser.add_argument(
         "--service-observed",
-        type=Path,
+        type=project_path_argument,
         default=Path("tmp/observed-services"),
         help="domain observation directory (default: tmp/observed-services)",
     )
     dashboard_build_parser.add_argument(
         "--deployments",
-        type=Path,
+        type=project_path_argument,
         default=Path("tmp/deployments"),
         help="deployment receipt directory (default: tmp/deployments)",
     )
     dashboard_build_parser.add_argument(
         "--output",
-        type=Path,
+        type=project_path_argument,
         default=Path("tmp/dashboard"),
         help="dashboard output directory (default: tmp/dashboard)",
     )
@@ -399,19 +415,19 @@ def _parser() -> argparse.ArgumentParser:
     _add_project_directory_argument(dashboard_serve_parser)
     dashboard_serve_parser.add_argument(
         "--observed",
-        type=Path,
+        type=project_path_argument,
         required=True,
         help="directory containing observed-server JSON snapshots",
     )
     dashboard_serve_parser.add_argument(
         "--service-observed",
-        type=Path,
+        type=project_path_argument,
         default=Path("tmp/observed-services"),
         help="domain observation directory (default: tmp/observed-services)",
     )
     dashboard_serve_parser.add_argument(
         "--deployments",
-        type=Path,
+        type=project_path_argument,
         default=Path("tmp/deployments"),
         help="deployment receipt directory (default: tmp/deployments)",
     )
@@ -451,7 +467,7 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _add_migrate_parser(
-    commands: argparse._SubParsersAction[argparse.ArgumentParser],
+    commands: argparse._SubParsersAction[StrictArgumentParser],
 ) -> None:
     migrate_parser = commands.add_parser(
         "migrate",
@@ -472,43 +488,43 @@ def _add_migrate_parser(
     )
     migrate_parser.add_argument(
         "--inventory-file",
-        type=Path,
+        type=project_path_argument,
         default=Path("tmp/ansible-inventory.json"),
         help="rendered inventory path (default: tmp/ansible-inventory.json)",
     )
     migrate_parser.add_argument(
         "--observed",
-        type=Path,
+        type=project_path_argument,
         default=Path("tmp/observed"),
         help="server observation directory (default: tmp/observed)",
     )
     migrate_parser.add_argument(
         "--service-observed",
-        type=Path,
+        type=project_path_argument,
         default=Path("tmp/observed-services"),
         help="domain observation directory (default: tmp/observed-services)",
     )
     migrate_parser.add_argument(
         "--deployments",
-        type=Path,
+        type=project_path_argument,
         default=Path("tmp/deployments"),
         help="domain receipt directory (default: tmp/deployments)",
     )
     migrate_parser.add_argument(
         "--receipts",
-        type=Path,
+        type=project_path_argument,
         default=Path("tmp/releases"),
         help="release receipt directory (default: tmp/releases)",
     )
     migrate_parser.add_argument(
         "--artifacts",
-        type=Path,
+        type=project_path_argument,
         default=Path("tmp/artifacts"),
         help="artifact directory (default: tmp/artifacts)",
     )
     migrate_parser.add_argument(
         "--plan-file",
-        type=Path,
+        type=project_path_argument,
         default=Path("tmp/migrate/plan.json"),
         help="persisted plan location (default: tmp/migrate/plan.json)",
     )
@@ -557,7 +573,7 @@ def _add_migrate_parser(
 
 
 def _add_lifecycle_parsers(
-    commands: argparse._SubParsersAction[argparse.ArgumentParser],
+    commands: argparse._SubParsersAction[StrictArgumentParser],
 ) -> None:
     data_parser = commands.add_parser(
         "data", help="migrate data into declared services"
@@ -571,7 +587,8 @@ def _add_lifecycle_parsers(
         ),
     )
     _add_project_directory_argument(data_migrate_parser)
-    data_migrate_parser.add_argument("service")
+    data_migrate_parser.add_argument("service", type=resource_id_argument)
+    _add_execute_argument(data_migrate_parser)
     data_migrate_parser.add_argument(
         "--database",
         required=True,
@@ -588,7 +605,7 @@ def _add_lifecycle_parsers(
     )
     data_migrate_parser.add_argument(
         "--receipts",
-        type=Path,
+        type=project_path_argument,
         default=Path("tmp/data-migrations"),
         help="migration receipt directory (default: tmp/data-migrations)",
     )
@@ -606,7 +623,7 @@ def _add_lifecycle_parsers(
     )
     data_migrate_parser.add_argument(
         "--inventory-file",
-        type=Path,
+        type=project_path_argument,
         default=Path("tmp/ansible-inventory.json"),
         help="rendered inventory path (default: tmp/ansible-inventory.json)",
     )
@@ -615,14 +632,16 @@ def _add_lifecycle_parsers(
         "deploy", help="deploy one built component release"
     )
     _add_lifecycle_arguments(deploy_parser)
+    _add_execute_argument(deploy_parser)
     deploy_parser.add_argument(
         "--release",
+        type=release_id_argument,
         required=True,
         help="release id produced by cloudfall-engine artifact build",
     )
     deploy_parser.add_argument(
         "--artifacts",
-        type=Path,
+        type=project_path_argument,
         default=Path("tmp/artifacts"),
         help="artifact directory (default: tmp/artifacts)",
     )
@@ -633,7 +652,7 @@ def _add_lifecycle_parsers(
     )
     deploy_parser.add_argument(
         "--receipts",
-        type=Path,
+        type=project_path_argument,
         default=Path("tmp/releases"),
         help="release receipt directory (default: tmp/releases)",
     )
@@ -642,8 +661,10 @@ def _add_lifecycle_parsers(
         "rollback", help="switch one component back to an existing release"
     )
     _add_lifecycle_arguments(rollback_parser)
+    _add_execute_argument(rollback_parser)
     rollback_parser.add_argument(
         "--release",
+        type=release_id_argument,
         required=True,
         help="existing release id to activate",
     )
@@ -652,6 +673,7 @@ def _add_lifecycle_parsers(
         "restart", help="restart one component behind its health check"
     )
     _add_lifecycle_arguments(restart_parser)
+    _add_execute_argument(restart_parser)
 
     health_parser = commands.add_parser(
         "health", help="probe one component's declared health check"
@@ -660,7 +682,7 @@ def _add_lifecycle_parsers(
 
 
 def _add_import_parsers(
-    commands: argparse._SubParsersAction[argparse.ArgumentParser],
+    commands: argparse._SubParsersAction[StrictArgumentParser],
 ) -> None:
     import_parser = commands.add_parser(
         "import", help="import external platform definitions"
@@ -673,23 +695,25 @@ def _add_import_parsers(
     render_parser.add_argument("blueprint", type=Path)
     render_parser.add_argument(
         "--application",
+        type=resource_id_argument,
         required=True,
         help="Cloudfall application id (also the application's Linux user)",
     )
     render_parser.add_argument(
         "--server",
+        type=resource_id_argument,
         required=True,
         help="declared server id that receives every imported resource",
     )
     render_parser.add_argument(
         "--output",
-        type=Path,
+        type=project_path_argument,
         default=Path("tmp/import/config"),
         help="config fragment output directory (default: tmp/import/config)",
     )
     render_parser.add_argument(
         "--env-dir",
-        type=Path,
+        type=project_path_argument,
         default=Path("tmp/import/env"),
         help="environment file output directory (default: tmp/import/env)",
     )
@@ -717,23 +741,25 @@ def _add_import_parsers(
     )
     render_api_parser.add_argument(
         "--application",
+        type=resource_id_argument,
         required=True,
         help="Cloudfall application id (also the application's Linux user)",
     )
     render_api_parser.add_argument(
         "--server",
+        type=resource_id_argument,
         required=True,
         help="declared server id that receives every imported resource",
     )
     render_api_parser.add_argument(
         "--output",
-        type=Path,
+        type=project_path_argument,
         default=Path("tmp/import/config"),
         help="config fragment output directory (default: tmp/import/config)",
     )
     render_api_parser.add_argument(
         "--env-dir",
-        type=Path,
+        type=project_path_argument,
         default=Path("tmp/import/env"),
         help="environment file output directory (default: tmp/import/env)",
     )
@@ -746,7 +772,7 @@ def _add_import_parsers(
 
 
 def _add_operator_parsers(
-    commands: argparse._SubParsersAction[argparse.ArgumentParser],
+    commands: argparse._SubParsersAction[StrictArgumentParser],
 ) -> None:
     operator_parser = commands.add_parser(
         "operator", help="alert-driven propose-and-approve operation"
@@ -777,7 +803,7 @@ def _add_operator_parsers(
     )
     operator_run_parser.add_argument(
         "--observed",
-        type=Path,
+        type=project_path_argument,
         default=Path("tmp/operator/observed"),
         help=(
             "observation directory for drift checks (default: tmp/operator/observed)"
@@ -791,17 +817,17 @@ def _add_operator_parsers(
         "show", help="show one proposal receipt"
     )
     _add_operator_arguments(operator_show_parser)
-    operator_show_parser.add_argument("proposal")
+    operator_show_parser.add_argument("proposal", type=resource_id_argument)
     operator_approve_parser = operator_commands.add_parser(
         "approve", help="execute a proposal and verify its trigger resolves"
     )
     _add_operator_arguments(operator_approve_parser)
     _add_operator_feed_arguments(operator_approve_parser, required=False)
     _add_operator_engine_arguments(operator_approve_parser)
-    operator_approve_parser.add_argument("proposal")
+    operator_approve_parser.add_argument("proposal", type=resource_id_argument)
     operator_approve_parser.add_argument(
         "--observed",
-        type=Path,
+        type=project_path_argument,
         default=Path("tmp/operator/observed"),
         help=(
             "observation directory for drift verification "
@@ -817,7 +843,7 @@ def _add_operator_parsers(
 
 
 def _add_secrets_parsers(
-    commands: argparse._SubParsersAction[argparse.ArgumentParser],
+    commands: argparse._SubParsersAction[StrictArgumentParser],
 ) -> None:
     secrets_parser = commands.add_parser(
         "secrets", help="resolve declared secret references"
@@ -830,7 +856,7 @@ def _add_secrets_parsers(
         help="render one component's references into its environment file",
     )
     _add_project_directory_argument(render_parser)
-    render_parser.add_argument("component")
+    render_parser.add_argument("component", type=resource_id_argument)
     render_parser.add_argument(
         "--schemas",
         type=Path,
@@ -845,13 +871,13 @@ def _add_secrets_parsers(
     )
     render_parser.add_argument(
         "--output",
-        type=Path,
+        type=project_path_argument,
         default=None,
         help=("environment file to write (default: tmp/env/<component>.env)"),
     )
     render_parser.add_argument(
         "--receipts",
-        type=Path,
+        type=project_path_argument,
         default=Path("tmp/env-receipts"),
         help=("environment receipt directory (default: tmp/env-receipts)"),
     )
@@ -863,14 +889,14 @@ def _add_secrets_parsers(
     )
     render_parser.add_argument(
         "--inventory-file",
-        type=Path,
+        type=project_path_argument,
         default=Path("tmp/ansible-inventory.json"),
         help="rendered inventory path (default: tmp/ansible-inventory.json)",
     )
 
 
 def _add_backup_parsers(
-    commands: argparse._SubParsersAction[argparse.ArgumentParser],
+    commands: argparse._SubParsersAction[StrictArgumentParser],
 ) -> None:
     backup_parser = commands.add_parser(
         "backup", help="run and prove declared service backups"
@@ -882,7 +908,7 @@ def _add_backup_parsers(
     ):
         subparser = backup_commands.add_parser(name, help=description)
         _add_project_directory_argument(subparser)
-        subparser.add_argument("service")
+        subparser.add_argument("service", type=resource_id_argument)
         subparser.add_argument(
             "--schemas",
             type=Path,
@@ -891,7 +917,7 @@ def _add_backup_parsers(
         )
         subparser.add_argument(
             "--receipts",
-            type=Path,
+            type=project_path_argument,
             default=Path("tmp/backups"),
             help="backup receipt directory (default: tmp/backups)",
         )
@@ -908,7 +934,7 @@ def _add_operator_arguments(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--proposals",
-        type=Path,
+        type=project_path_argument,
         default=Path("tmp/operator/proposals"),
         help="proposal receipt directory (default: tmp/operator/proposals)",
     )
@@ -936,15 +962,26 @@ def _add_operator_engine_arguments(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--inventory-file",
-        type=Path,
+        type=project_path_argument,
         default=Path("tmp/ansible-inventory.json"),
         help="rendered inventory path (default: tmp/ansible-inventory.json)",
     )
 
 
+def _add_execute_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--yes",
+        action="store_true",
+        help=(
+            "change the servers; without this flag the command validates the "
+            "request and only shows what it would do"
+        ),
+    )
+
+
 def _add_lifecycle_arguments(parser: argparse.ArgumentParser) -> None:
     _add_project_directory_argument(parser)
-    parser.add_argument("component")
+    parser.add_argument("component", type=resource_id_argument)
     parser.add_argument(
         "--schemas",
         type=Path,
@@ -959,7 +996,7 @@ def _add_lifecycle_arguments(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--inventory-file",
-        type=Path,
+        type=project_path_argument,
         default=Path("tmp/ansible-inventory.json"),
         help="rendered inventory path (default: tmp/ansible-inventory.json)",
     )
@@ -967,7 +1004,7 @@ def _add_lifecycle_arguments(parser: argparse.ArgumentParser) -> None:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the CLI and return a process exit code."""
-    arguments = _parser().parse_args(argv)
+    arguments = parse_arguments(_parser(), argv)
     if arguments.command == "init":
         return _run_init(arguments)
     try:
@@ -1003,6 +1040,11 @@ def _run_init(arguments: Namespace) -> int:
             name=name,
             revision=revision,
             source=GitSourceUrl.from_boundary(arguments.source),
+            description=(
+                ProjectDescription.from_boundary(arguments.description)
+                if arguments.description is not None
+                else None
+            ),
         )
         scaffold = init_project(options)
     except ValueError as error:
@@ -1074,8 +1116,8 @@ def _run_add(arguments: Namespace, project_directory: Path) -> int:
 def _run_import_render(arguments: Namespace) -> int:
     try:
         targets = ImportTargets(
-            application_id=ResourceId.from_boundary(arguments.application),
-            server_id=ResourceId.from_boundary(arguments.server),
+            application_id=arguments.application,
+            server_id=arguments.server,
             project_directory=Path(arguments.output),
             environment_directory=Path(arguments.env_dir),
         )
@@ -1183,7 +1225,7 @@ def _run_secrets_render(
     try:
         result = render_environment(
             _engine_context(arguments, schema_directory),
-            ResourceId.from_boundary(arguments.component),
+            arguments.component,
             SopsSecretProvider(secrets_directory=Path(arguments.secrets_dir)),
             output,
             receipt_directory=Path(arguments.receipts),
@@ -1215,7 +1257,7 @@ def _run_backup_operation(
     try:
         result = operation(
             _engine_context(arguments, schema_directory),
-            ResourceId.from_boundary(arguments.service),
+            arguments.service,
             Path(arguments.receipts),
         )
     except LifecycleError as error:
@@ -1337,7 +1379,7 @@ def _run_operator_show(
 ) -> int:
     try:
         store = _operator_store(arguments, schema_directory)
-        proposal = store.load(ResourceId.from_boundary(arguments.proposal))
+        proposal = store.load(arguments.proposal)
     except OperatorError as error:
         return _operator_exit(error)
     _write_json(proposal.as_document())
@@ -1350,7 +1392,7 @@ def _run_operator_approve(
     inventory = PlatformInventory.from_state(state)
     try:
         store = _operator_store(arguments, schema_directory)
-        proposal_id = ResourceId.from_boundary(arguments.proposal)
+        proposal_id = arguments.proposal
         pending = store.load(proposal_id)
         context = _engine_context(arguments, schema_directory)
         if pending.trigger_kind is TriggerKind.ALERT:
@@ -1447,7 +1489,6 @@ def _run_dashboard_serve(
             },
         }
     )
-    sys.stdout.flush()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
@@ -1493,10 +1534,20 @@ def _lifecycle_exit(error: LifecycleError) -> int:
 def _run_data_migrate(
     arguments: Namespace, _state: ValidatedConfig, schema_directory: Path
 ) -> int:
+    context = _engine_context(arguments, schema_directory)
     try:
+        if not arguments.yes:
+            return _write_plan(
+                preview_data_migration(
+                    context,
+                    arguments.service,
+                    str(arguments.database),
+                    Path(arguments.source_url_file),
+                )
+            )
         result = migrate_data(
-            _engine_context(arguments, schema_directory),
-            ResourceId.from_boundary(arguments.service),
+            context,
+            arguments.service,
             str(arguments.database),
             Path(arguments.source_url_file),
             Path(arguments.receipts),
@@ -1510,11 +1561,21 @@ def _run_data_migrate(
 def _run_deploy(
     arguments: Namespace, _state: ValidatedConfig, schema_directory: Path
 ) -> int:
+    context = _engine_context(arguments, schema_directory)
     try:
+        if not arguments.yes:
+            return _write_plan(
+                preview_deploy(
+                    context,
+                    arguments.component,
+                    arguments.release,
+                    Path(arguments.artifacts),
+                )
+            )
         result = deploy(
-            _engine_context(arguments, schema_directory),
-            ResourceId.from_boundary(arguments.component),
-            ReleaseId.from_boundary(arguments.release),
+            context,
+            arguments.component,
+            arguments.release,
             Path(arguments.artifacts),
             DeployOptions(
                 environment_file=(
@@ -1532,11 +1593,16 @@ def _run_deploy(
 def _run_rollback(
     arguments: Namespace, _state: ValidatedConfig, schema_directory: Path
 ) -> int:
+    context = _engine_context(arguments, schema_directory)
     try:
+        if not arguments.yes:
+            return _write_plan(
+                preview_rollback(context, arguments.component, arguments.release)
+            )
         result = rollback(
-            _engine_context(arguments, schema_directory),
-            ResourceId.from_boundary(arguments.component),
-            ReleaseId.from_boundary(arguments.release),
+            context,
+            arguments.component,
+            arguments.release,
         )
     except LifecycleError as error:
         return _lifecycle_exit(error)
@@ -1547,11 +1613,11 @@ def _run_rollback(
 def _run_restart(
     arguments: Namespace, _state: ValidatedConfig, schema_directory: Path
 ) -> int:
+    context = _engine_context(arguments, schema_directory)
     try:
-        result = restart(
-            _engine_context(arguments, schema_directory),
-            ResourceId.from_boundary(arguments.component),
-        )
+        if not arguments.yes:
+            return _write_plan(preview_restart(context, arguments.component))
+        result = restart(context, arguments.component)
     except LifecycleError as error:
         return _lifecycle_exit(error)
     _write_json(result.as_dict())
@@ -1564,7 +1630,7 @@ def _run_health(
     try:
         result = health(
             _engine_context(arguments, schema_directory),
-            ResourceId.from_boundary(arguments.component),
+            arguments.component,
         )
     except LifecycleError as error:
         return _lifecycle_exit(error)
@@ -1640,8 +1706,21 @@ def _key_value_pairs(entries: list[str], option: str) -> dict[str, str]:
     return pairs
 
 
+def _write_plan(preview: LifecyclePreview) -> int:
+    _write_json(
+        {
+            **preview.as_dict(),
+            "instruction": "review the plan and re-run with --yes to execute it",
+        }
+    )
+    return 0
+
+
 def _write_json(payload: object) -> None:
     sys.stdout.write(f"{json.dumps(payload, sort_keys=True)}\n")
+    # A pipe makes stdout block-buffered; flush so long-running commands such
+    # as `operator run --interval` deliver each document when it is written.
+    sys.stdout.flush()
 
 
 def run() -> None:

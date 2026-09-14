@@ -155,8 +155,10 @@ uv sync
 The project holds one directory per resource kind (`servers/`,
 `server-types/`, `ssh-public-keys/`, `applications/`, `components/`,
 `services/`, `domains/`, `alert-rules/`, `operator-policies/`,
-`logging-stacks/`), a README with the next steps, a `.gitignore` for the
-runtime `tmp/` directory where evidence and receipts land, and a
+`logging-stacks/`), a `secrets/` directory with a `.sops.yaml` template for
+its encrypted fragments, a README with the next steps (pass `--description`
+to say what the project manages), a `.gitignore` for the runtime `tmp/`
+directory where evidence and receipts land, a fresh git repository, and a
 `pyproject.toml`:
 
 ```toml
@@ -236,7 +238,7 @@ pause resumes exactly where it stopped.
 
 Managed-database contents follow the same guided path: save the source
 connection URL into a local file and either run `cloudfall data migrate`
-directly or add `--data <database>=<url-file>` to the migration plan. The
+directly (it shows the plan until you add `--yes`) or add `--data <database>=<url-file>` to the migration plan. The
 engine dumps on the target host, restores over the peer-authenticated
 socket, refuses non-empty target databases, verifies per-table row counts,
 and writes a `DataMigrationReceipt`. The same path serves databases hosted

@@ -7,13 +7,20 @@ Most of the SDK is read-only: load a project, validate it strictly, resolve
 references, and expose inventory queries without depending on Ansible internals.
 
 `cloudfall init [directory]` is the first command: it lays out a new project
-(one directory per resource kind, a README, a `.gitignore` for `tmp/`, and a
-`pyproject.toml` pinning Cloudfall to the commit the running `cloudfall` was
-installed from, or to `--rev`) and reports the files it wrote as JSON. It
-initializes the current directory when none is named and refuses a non-empty
-one. Every other command runs inside a project: the current directory when
-it is one, else `--project`, else `CLOUDFALL_PROJECT`; relative
-paths such as the `tmp/` defaults resolve against the project.
+(one directory per resource kind, an empty `secrets/` with a `.sops.yaml`
+template, a README whose guide and example links point at the pinned
+commit, a `.gitignore` for `tmp/`, and a `pyproject.toml` pinning Cloudfall
+to the commit the running `cloudfall` was installed from, or to `--rev`),
+runs `git init` unless the directory already lies inside a repository, and
+reports the files it wrote as JSON. `--description` writes one line saying
+what the project manages into the README and `pyproject.toml`. When
+`cloudfall` runs from a source checkout, the pin is refused unless the
+checkout is clean (else `HEAD` is not the running code) and `HEAD` is on a
+remote branch (else `uv sync` could not fetch it). It initializes the
+current directory when none is named and refuses a non-empty one. Every
+other command runs inside a project: the current directory when it is one,
+else `--project`, else `CLOUDFALL_PROJECT`; relative paths such as the
+`tmp/` defaults resolve against the project.
 
 `cloudfall add ssh-key|server-type|server` writes fleet resources into the
 project: an `SshPublicKey` read from a key file, a `ServerType` from the
@@ -32,11 +39,17 @@ engine's playbook contract for execution — never Ansible internals. Each
 operation is split into a pure, testable execution plan and a thin executor:
 
 ```console
-uv run cloudfall deploy --project config/examples crm-backend --release <release-id>
-uv run cloudfall rollback --project config/examples crm-backend --release <release-id>
-uv run cloudfall restart --project config/examples crm-backend
+uv run cloudfall deploy --project config/examples crm-backend --release <release-id> --yes
+uv run cloudfall rollback --project config/examples crm-backend --release <release-id> --yes
+uv run cloudfall restart --project config/examples crm-backend --yes
 uv run cloudfall health --project config/examples crm-backend
 ```
+
+`deploy`, `rollback`, `restart`, and `data migrate` change servers only with
+`--yes`. Without it they run every controller-side check (declared component,
+verified artifact, declared database, source URL file) and print a `plan`
+naming the target servers, exit `0`, so a request can be reviewed before it
+runs.
 
 `deploy` refuses to run when the built artifact is missing, misidentified, or
 fails digest verification, and refuses to report success if the engine wrote

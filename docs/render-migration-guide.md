@@ -142,4 +142,5 @@ plan; it finishes with TLS issuance and the final audit.
   codes for drift
 - `task dashboard` renders the evidence-derived operations dashboard
 - `cloudfall deploy` / `rollback` / `restart` / `health` replace Render's
-  deploy buttons, with structured JSON results
+  deploy buttons, with structured JSON results; the first three show a
+  validated plan and change servers only with `--yes`

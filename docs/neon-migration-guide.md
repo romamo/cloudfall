@@ -138,7 +138,12 @@ mode or stop its writers, then:
 ```console
 uv run cloudfall data migrate postgresql-main \
   --database app --source-url-file tmp/neon-app-url
+uv run cloudfall data migrate postgresql-main \
+  --database app --source-url-file tmp/neon-app-url --yes
 ```
+
+The first command checks the declared database and the URL file and shows
+the plan; `--yes` runs it.
 
 The guided migration dumps from Neon on the target host, restores over
 the peer-authenticated socket as the declared owner, verifies per-table
