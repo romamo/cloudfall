@@ -18,6 +18,7 @@ import os
 import re
 import shutil
 import subprocess
+import textwrap
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
@@ -26,6 +27,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
+from cloudfall.commands import CommandEffect, commands_with_effect
 from cloudfall.domain import ResourceKind
 
 if TYPE_CHECKING:
@@ -54,6 +56,12 @@ SECRETS_GUIDE_PATH = "docs/secrets-guide.md"
 
 EXAMPLES_PATH = "config/examples"
 """Path of the reference resource set inside the Cloudfall repository."""
+
+AGENT_CONTRACT_FILE = "AGENTS.md"
+"""Project file stating the terms on which an AI agent operates it."""
+
+CLAUDE_POINTER_FILE = "CLAUDE.md"
+"""One-line project file pointing Claude Code at the agent contract."""
 
 _ERROR_NAME_UNDERIVED = "project_name_underived"
 _ERROR_DIRECTORY_MISSING = "project_directory_missing"
@@ -522,6 +530,8 @@ def init_project(
         ".gitignore": _GITIGNORE,
         SOPS_CONFIGURATION_FILE: _SOPS_CONFIGURATION,
         "README.md": _readme(options, git),
+        AGENT_CONTRACT_FILE: _agent_contract(options),
+        CLAUDE_POINTER_FILE: _CLAUDE_POINTER,
     }
     for kind in ResourceKind:
         files[f"{kind.directory}/.gitkeep"] = ""
@@ -687,3 +697,145 @@ the pinned commit.
 [secrets-guide]: {secrets_guide}
 [examples]: {examples}
 """
+
+
+_CLAUDE_POINTER = f"""\
+Read `{AGENT_CONTRACT_FILE}` before doing anything in this project; it is the
+operating contract for AI agents here.
+"""
+
+
+def _agent_contract(options: InitOptions) -> str:
+    tmp = RUNTIME_DIRECTORY
+    secrets = SECRETS_DIRECTORY
+    kinds = textwrap.fill(
+        ", ".join(f"`{kind.directory}/`" for kind in ResourceKind), width=72
+    )
+    purpose = (
+        str(options.description)
+        if options.description is not None
+        else (
+            "Not stated yet: the project was created without `--description`.\n"
+            "Ask the human what this project manages before planning any\n"
+            "change; do not infer it from the resources."
+        )
+    )
+    reads = _command_rows(CommandEffect.READ)
+    writes = _command_rows(CommandEffect.PROJECT)
+    mutations = _command_rows(CommandEffect.SERVERS, with_gate=True)
+    return f"""# Agent operating contract
+
+This is a [Cloudfall](https://cloudfall.dev) project: `{options.name}`.
+Humans and AI agents both edit the resources and both run the CLI. An
+agent drafts and validates; a human approves anything that changes a
+server. These are the terms.
+
+## What this project manages
+
+{purpose}
+
+## Invocation
+
+Run every command as `uv run cloudfall …` (or `uv run cloudfall-engine …`)
+from this directory, which the CLI recognizes as the project. From
+elsewhere, pass `--project <dir>` or set `CLOUDFALL_PROJECT=<dir>`.
+Relative paths, including every `{tmp}/` default, resolve against the
+project either way. Run `uv sync` once after cloning and after any change
+to the `rev` pin in `pyproject.toml`.
+
+Resources are plain YAML, one document per file, in the kind directories,
+and only those directories are read as resources:
+
+{kinds}
+
+Write or edit them freely, then run `uv run cloudfall config validate`
+before anything else. Never write a value you would have to guess: ask for
+addresses, key owners, git refs, and the like.
+
+## Commands that change nothing on servers
+
+Run these whenever they help. They read the project and evidence, may
+probe servers and public endpoints read-only, and write only under
+`{tmp}/`.
+
+| Command | Does |
+|---|---|
+{reads}
+
+## Commands that write project files
+
+They write resources into this project on the controller; commit the
+result. Servers are untouched.
+
+| Command | Does |
+|---|---|
+{writes}
+
+## Commands that change servers
+
+Every command below changes servers. Do not run one, and do not add its
+gate, unless a human has approved that specific run. The agent's job is to
+prepare it: draft the resources, run the read-only checks, run the command
+without its gate to obtain the plan, and show the plan to the human. The
+human then runs the gated command, or tells the agent to run it. Nothing
+on this list is safe to run on your own initiative.
+
+| Command | Does | Gate |
+|---|---|---|
+{mutations}
+
+There is no other way to change a server from this project: no ad hoc SSH,
+no hand-written playbook run outside `cloudfall-engine playbook run`.
+
+## Output contract
+
+Every command prints one JSON document on stdout and nothing else. A
+failure prints a JSON error envelope on stderr, `{{"status": "error",
+"error": {{"code": …, "message": …}}}}`, and the `code` is stable: branch on
+it, not on the message. Read the exit code first:
+
+| Exit | Meaning |
+|---|---|
+| `0` | the command ran and its result is positive (`status: ok` or `status: plan`) |
+| `1` | the command ran and its result is negative: drift, unhealthy, a failed step |
+| `2` | invalid input, usage, or an unmet precondition; nothing ran |
+| `3` | compliance unknown: observations missing or stale (`audit`, `migrate`) |
+
+## Evidence
+
+`{tmp}/` holds everything derived or produced: observations, receipts,
+rendered inventory, built artifacts, rendered environment files, and the
+persisted migration plan. It is ignored by git. Read anything there to
+answer questions about state. Exception: `{tmp}/env/` and any other
+rendered environment file contain secret values; do not read or quote them.
+
+Status comes from evidence, never from assumption. A deployment counts as
+done when its receipt exists; a server counts as compliant when `audit`
+says so against a fresh observation. Do not report success you cannot
+point to a receipt or observation for.
+
+## Secrets
+
+Resources declare `secretRefs`; they never hold values. Secret values live
+only in sops-encrypted fragments under `{secrets}/`, which a human writes
+and commits. Never read, decrypt, write, or echo a secret value, and never
+place one in a resource, a command line, a commit, or a message. If a
+command needs a secret file, ask the human to provide the path.
+
+## Git
+
+Resources, `{secrets}/`, `.sops.yaml`, `pyproject.toml`, `uv.lock`, and the
+documents in this directory are committed. `{tmp}/` and `.venv/` are not.
+Commit resource changes with a message saying what changed and why; do not
+commit on the human's behalf unless asked.
+"""
+
+
+def _command_rows(effect: CommandEffect, *, with_gate: bool = False) -> str:
+    rows = []
+    for command in commands_with_effect(effect):
+        cells = [f"`{command.invocation}`", command.summary]
+        if with_gate:
+            cells.append(command.gate or "")
+        rows.append(f"| {' | '.join(cells)} |")
+    return "\n".join(rows)

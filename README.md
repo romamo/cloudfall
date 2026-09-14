@@ -157,9 +157,10 @@ The project holds one directory per resource kind (`servers/`,
 `services/`, `domains/`, `alert-rules/`, `operator-policies/`,
 `logging-stacks/`), a `secrets/` directory with a `.sops.yaml` template for
 its encrypted fragments, a README with the next steps (pass `--description`
-to say what the project manages), a `.gitignore` for the runtime `tmp/`
-directory where evidence and receipts land, a fresh git repository, and a
-`pyproject.toml`:
+to say what the project manages), an `AGENTS.md` stating the terms on which
+an AI agent operates the project (see below), a `.gitignore` for the
+runtime `tmp/` directory where evidence and receipts land, a fresh git
+repository, and a `pyproject.toml`:
 
 ```toml
 [project]
@@ -199,6 +200,22 @@ Bundled playbooks are addressed by name (`cloudfall-engine playbook list`
 shows them); project playbooks by path, with `--roles` directories searched
 before the bundled roles. To move a project to a newer Cloudfall commit, bump
 `rev` and run `uv sync`.
+
+### The agent contract
+
+Humans and AI agents both edit the resources and both run the CLI, with a
+human approving anything that changes a server. `cloudfall init` writes
+that arrangement down as the project's `AGENTS.md`, the operating contract
+an agent started in the directory (Claude Code, Codex, or `cloudfall-mcp`)
+reads first: the canonical `uv run cloudfall` invocation and project
+resolution, every command sorted by effect (changes nothing on servers,
+writes project files, changes servers) with the gate each server-changing
+command demands, the JSON-on-stdout, JSON-error-on-stderr output contract
+and exit codes, what the agent may read under `tmp/`, the rule that secret
+values are never read or written by an agent, and what is committed. A
+one-line `CLAUDE.md` points Claude Code at it. The classification is
+generated from the same catalog the tests check against the CLI, so a new
+command cannot ship unclassified.
 
 ## Migrate from Render
 

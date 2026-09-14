@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 from cloudfall.cli import main
+from cloudfall.commands import COMMANDS, CommandEffect
 from cloudfall.domain import ResourceKind
 from cloudfall.project import (
     CheckoutState,
@@ -467,3 +468,101 @@ def test_cli_reports_a_missing_project_as_json(
     payload = json.loads(capsys.readouterr().err)
     assert exit_code == 2
     assert payload["error"]["code"] == "project_directory_missing"
+
+
+def _section(document: str, heading: str) -> str:
+    """Return the body of one ``##`` section of a markdown document."""
+    marker = f"\n## {heading}\n"
+    assert marker in document, heading
+    body = document.split(marker, 1)[1]
+    return body.split("\n## ", 1)[0]
+
+
+def test_init_writes_the_agent_contract_and_the_claude_pointer(
+    tmp_path: Path,
+) -> None:
+    directory = tmp_path / "fleet"
+
+    scaffold = init_project(_options(directory))
+
+    assert "AGENTS.md" in scaffold.files
+    assert "CLAUDE.md" in scaffold.files
+    contract = (directory / "AGENTS.md").read_text(encoding="utf-8")
+    assert contract.startswith("# Agent operating contract\n")
+    assert "`fleet`" in contract
+    assert "`uv run cloudfall …`" in contract
+    assert "`--project <dir>`" in contract
+    assert "`CLOUDFALL_PROJECT=<dir>`" in contract
+    for heading in (
+        "What this project manages",
+        "Invocation",
+        "Commands that change nothing on servers",
+        "Commands that write project files",
+        "Commands that change servers",
+        "Output contract",
+        "Evidence",
+        "Secrets",
+        "Git",
+    ):
+        assert f"\n## {heading}\n" in contract
+    assert "Ask the human what this project manages" in _section(
+        contract, "What this project manages"
+    )
+    assert '`{"status": "error",' in _section(contract, "Output contract")
+    assert "| `3` |" in _section(contract, "Output contract")
+    assert "`secretRefs`" in _section(contract, "Secrets")
+    assert "`tmp/`" in _section(contract, "Evidence")
+    assert "`.venv/`" in _section(contract, "Git")
+    pointer = (directory / "CLAUDE.md").read_text(encoding="utf-8")
+    assert pointer.count("\n") <= 2
+    assert "`AGENTS.md`" in pointer
+
+
+def test_agent_contract_states_the_description_as_the_purpose(
+    tmp_path: Path,
+) -> None:
+    directory = tmp_path / "fleet"
+    description = ProjectDescription("Two Hetzner hosts running the CRM for Acme")
+
+    init_project(_options(directory, description))
+
+    contract = (directory / "AGENTS.md").read_text(encoding="utf-8")
+    assert _section(contract, "What this project manages").strip() == str(description)
+    assert "Ask the human what this project manages" not in contract
+
+
+def test_agent_contract_classifies_every_command_by_effect(tmp_path: Path) -> None:
+    """The contract names every server-changing command and no other one."""
+    directory = tmp_path / "fleet"
+    init_project(_options(directory))
+    contract = (directory / "AGENTS.md").read_text(encoding="utf-8")
+    sections = {
+        CommandEffect.READ: _section(
+            contract, "Commands that change nothing on servers"
+        ),
+        CommandEffect.PROJECT: _section(contract, "Commands that write project files"),
+        CommandEffect.SERVERS: _section(contract, "Commands that change servers"),
+    }
+
+    for command in COMMANDS:
+        row = f"| `{command.invocation}` |"
+        for effect, section in sections.items():
+            assert (row in section) is (command.effect is effect), command.name
+    for name in (
+        "deploy",
+        "rollback",
+        "restart",
+        "data migrate",
+        "migrate",
+        "backup run",
+        "backup verify",
+        "operator approve",
+    ):
+        assert f"| `uv run cloudfall {name}` |" in sections[CommandEffect.SERVERS]
+    assert (
+        "| `uv run cloudfall-engine playbook run` |" in sections[CommandEffect.SERVERS]
+    )
+    for line in sections[CommandEffect.SERVERS].splitlines():
+        if line.startswith("| `uv run"):
+            assert line.count(" | ") == 2, line
+            assert not line.endswith("|  |"), line

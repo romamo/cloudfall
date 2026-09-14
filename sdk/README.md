@@ -9,8 +9,10 @@ references, and expose inventory queries without depending on Ansible internals.
 `cloudfall init [directory]` is the first command: it lays out a new project
 (one directory per resource kind, an empty `secrets/` with a `.sops.yaml`
 template, a README whose guide and example links point at the pinned
-commit, a `.gitignore` for `tmp/`, and a `pyproject.toml` pinning Cloudfall
-to the commit the running `cloudfall` was installed from, or to `--rev`),
+commit, an `AGENTS.md` operating contract for AI agents with a `CLAUDE.md`
+pointing at it, a `.gitignore` for `tmp/`, and a `pyproject.toml` pinning
+Cloudfall to the commit the running `cloudfall` was installed from, or to
+`--rev`),
 runs `git init` unless the directory already lies inside a repository, and
 reports the files it wrote as JSON. `--description` writes one line saying
 what the project manages into the README and `pyproject.toml`. When
@@ -21,6 +23,16 @@ current directory when none is named and refuses a non-empty one. Every
 other command runs inside a project: the current directory when it is one,
 else `--project`, else `CLOUDFALL_PROJECT`; relative paths such as the
 `tmp/` defaults resolve against the project.
+
+The agent contract is rendered from `cloudfall.commands`, the catalog of
+every `cloudfall` and `cloudfall-engine` leaf command with its effect
+(`read`: reads the project, evidence, or servers and writes only under
+`tmp/`; `project`: writes project files on the controller; `servers`:
+changes servers) and, for the last class, the gate that guards it (`--yes`,
+a reviewed proposal, a declared backup). The tests walk both argparse trees
+and fail when a command is missing from the catalog or a `--yes`-gated
+command is not classed as changing servers, so `AGENTS.md` names every
+server-changing command and no other.
 
 `cloudfall add ssh-key|server-type|server` writes fleet resources into the
 project: an `SshPublicKey` read from a key file, a `ServerType` from the

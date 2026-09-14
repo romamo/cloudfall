@@ -18,6 +18,13 @@ Notable changes to Cloudfall. The format follows
   repository, links the secrets guide and the reference examples at the
   pinned commit, and takes `--description` for an About section in the
   README and the `description` in `pyproject.toml`
+- `cloudfall init` writes `AGENTS.md`, the operating contract for AI agents
+  in the project: canonical invocation, every command sorted by effect with
+  the gate each server-changing command demands, the output contract and
+  exit codes, what may be read under `tmp/`, the secrets rule, and git
+  discipline; plus a one-line `CLAUDE.md` pointing at it. The
+  classification comes from the new `cloudfall.commands` catalog, which
+  the tests check against both argparse trees (#2)
 - `cloudfall init` from a source checkout refuses to pin `HEAD` when tracked
   files are modified (`project_revision_uncommitted`) or when `HEAD` is on
   no remote branch (`project_revision_unpublished`), so a project never pins
