@@ -38,6 +38,7 @@ the place workloads come from.
 | Debian | Operating system | Required | Stock Debian is a principle (any Linux admin can take over), not a placeholder |
 | NixOS | Operating system and its configuration | Alternative | Makes the machine a build output; Cloudfall makes the operation provable on a mutable host |
 | Puppet, Chef, Salt | OS configuration | Alternative | Same layer as Ansible; Cloudfall picked Ansible and hides it |
+| pyinfra | OS configuration | Alternative | Same layer as Ansible, with Python files instead of YAML and a fact-then-diff run that is faster; the candidate engine if Cloudfall ever swaps out Ansible, and hidden behind the engine contract either way |
 | Coolify, Dokploy, CapRover | Self-hosted PaaS | Replaces | Same job (apps behind a proxy with TLS on your server); Docker containers driven from a dashboard versus native systemd driven from typed config with receipts |
 | Dokku | Self-hosted PaaS | Replaces | Heroku-style git push to containers on one host; no typed state, no evidence, no operator |
 | Kamal | Deployment | Replaces | Imperative container deploys over SSH with health checks; closest in spirit on deploys, but containers, no config-versus-observed audit, no databases, no operator |
