@@ -30,7 +30,7 @@ declaring a `LoggingStack` for live hosts.
 Its first executable capability is deterministic Ansible inventory rendering:
 
 ```console
-uv run cloudfall-engine inventory render config/examples
+uv run cloudfall-engine inventory render --project config/examples
 ```
 
 The renderer consumes the SDK's typed inventory and creates host variables plus
@@ -56,7 +56,7 @@ uv run cloudfall-engine playbook run engine/ansible/playbooks/proxy.yml \
 ```
 
 `--check`, `--diff`, `--syntax-check`, `--limit`, `--tags`, and `--extra-vars`
-pass through to `ansible-playbook`. A fleet repository uses this instead of
+pass through to `ansible-playbook`. A project uses this instead of
 setting `ANSIBLE_CONFIG` against a checkout; the `task` targets in this
 repository still call `ansible-playbook` directly because they run from the
 source tree.

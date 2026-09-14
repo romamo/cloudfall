@@ -1,7 +1,7 @@
 """Import a Render blueprint into declarative Cloudfall state.
 
 The importer maps ``render.yaml`` services onto Cloudfall resources, writes
-environment files outside the state directory (state never contains secret
+environment files outside the project directory (the config never contains secret
 values), and records every assumption, unsupported feature, and required
 follow-up action in a structured gap report instead of guessing silently.
 """
@@ -78,7 +78,7 @@ class ImportTargets:
 
     application_id: ResourceId
     server_id: ResourceId
-    config_directory: Path
+    project_directory: Path
     environment_directory: Path
 
 
@@ -203,7 +203,7 @@ def import_render_mapping(
             catalog,
             ResourceKind.APPLICATION,
             application_document,
-            targets.config_directory / "applications",
+            targets.project_directory / "applications",
         )
     ]
     written.extend(
@@ -211,7 +211,7 @@ def import_render_mapping(
             catalog,
             ResourceKind.COMPONENT,
             document,
-            targets.config_directory / "components",
+            targets.project_directory / "components",
         )
         for document in state.component_documents
     )
@@ -220,7 +220,7 @@ def import_render_mapping(
             catalog,
             ResourceKind.SERVICE,
             document,
-            targets.config_directory / "services",
+            targets.project_directory / "services",
         )
         for document in service_documents
     )
@@ -229,7 +229,7 @@ def import_render_mapping(
             catalog,
             ResourceKind.DOMAIN,
             document,
-            targets.config_directory / "domains",
+            targets.project_directory / "domains",
         )
         for document in state.domain_documents
     )
@@ -832,8 +832,8 @@ def _write_report(targets: ImportTargets, state: _ImportState) -> Path:
             f"- **{gap.subject}**: {gap.detail}" for gap in entries
         )
         lines.append("")
-    path = targets.config_directory / "IMPORT-REPORT.md"
-    targets.config_directory.mkdir(parents=True, exist_ok=True)
+    path = targets.project_directory / "IMPORT-REPORT.md"
+    targets.project_directory.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines), encoding="utf-8")
     return path
 

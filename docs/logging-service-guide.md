@@ -78,7 +78,7 @@ ownership and modes.
 
 Copy the synthetic
 [`operations` example](../config/examples/logging-stacks/operations.yaml) into
-`config/production/logging-stacks/`, then replace every example host, name,
+your project's `logging-stacks/`, then replace every example host, name,
 version, path, and retention value.
 
 Declare every journald collector host and every application file glob. A file
@@ -100,9 +100,9 @@ Do not recursively broaden unrelated `/var/log` permissions.
 ## 4. Validate and inspect the plan
 
 ```console
-uv run cloudfall config validate config/production
-uv run cloudfall inventory show config/production
-uv run cloudfall-engine inventory render config/production \
+uv run cloudfall config validate
+uv run cloudfall inventory show
+uv run cloudfall-engine inventory render \
   --output tmp/ansible-inventory.json
 uv run ansible-inventory --inventory tmp/ansible-inventory.json \
   --graph cloudfall_logging_backends
@@ -120,8 +120,8 @@ The check run still requires the pre-provisioned secret files because that is a
 deployment precondition:
 
 ```console
-task logging:check CONFIG_DIR=config/production
-task logging:deploy CONFIG_DIR=config/production
+task logging:check CONFIG_DIR=../my-project
+task logging:deploy CONFIG_DIR=../my-project
 ```
 
 The deployment order is backend first and collectors second, one host at a

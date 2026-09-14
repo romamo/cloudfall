@@ -16,13 +16,13 @@ Render and Cloudfall describe the same things with different words:
 
 | Render | Cloudfall |
 |---|---|
-| Blueprint (`render.yaml`) | Config: YAML resources under your config directory |
+| Blueprint (`render.yaml`) | Config: YAML resources in your project, one directory per kind |
 | Web service (`type: web`) | Component with an HTTP health check and an assigned listen port |
 | Private service (`type: pserv`) | Component with a listen port and no public domain |
 | Background worker (`type: worker`) | Component with a service-active health gate (no fabricated HTTP check) |
 | Managed PostgreSQL (`databases:`) | `Service` of kind PostgreSQL: localhost-only bind, application-owned databases, peer authentication, no database passwords |
 | Custom domain | `Domain` resource: Nginx virtual host plus Let's Encrypt TLS |
-| Environment variables and env groups | Environment files kept outside the config directory; the config never contains secret values |
+| Environment variables and env groups | Environment files under the project's `tmp/`, never in a resource; the config never contains secret values |
 | Instance type / plan | Your server (VPS or bare metal) plus its server type (`ServerType`) |
 | Deploy from GitHub | `cloudfall deploy`: artifact built from a git ref, health-check gate, symlink switch, automatic rollback |
 | Render dashboard | Local operations dashboard (`task dashboard`) |
@@ -44,6 +44,8 @@ Not imported today; each lands in the gap report instead of being guessed at:
 - Your `render.yaml` blueprint and access to your application repositories
 - Python 3.14 and [`uv`](https://docs.astral.sh/uv/) on the machine you run
   Cloudfall from (your workstation works; no management server is required)
+- A project: `uvx --from git+https://github.com/romamo/cloudfall.git cloudfall init my-project`,
+  then `cd my-project && uv sync`. Every command below runs from inside it
 
 ## Step 1: import the blueprint
 
@@ -90,16 +92,19 @@ Treat the required-actions list as your migration checklist.
 
 ## Step 3: complete the config
 
-Merge the emitted fragment with the resources the blueprint cannot know
-about: your `Server` and its server type (`ServerType`). Then validate:
+Move the emitted fragment into your project's kind directories and declare
+what the blueprint cannot know about: your SSH key and the server, whose
+`ServerType` is created from the bundled Debian 13 baseline. Then validate:
 
 ```console
-uv run cloudfall config validate config/production
+uv run cloudfall add ssh-key ~/.ssh/id_ed25519.pub --owner roman
+uv run cloudfall add server h1 --address 203.0.113.10
+uv run cloudfall config validate
 ```
 
 ## Step 4: fill in environment files
 
-The importer creates environment files outside the config directory,
+The importer creates environment files under `tmp/`, never in a resource,
 including any `envVarGroups` from the blueprint. Copy the real secret values
 from the Render dashboard into these files; secrets never enter the config,
 and validation rejects them if they do.
@@ -107,8 +112,8 @@ and validation rejects them if they do.
 ## Step 5: run the migration plan
 
 ```console
-uv run cloudfall migrate config/production --build acme-api=main
-uv run cloudfall migrate config/production --build acme-api=main --yes
+uv run cloudfall migrate --build acme-api=main
+uv run cloudfall migrate --build acme-api=main --yes
 ```
 
 Without `--yes` the command shows the plan. With it, the plan executes step

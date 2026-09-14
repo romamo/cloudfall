@@ -206,6 +206,7 @@ def test_inventory_cli_emits_structured_output(
         [
             "inventory",
             "show",
+            "--project",
             str(EXAMPLES),
             "--schemas",
             str(SCHEMAS),

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -19,13 +20,29 @@ if TYPE_CHECKING:
 
 from cloudfall.agent_tools import AgentConfig
 from cloudfall.audit import AuditStatus, audit_inventory
+from cloudfall.authoring import (
+    AuthoringError,
+    ServerOptions,
+    ServerTypeOptions,
+    SshKeyOptions,
+    add_server,
+    add_server_type,
+    add_ssh_key,
+)
 from cloudfall.dashboard import RefreshInterval, build_dashboard
 from cloudfall.dashboard_server import (
     EvidenceSources,
     ListenEndpoint,
     create_dashboard_server,
 )
-from cloudfall.domain import ReleaseId, ResourceId
+from cloudfall.domain import (
+    ConnectionAddress,
+    Hostname,
+    LinuxUser,
+    ReleaseId,
+    ResourceId,
+    TcpPort,
+)
 from cloudfall.importer import (
     ImportTargets,
     RenderImportError,
@@ -67,6 +84,18 @@ from cloudfall.operator import (
 from cloudfall.operator import (
     run_once as operator_run_once,
 )
+from cloudfall.project import (
+    DEFAULT_SOURCE_URL,
+    PROJECT_DIRECTORY_VARIABLE,
+    GitRevision,
+    GitSourceUrl,
+    InitOptions,
+    ProjectError,
+    ProjectName,
+    init_project,
+    project_context,
+    resolve_installed_revision,
+)
 from cloudfall.render_api import (
     HttpRenderApiClient,
     import_render_api,
@@ -103,7 +132,7 @@ def _add_config_parsers(
     validate_parser = config_commands.add_parser(
         "validate", help="validate the YAML config and resource references"
     )
-    validate_parser.add_argument("config_directory", type=Path)
+    _add_project_directory_argument(validate_parser)
     validate_parser.add_argument(
         "--schemas",
         type=Path,
@@ -120,7 +149,7 @@ def _add_config_parsers(
     show_parser = inventory_commands.add_parser(
         "show", help="show non-secret platform inventory"
     )
-    show_parser.add_argument("config_directory", type=Path)
+    _add_project_directory_argument(show_parser)
     show_parser.add_argument(
         "--schemas",
         type=Path,
@@ -129,15 +158,123 @@ def _add_config_parsers(
     )
 
 
+def _add_project_directory_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--project",
+        type=Path,
+        default=None,
+        help=(
+            f"project directory to run in (default: ${PROJECT_DIRECTORY_VARIABLE}, "
+            "else the current directory when it is a project)"
+        ),
+    )
+
+
+def _add_init_parser(
+    commands: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    init_parser = commands.add_parser(
+        "init", help="create a new project: fleet, applications, and operations"
+    )
+    init_parser.add_argument(
+        "directory",
+        type=Path,
+        nargs="?",
+        default=Path(),
+        help="project directory to create; must be empty or absent (default: .)",
+    )
+    init_parser.add_argument(
+        "--name",
+        help="package name written to pyproject.toml (default: the directory name)",
+    )
+    init_parser.add_argument(
+        "--rev",
+        help=(
+            "Cloudfall commit to pin (default: the commit the running "
+            "cloudfall was installed from)"
+        ),
+    )
+    init_parser.add_argument(
+        "--source",
+        default=DEFAULT_SOURCE_URL,
+        help=(
+            "git location of Cloudfall to install from "
+            f"(default: {DEFAULT_SOURCE_URL})"
+        ),
+    )
+
+
+def _add_add_parsers(
+    commands: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    add_parser = commands.add_parser(
+        "add", help="write a fleet resource into the project"
+    )
+    add_commands = add_parser.add_subparsers(dest="add_command", required=True)
+
+    key_parser = add_commands.add_parser(
+        "ssh-key", help="declare an SSH public key read from a file"
+    )
+    key_parser.add_argument("key_file", type=Path, help="e.g. ~/.ssh/id_ed25519.pub")
+    key_parser.add_argument("--owner", required=True, help="who the key belongs to")
+    key_parser.add_argument("--id", help="resource id (default: the owner)")
+    key_parser.add_argument(
+        "--environment", default="production", help="(default: production)"
+    )
+    key_parser.add_argument("--description")
+
+    type_parser = add_commands.add_parser(
+        "server-type",
+        help="declare a server type from the bundled Debian 13 baseline",
+    )
+    type_parser.add_argument("id", help="resource id, e.g. debian-application")
+    type_parser.add_argument("--description")
+
+    server_parser = add_commands.add_parser(
+        "server", help="declare a server; creates its server type when missing"
+    )
+    server_parser.add_argument("id", help="resource id, e.g. h1")
+    server_parser.add_argument(
+        "--address", required=True, help="IP address or hostname to connect to"
+    )
+    server_parser.add_argument(
+        "--type",
+        default="debian-application",
+        help="server type id (default: debian-application)",
+    )
+    server_parser.add_argument(
+        "--environment", default="production", help="(default: production)"
+    )
+    server_parser.add_argument(
+        "--hostname", help="(default: the address when it is a hostname, else the id)"
+    )
+    server_parser.add_argument("--ssh-user", default="root", help="(default: root)")
+    server_parser.add_argument(
+        "--ssh-port", type=int, default=22, help="(default: 22)"
+    )
+    server_parser.add_argument("--description")
+
+    for subparser in (key_parser, type_parser, server_parser):
+        _add_project_directory_argument(subparser)
+        subparser.add_argument(
+            "--schemas",
+            type=Path,
+            default=default_schema_directory(),
+            help="versioned schema directory (default: bundled schemas)",
+        )
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="cloudfall")
     commands = parser.add_subparsers(dest="command", required=True)
+    _add_init_parser(commands)
+    _add_add_parsers(commands)
     _add_config_parsers(commands)
 
     audit_parser = commands.add_parser(
         "audit", help="compare the config with observed server snapshots"
     )
-    audit_parser.add_argument("config_directory", type=Path)
+    _add_project_directory_argument(audit_parser)
     audit_parser.add_argument(
         "--observed",
         type=Path,
@@ -167,7 +304,7 @@ def _parser() -> argparse.ArgumentParser:
     services_inspect_parser = services_commands.add_parser(
         "inspect", help="collect DNS, TLS, origin, and public route evidence"
     )
-    services_inspect_parser.add_argument("config_directory", type=Path)
+    _add_project_directory_argument(services_inspect_parser)
     services_inspect_parser.add_argument(
         "--output",
         type=Path,
@@ -183,7 +320,7 @@ def _parser() -> argparse.ArgumentParser:
     services_status_parser = services_commands.add_parser(
         "status", help="derive service lifecycle status from current evidence"
     )
-    services_status_parser.add_argument("config_directory", type=Path)
+    _add_project_directory_argument(services_status_parser)
     services_status_parser.add_argument(
         "--observed",
         type=Path,
@@ -224,7 +361,7 @@ def _parser() -> argparse.ArgumentParser:
     dashboard_build_parser = dashboard_commands.add_parser(
         "build", help="build a static read-only operations dashboard"
     )
-    dashboard_build_parser.add_argument("config_directory", type=Path)
+    _add_project_directory_argument(dashboard_build_parser)
     dashboard_build_parser.add_argument(
         "--observed",
         type=Path,
@@ -259,7 +396,7 @@ def _parser() -> argparse.ArgumentParser:
     dashboard_serve_parser = dashboard_commands.add_parser(
         "serve", help="serve a live-refreshing read-only dashboard over HTTP"
     )
-    dashboard_serve_parser.add_argument("config_directory", type=Path)
+    _add_project_directory_argument(dashboard_serve_parser)
     dashboard_serve_parser.add_argument(
         "--observed",
         type=Path,
@@ -320,7 +457,7 @@ def _add_migrate_parser(
         "migrate",
         help="run the resumable end-to-end migration plan",
     )
-    migrate_parser.add_argument("config_directory", type=Path)
+    _add_project_directory_argument(migrate_parser)
     migrate_parser.add_argument(
         "--schemas",
         type=Path,
@@ -433,7 +570,7 @@ def _add_lifecycle_parsers(
             "declared service with row-count verification"
         ),
     )
-    data_migrate_parser.add_argument("config_directory", type=Path)
+    _add_project_directory_argument(data_migrate_parser)
     data_migrate_parser.add_argument("service")
     data_migrate_parser.add_argument(
         "--database",
@@ -532,6 +669,7 @@ def _add_import_parsers(
     render_parser = import_commands.add_parser(
         "render", help="map a render.yaml blueprint onto Cloudfall config"
     )
+    _add_project_directory_argument(render_parser)
     render_parser.add_argument("blueprint", type=Path)
     render_parser.add_argument(
         "--application",
@@ -565,6 +703,7 @@ def _add_import_parsers(
         "render-api",
         help="map a live Render workspace onto Cloudfall config via the API",
     )
+    _add_project_directory_argument(render_api_parser)
     render_api_parser.add_argument(
         "--api-key-file",
         type=Path,
@@ -690,7 +829,7 @@ def _add_secrets_parsers(
         "render",
         help="render one component's references into its environment file",
     )
-    render_parser.add_argument("config_directory", type=Path)
+    _add_project_directory_argument(render_parser)
     render_parser.add_argument("component")
     render_parser.add_argument(
         "--schemas",
@@ -742,7 +881,7 @@ def _add_backup_parsers(
         ("verify", "prove the newest backup restores for one service"),
     ):
         subparser = backup_commands.add_parser(name, help=description)
-        subparser.add_argument("config_directory", type=Path)
+        _add_project_directory_argument(subparser)
         subparser.add_argument("service")
         subparser.add_argument(
             "--schemas",
@@ -760,7 +899,7 @@ def _add_backup_parsers(
 
 
 def _add_operator_arguments(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("config_directory", type=Path)
+    _add_project_directory_argument(parser)
     parser.add_argument(
         "--schemas",
         type=Path,
@@ -804,7 +943,7 @@ def _add_operator_engine_arguments(parser: argparse.ArgumentParser) -> None:
 
 
 def _add_lifecycle_arguments(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("config_directory", type=Path)
+    _add_project_directory_argument(parser)
     parser.add_argument("component")
     parser.add_argument(
         "--schemas",
@@ -829,16 +968,107 @@ def _add_lifecycle_arguments(parser: argparse.ArgumentParser) -> None:
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the CLI and return a process exit code."""
     arguments = _parser().parse_args(argv)
-    if arguments.command == "import":
-        return _run_import_render(arguments)
-    config_directory = Path(arguments.config_directory)
-    schema_directory = Path(arguments.schemas)
+    if arguments.command == "init":
+        return _run_init(arguments)
     try:
-        state = validate_config(config_directory, schema_directory)
-        return _dispatch(arguments, state, schema_directory)
-    except ConfigValidationError as error:
+        with project_context(arguments.project, os.environ) as project_directory:
+            arguments.project_directory = project_directory
+            if arguments.command == "add":
+                return _run_add(arguments, project_directory)
+            if arguments.command == "import":
+                return _run_import_render(arguments)
+            schema_directory = Path(arguments.schemas)
+            state = validate_config(project_directory, schema_directory)
+            return _dispatch(arguments, state, schema_directory)
+    except (ProjectError, ConfigValidationError) as error:
         sys.stderr.write(f"{json.dumps(error.as_dict(), sort_keys=True)}\n")
         return 2
+
+
+def _run_init(arguments: Namespace) -> int:
+    directory = Path(arguments.directory)
+    try:
+        name = (
+            ProjectName.from_boundary(arguments.name)
+            if arguments.name is not None
+            else ProjectName.from_directory(directory)
+        )
+        revision = (
+            GitRevision.from_boundary(arguments.rev)
+            if arguments.rev is not None
+            else resolve_installed_revision()
+        )
+        options = InitOptions(
+            directory=directory,
+            name=name,
+            revision=revision,
+            source=GitSourceUrl.from_boundary(arguments.source),
+        )
+        scaffold = init_project(options)
+    except ValueError as error:
+        payload = {
+            "status": "error",
+            "error": {"code": "invalid_argument", "message": str(error)},
+        }
+        sys.stderr.write(f"{json.dumps(payload, sort_keys=True)}\n")
+        return 2
+    except ProjectError as error:
+        sys.stderr.write(f"{json.dumps(error.as_dict(), sort_keys=True)}\n")
+        return 2
+    _write_json(scaffold.as_dict())
+    return 0
+
+
+def _run_add(arguments: Namespace, project_directory: Path) -> int:
+    schema_directory = Path(arguments.schemas)
+    try:
+        if arguments.add_command == "ssh-key":
+            key_options = SshKeyOptions(
+                key_path=Path(arguments.key_file).expanduser(),
+                owner=ResourceId.from_boundary(arguments.owner),
+                environment=ResourceId.from_boundary(arguments.environment),
+                resource_id=(
+                    ResourceId.from_boundary(arguments.id)
+                    if arguments.id is not None
+                    else None
+                ),
+                description=arguments.description,
+            )
+            result = add_ssh_key(project_directory, key_options, schema_directory)
+        elif arguments.add_command == "server-type":
+            type_options = ServerTypeOptions(
+                resource_id=ResourceId.from_boundary(arguments.id),
+                description=arguments.description,
+            )
+            result = add_server_type(project_directory, type_options, schema_directory)
+        else:
+            server_options = ServerOptions(
+                resource_id=ResourceId.from_boundary(arguments.id),
+                address=ConnectionAddress.from_boundary(arguments.address),
+                server_type=ResourceId.from_boundary(arguments.type),
+                environment=ResourceId.from_boundary(arguments.environment),
+                ssh_user=LinuxUser.from_boundary(arguments.ssh_user),
+                ssh_port=TcpPort.from_boundary(arguments.ssh_port),
+                hostname=(
+                    Hostname.from_boundary(arguments.hostname)
+                    if arguments.hostname is not None
+                    else None
+                ),
+                description=arguments.description,
+            )
+            result = add_server(project_directory, server_options, schema_directory)
+    except (TypeError, ValueError) as error:
+        payload = {
+            "status": "error",
+            "error": {"code": "invalid_argument", "message": str(error)},
+        }
+        sys.stderr.write(f"{json.dumps(payload, sort_keys=True)}\n")
+        return 2
+    except AuthoringError as error:
+        sys.stderr.write(f"{json.dumps(error.as_dict(), sort_keys=True)}\n")
+        return 2
+    _write_json(result.as_dict())
+    return 0
 
 
 def _run_import_render(arguments: Namespace) -> int:
@@ -846,7 +1076,7 @@ def _run_import_render(arguments: Namespace) -> int:
         targets = ImportTargets(
             application_id=ResourceId.from_boundary(arguments.application),
             server_id=ResourceId.from_boundary(arguments.server),
-            config_directory=Path(arguments.output),
+            project_directory=Path(arguments.output),
             environment_directory=Path(arguments.env_dir),
         )
         if arguments.import_command == "render-api":
@@ -1196,7 +1426,7 @@ def _run_dashboard_serve(
     arguments: Namespace, _state: ValidatedConfig, schema_directory: Path
 ) -> int:
     sources = EvidenceSources(
-        config_directory=Path(arguments.config_directory),
+        project_directory=Path(arguments.project_directory),
         schema_directory=schema_directory,
         observed_directory=Path(arguments.observed),
         service_observed_directory=Path(arguments.service_observed),
@@ -1248,7 +1478,7 @@ def _service_operations(
 
 def _engine_context(arguments: Namespace, schema_directory: Path) -> EngineContext:
     return EngineContext(
-        config_directory=Path(arguments.config_directory),
+        project_directory=Path(arguments.project_directory),
         schema_directory=schema_directory,
         engine_directory=Path(arguments.engine),
         inventory_file=Path(arguments.inventory_file),
@@ -1366,7 +1596,7 @@ def _run_migrate(
         sys.stderr.write(f"{json.dumps(payload, sort_keys=True)}\n")
         return 2
     config = AgentConfig(
-        config_directory=Path(arguments.config_directory),
+        project_directory=Path(arguments.project_directory),
         schema_directory=schema_directory,
         engine_directory=Path(arguments.engine),
         inventory_file=Path(arguments.inventory_file),

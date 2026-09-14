@@ -226,40 +226,61 @@ class SchemaCatalog:
         validator.validate(content)
 
 
+def _resource_files(project_directory: Path) -> Iterable[tuple[ResourceKind, Path]]:
+    """Yield each kind directory's YAML files in deterministic order.
+
+    Resources live in their kind's directory (``servers/``, ``components/``,
+    ...). Nothing else in a project is read as a resource: not ``tmp/``, not
+    playbooks, not secrets, not tooling files.
+    """
+    for kind in ResourceKind:
+        kind_directory = project_directory / kind.directory
+        if not kind_directory.is_dir():
+            continue
+        for path in sorted(kind_directory.rglob("*")):
+            if path.is_file() and path.suffix.lower() in _YAML_SUFFIXES:
+                yield kind, path
+
+
 class StateValidator:
-    """Schema and semantic validator for a state directory."""
+    """Schema and semantic validator for a project directory."""
 
     def __init__(self, schemas: SchemaCatalog) -> None:
         """Create a state validator backed by a validated schema catalog."""
         self._schemas = schemas
 
-    def validate_directory(self, config_directory: Path) -> ValidatedConfig:
-        """Validate every YAML resource below a directory."""
-        if not config_directory.is_dir():
+    def validate_directory(self, project_directory: Path) -> ValidatedConfig:
+        """Validate every YAML resource in a project's kind directories."""
+        if not project_directory.is_dir():
             issue = ValidationIssue(
-                code="config_directory_missing",
-                message=f"state directory does not exist: {config_directory}",
+                code="project_directory_missing",
+                message=f"project directory does not exist: {project_directory}",
             )
             raise ConfigValidationError(issue)
 
-        paths = tuple(
-            path
-            for path in sorted(config_directory.rglob("*"))
-            if path.is_file() and path.suffix.lower() in _YAML_SUFFIXES
-        )
+        paths = tuple(_resource_files(project_directory))
         if not paths:
             issue = ValidationIssue(
-                code="state_empty",
-                message=(
-                    f"state directory contains no YAML documents: {config_directory}"
-                ),
+                code="project_empty",
+                message=f"project contains no YAML resources: {project_directory}",
             )
             raise ConfigValidationError(issue)
 
         documents: list[ResourceDocument] = []
         index: dict[ResourceKey, ResourceDocument] = {}
-        for path in paths:
+        for kind, path in paths:
             for document in self._load_file(path):
+                if document.key.kind is not kind:
+                    issue = ValidationIssue(
+                        code="resource_misplaced",
+                        message=(
+                            f"{document.key.kind.value}/{document.key.resource_id} "
+                            f"belongs in {document.key.kind.directory}/, "
+                            f"not {kind.directory}/"
+                        ),
+                        source=document.source,
+                    )
+                    raise ConfigValidationError(issue)
                 if document.key in index:
                     first = index[document.key]
                     issue = ValidationIssue(
@@ -1290,10 +1311,10 @@ def _validate_operator_policy_references(
         raise ConfigValidationError(issue)
 
 
-def validate_config(config_directory: Path, schema_directory: Path) -> ValidatedConfig:
+def validate_config(project_directory: Path, schema_directory: Path) -> ValidatedConfig:
     """Load and validate a directory of Cloudfall YAML resources."""
     catalog = SchemaCatalog(schema_directory)
-    return StateValidator(catalog).validate_directory(config_directory)
+    return StateValidator(catalog).validate_directory(project_directory)
 
 _REFERENCE_VALIDATORS: Mapping[
     ResourceKind,

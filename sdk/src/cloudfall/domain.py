@@ -85,6 +85,25 @@ class ResourceKind(StrEnum):
             raise TypeError(message)
         return cls(value)
 
+    @property
+    def directory(self) -> str:
+        """Return the project directory that holds resources of this kind."""
+        return _RESOURCE_DIRECTORIES[self]
+
+
+_RESOURCE_DIRECTORIES: Mapping[ResourceKind, str] = {
+    ResourceKind.SSH_PUBLIC_KEY: "ssh-public-keys",
+    ResourceKind.HOST_PROFILE: "server-types",
+    ResourceKind.SERVER: "servers",
+    ResourceKind.APPLICATION: "applications",
+    ResourceKind.COMPONENT: "components",
+    ResourceKind.SERVICE: "services",
+    ResourceKind.DOMAIN: "domains",
+    ResourceKind.LOGGING_STACK: "logging-stacks",
+    ResourceKind.ALERT_RULE: "alert-rules",
+    ResourceKind.OPERATOR_POLICY: "operator-policies",
+}
+
 
 class SshPublicKeyLifecycle(StrEnum):
     """Lifecycle of a declarative SSH public key."""

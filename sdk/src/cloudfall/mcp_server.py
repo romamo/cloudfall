@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -16,6 +18,11 @@ from mcp.server.mcpserver import MCPServer
 from mcp.types import ToolAnnotations
 
 from cloudfall.agent_tools import AgentConfig, AgentToolset
+from cloudfall.project import (
+    PROJECT_DIRECTORY_VARIABLE,
+    ProjectError,
+    project_context,
+)
 from cloudfall.resources import default_engine_directory, default_schema_directory
 
 if TYPE_CHECKING:
@@ -439,16 +446,22 @@ def _parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
-        "--state",
+        "--project",
         type=Path,
-        required=True,
-        help="declarative state directory to operate on",
+        default=None,
+        help=(
+            f"project directory to run in (default: ${PROJECT_DIRECTORY_VARIABLE}, "
+            "else the current directory when it is a project)"
+        ),
     )
     parser.add_argument(
         "--schemas",
         type=Path,
         default=default_schema_directory(),
-        help="JSON Schema directory used to validate state (default: %(default)s)",
+        help=(
+            "JSON Schema directory used to validate the project "
+            "(default: %(default)s)"
+        ),
     )
     parser.add_argument(
         "--engine",
@@ -556,8 +569,18 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the MCP server over stdio."""
     arguments = _parser().parse_args(argv)
+    try:
+        with project_context(arguments.project, os.environ) as project_directory:
+            _serve(arguments, project_directory)
+    except ProjectError as error:
+        sys.stderr.write(f"{_dump(error.as_dict())}\n")
+        return 2
+    return 0
+
+
+def _serve(arguments: argparse.Namespace, project_directory: Path) -> None:
     config = AgentConfig(
-        config_directory=Path(arguments.state),
+        project_directory=project_directory,
         schema_directory=Path(arguments.schemas),
         engine_directory=Path(arguments.engine),
         inventory_file=Path(arguments.inventory_file),
@@ -577,7 +600,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         gateway_key_path=arguments.gateway_key,
     )
     create_server(config).run(transport="stdio")
-    return 0
 
 
 def run() -> None:

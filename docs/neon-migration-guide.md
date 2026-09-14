@@ -89,8 +89,8 @@ Declare one entry under `databases` per Neon database you are keeping.
 Validate and converge:
 
 ```console
-uv run cloudfall config validate config/production
-uv run cloudfall services config/production
+uv run cloudfall config validate
+uv run cloudfall services
 ```
 
 ## Step 2: pre-flight checks on the Neon side
@@ -136,7 +136,7 @@ after the dump starts are lost. Put the application into maintenance
 mode or stop its writers, then:
 
 ```console
-uv run cloudfall data migrate config/production postgresql-main \
+uv run cloudfall data migrate postgresql-main \
   --database app --source-url-file tmp/neon-app-url
 ```
 

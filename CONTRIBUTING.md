@@ -22,7 +22,7 @@ Every change must pass the same suite CI runs:
 uv run ruff check .
 uv run mypy
 uv run pytest
-uv run cloudfall config validate config/examples
+uv run cloudfall config validate --project config/examples
 uv run ansible-lint engine/ansible
 ```
 

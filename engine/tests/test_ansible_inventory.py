@@ -285,6 +285,7 @@ def test_engine_cli_emits_ansible_json(
         [
             "inventory",
             "render",
+            "--project",
             str(EXAMPLES),
             "--schemas",
             str(SCHEMAS),
@@ -314,6 +315,7 @@ def test_engine_cli_can_write_inventory_file(
         [
             "inventory",
             "render",
+            "--project",
             str(EXAMPLES),
             "--schemas",
             str(SCHEMAS),

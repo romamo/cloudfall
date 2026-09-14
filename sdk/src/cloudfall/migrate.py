@@ -146,7 +146,7 @@ def execute_migration(
     runners: Mapping[str, Runner] | None = None,
 ) -> dict[str, object]:
     """Run or preview the migration plan, resuming persisted progress."""
-    state = validate_config(config.config_directory, config.schema_directory)
+    state = validate_config(config.project_directory, config.schema_directory)
     inventory = PlatformInventory.from_state(state)
     _require_known_components(inventory, options)
     steps = _load_plan(options, _computed_steps(inventory, options))
@@ -668,7 +668,7 @@ def _resolve_names(hostname: str) -> set[str]:
 
 
 def _verify_audit(config: AgentConfig) -> dict[str, object]:
-    state = validate_config(config.config_directory, config.schema_directory)
+    state = validate_config(config.project_directory, config.schema_directory)
     observations = load_observations(
         config.observed_directory, config.schema_directory
     )
@@ -684,7 +684,7 @@ def _verify_audit(config: AgentConfig) -> dict[str, object]:
 
 
 def _verify_routes(config: AgentConfig) -> dict[str, object]:
-    state = validate_config(config.config_directory, config.schema_directory)
+    state = validate_config(config.project_directory, config.schema_directory)
     inventory = PlatformInventory.from_state(state)
     inspect_domains(
         inventory,

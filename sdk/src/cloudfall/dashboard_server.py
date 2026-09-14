@@ -55,7 +55,7 @@ class ListenEndpoint:
 class EvidenceSources:
     """Filesystem locations the dashboard re-derives its view from."""
 
-    config_directory: Path
+    project_directory: Path
     schema_directory: Path
     observed_directory: Path
     service_observed_directory: Path
@@ -64,7 +64,7 @@ class EvidenceSources:
 
     def operations_view(self) -> FleetOperations:
         """Re-validate state and evidence, then build a fresh projection."""
-        state = validate_config(self.config_directory, self.schema_directory)
+        state = validate_config(self.project_directory, self.schema_directory)
         inventory = PlatformInventory.from_state(state)
         if self.inspect_services:
             inspect_domains(

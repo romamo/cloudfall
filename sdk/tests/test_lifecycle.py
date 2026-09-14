@@ -29,7 +29,7 @@ RELEASE = "20260101T000000Z-abcdef0"
 
 def _context(tmp_path: Path) -> EngineContext:
     return EngineContext(
-        config_directory=EXAMPLES,
+        project_directory=EXAMPLES,
         schema_directory=SCHEMAS,
         engine_directory=ENGINE,
         inventory_file=tmp_path / "inventory.json",
@@ -186,6 +186,7 @@ def test_cli_deploy_reports_a_missing_artifact(
     exit_code = main(
         [
             "deploy",
+            "--project",
             str(EXAMPLES),
             "crm-backend",
             "--release",

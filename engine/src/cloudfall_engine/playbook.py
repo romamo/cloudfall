@@ -1,9 +1,9 @@
 """Run Ansible playbooks under the engine's configuration.
 
-A fleet repository keeps its own playbooks and roles next to its config.
+A project keeps its own playbooks and roles next to its config.
 This module runs those, and the bundled engine playbooks, with the
 engine's ``ansible.cfg`` and a role search path that always ends with the
-bundled roles, so fleet playbooks may reuse them without a checkout.
+bundled roles, so project playbooks may reuse them without a checkout.
 """
 
 from __future__ import annotations

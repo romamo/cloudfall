@@ -107,7 +107,7 @@ def render_environment(
     receipt_directory: Path | None = None,
 ) -> dict[str, object]:
     """Resolve a component's references into one 0600 environment file."""
-    state = validate_config(context.config_directory, context.schema_directory)
+    state = validate_config(context.project_directory, context.schema_directory)
     inventory = PlatformInventory.from_state(state)
     component = _declared_component(inventory, component_id)
     application = next(

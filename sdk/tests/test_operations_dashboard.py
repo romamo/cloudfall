@@ -29,10 +29,10 @@ GENERATED_AT = UtcTimestamp(datetime(2026, 7, 15, 11, tzinfo=UTC))
 
 
 def _view(
-    observation_directory: Path, config_directory: Path = EXAMPLES
+    observation_directory: Path, project_directory: Path = EXAMPLES
 ) -> FleetOperations:
     inventory = PlatformInventory.from_state(
-        validate_config(config_directory, SCHEMAS)
+        validate_config(project_directory, SCHEMAS)
     )
     observations = load_observations(observation_directory, SCHEMAS)
     return build_operations_view(
@@ -45,10 +45,10 @@ def _view(
 
 
 def _domainless_examples(tmp_path: Path) -> Path:
-    config_directory = tmp_path / "config"
-    shutil.copytree(EXAMPLES, config_directory)
-    shutil.rmtree(config_directory / "domains")
-    return config_directory
+    project_directory = tmp_path / "config"
+    shutil.copytree(EXAMPLES, project_directory)
+    shutil.rmtree(project_directory / "domains")
+    return project_directory
 
 
 def test_compliant_evidence_produces_healthy_operations_view(

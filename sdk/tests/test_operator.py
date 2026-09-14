@@ -390,6 +390,7 @@ def test_cli_operator_list_emits_structured_output(
         [
             "operator",
             "list",
+            "--project",
             str(EXAMPLES),
             "--schemas",
             str(SCHEMAS),

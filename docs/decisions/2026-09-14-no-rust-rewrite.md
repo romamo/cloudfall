@@ -29,7 +29,7 @@ later without a rewrite.
   plane would still need `ansible-core` on the management host, so the main
   Rust benefit, one static binary with no interpreter, is not available
 - **Nothing is CPU-bound.** Wall-clock time is SSH, apt, certbot, and
-  PostgreSQL dumps. Validating a config directory against JSON Schema takes
+  PostgreSQL dumps. Validating a project against JSON Schema takes
   milliseconds in Python; Rust would speed up the part that does not matter
 - **Stage of the product.** Version 0.1.0, one real workload in migration, one
   maintainer. The scarce resource is proving runs and user feedback. A rewrite

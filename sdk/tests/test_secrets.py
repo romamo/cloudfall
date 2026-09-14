@@ -22,7 +22,7 @@ ENGINE = ROOT / "engine"
 
 def _context(tmp_path: Path) -> EngineContext:
     return EngineContext(
-        config_directory=EXAMPLES,
+        project_directory=EXAMPLES,
         schema_directory=SCHEMAS,
         engine_directory=ENGINE,
         inventory_file=tmp_path / "inventory.json",

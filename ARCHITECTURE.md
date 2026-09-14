@@ -28,6 +28,34 @@ infrastructure over SSH. Every mutating operation goes through the engine's
 explicit playbook contracts and produces receipts; status is derived from
 validated observations, never inferred.
 
+## Project
+
+A project is the unit Cloudfall operates: one directory, usually a private
+repository, holding everything needed to run one user's stack.
+
+- **Fleet** — the machines: `Server`, `ServerType`, and `SshPublicKey`
+  resources
+- **Applications** — the workloads: `Application`, `Component`, `Service`,
+  and `Domain` resources
+- **Operations** — the declarations that run them: `AlertRule`,
+  `OperatorPolicy`, and `LoggingStack` resources
+- **Pin** — a `pyproject.toml` that installs Cloudfall as a package at one
+  exact commit, so the project and the platform version move together
+
+Every `cloudfall` command runs inside a project: the current directory when
+it is one, or the directory named by `--project` or by the
+`CLOUDFALL_PROJECT` environment variable. Relative paths, including the
+`tmp/` defaults, resolve against the project, as if the command had been
+started there.
+Resources live in one directory per kind (`servers/`, `components/`, ...),
+and only those directories are read as resources; a resource in the wrong
+directory is a validation error. Everything else in the project is the
+user's: playbooks and roles of their own, encrypted secrets, docs, tooling.
+Runtime state (observations, receipts, rendered inventory, built artifacts,
+rendered environment files, the persisted migration plan) lands under `tmp/`
+and is never committed. `cloudfall init` lays out a new project and
+`cloudfall add` declares its first fleet resources.
+
 ## Module boundaries
 
 Cloudfall is a monorepo with three architectural modules:
@@ -56,8 +84,8 @@ policy, and SSH public keys.
 
 The config never contains secret values; schemas and validation reject them.
 Secrets exist as references, rendered from a sops/age-encrypted secrets
-directory into environment files outside the config directory and consumed
-by systemd via `EnvironmentFile`.
+directory into environment files under the project's `tmp/`, never into a
+resource, and consumed by systemd via `EnvironmentFile`.
 
 ## Application and component model
 

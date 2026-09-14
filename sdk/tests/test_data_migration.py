@@ -25,7 +25,7 @@ ENGINE = ROOT / "engine"
 
 def _context(tmp_path: Path) -> EngineContext:
     return EngineContext(
-        config_directory=EXAMPLES,
+        project_directory=EXAMPLES,
         schema_directory=SCHEMAS,
         engine_directory=ENGINE,
         inventory_file=tmp_path / "inventory.json",
@@ -102,7 +102,7 @@ def test_data_migration_rejects_an_empty_source_url_file(
 
 def _agent_config(tmp_path: Path) -> AgentConfig:
     return AgentConfig(
-        config_directory=EXAMPLES,
+        project_directory=EXAMPLES,
         schema_directory=SCHEMAS,
         engine_directory=ENGINE,
         inventory_file=tmp_path / "inventory.json",

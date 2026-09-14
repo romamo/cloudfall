@@ -133,7 +133,7 @@ class LifecycleResult:
 class EngineContext:
     """Filesystem contract shared by every lifecycle action."""
 
-    config_directory: Path
+    project_directory: Path
     schema_directory: Path
     engine_directory: Path
     inventory_file: Path
@@ -342,7 +342,8 @@ def build_release_artifact(
         "cloudfall_engine",
         "artifact",
         "build",
-        str(context.config_directory),
+        "--project",
+        str(context.project_directory),
         component_id.value,
         "--ref",
         git_ref,
@@ -607,7 +608,7 @@ def _backup_operation(
     receipt_directory: Path,
     action: str,
 ) -> dict[str, object]:
-    state = validate_config(context.config_directory, context.schema_directory)
+    state = validate_config(context.project_directory, context.schema_directory)
     inventory = PlatformInventory.from_state(state)
     declared = next(
         (
@@ -651,7 +652,7 @@ def _backup_operation(
 def _postgresql_service(
     context: EngineContext, service_id: ResourceId
 ) -> ServiceInventory:
-    state = validate_config(context.config_directory, context.schema_directory)
+    state = validate_config(context.project_directory, context.schema_directory)
     inventory = PlatformInventory.from_state(state)
     service = next(
         (
@@ -672,7 +673,7 @@ def _postgresql_service(
 def _component(
     context: EngineContext, component_id: ResourceId
 ) -> ComponentInventory:
-    state = validate_config(context.config_directory, context.schema_directory)
+    state = validate_config(context.project_directory, context.schema_directory)
     inventory = PlatformInventory.from_state(state)
     component = next(
         (
@@ -697,7 +698,8 @@ def _render_inventory_step(context: EngineContext) -> ExecutionStep:
             "cloudfall_engine",
             "inventory",
             "render",
-            str(context.config_directory),
+            "--project",
+            str(context.project_directory),
             "--schemas",
             str(context.schema_directory),
             "--output",

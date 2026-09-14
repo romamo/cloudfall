@@ -3,8 +3,25 @@
 This module provides the stable Python API used by AI agents, future CLI and MCP
 entry points, and other operational tooling.
 
-Most of the SDK is read-only: load state, validate it strictly, resolve
+Most of the SDK is read-only: load a project, validate it strictly, resolve
 references, and expose inventory queries without depending on Ansible internals.
+
+`cloudfall init [directory]` is the first command: it lays out a new project
+(one directory per resource kind, a README, a `.gitignore` for `tmp/`, and a
+`pyproject.toml` pinning Cloudfall to the commit the running `cloudfall` was
+installed from, or to `--rev`) and reports the files it wrote as JSON. It
+initializes the current directory when none is named and refuses a non-empty
+one. Every other command runs inside a project: the current directory when
+it is one, else `--project`, else `CLOUDFALL_PROJECT`; relative
+paths such as the `tmp/` defaults resolve against the project.
+
+`cloudfall add ssh-key|server-type|server` writes fleet resources into the
+project: an `SshPublicKey` read from a key file, a `ServerType` from the
+bundled Debian 13 baseline (no software RAID, the six baseline packages,
+default-deny firewall with 22/80/443), and a `Server` that creates its type
+on first use. Each document is schema-validated before it is written, the
+project is validated afterwards, and a failed validation removes what was
+written. Existing resources are never overwritten.
 
 The lifecycle module adds the first mutating operations: `deploy()`,
 `rollback()`, `restart()`, and `health()` with structured JSON results. They
@@ -15,10 +32,10 @@ engine's playbook contract for execution — never Ansible internals. Each
 operation is split into a pure, testable execution plan and a thin executor:
 
 ```console
-uv run cloudfall deploy config/examples crm-backend --release <release-id>
-uv run cloudfall rollback config/examples crm-backend --release <release-id>
-uv run cloudfall restart config/examples crm-backend
-uv run cloudfall health config/examples crm-backend
+uv run cloudfall deploy --project config/examples crm-backend --release <release-id>
+uv run cloudfall rollback --project config/examples crm-backend --release <release-id>
+uv run cloudfall restart --project config/examples crm-backend
+uv run cloudfall health --project config/examples crm-backend
 ```
 
 `deploy` refuses to run when the built artifact is missing, misidentified, or
@@ -44,7 +61,7 @@ would run; only a second call with `confirm=true` executes. Deployments
 through MCP always write release receipts.
 
 ```console
-uv run cloudfall-mcp --state config/examples
+uv run cloudfall-mcp --project config/examples
 ```
 
 Every tool returns a structured JSON envelope, including errors, so agents
@@ -80,7 +97,7 @@ service manager, RAID level/health/capacity, mounted filesystems, required and
 forbidden packages, service state, and allowlisted configuration evidence.
 
 ```console
-uv run cloudfall audit config/examples --observed tmp/observed
+uv run cloudfall audit --project config/examples --observed tmp/observed
 ```
 
 `cloudfall dashboard build` combines the same validated audit data with operational
@@ -88,7 +105,7 @@ signals such as disk pressure, failed services, and stale evidence. It emits a
 dependency-free static dashboard plus `operations.json` for other clients:
 
 ```console
-uv run cloudfall dashboard build config/examples \
+uv run cloudfall dashboard build --project config/examples \
   --observed tmp/observed --output tmp/dashboard
 ```
 

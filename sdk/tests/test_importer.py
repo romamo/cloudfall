@@ -76,7 +76,7 @@ def _targets(tmp_path: Path) -> ImportTargets:
     return ImportTargets(
         application_id=ResourceId("acme"),
         server_id=ResourceId("h1"),
-        config_directory=tmp_path / "config",
+        project_directory=tmp_path / "config",
         environment_directory=tmp_path / "env",
     )
 
@@ -94,9 +94,9 @@ def test_imported_state_merges_into_a_valid_directory(tmp_path: Path) -> None:
 
     for base in ("servers", "server-types", "ssh-public-keys"):
         shutil.copytree(
-            EXAMPLES / base, targets.config_directory / base
+            EXAMPLES / base, targets.project_directory / base
         )
-    state = validate_config(targets.config_directory, SCHEMAS)
+    state = validate_config(targets.project_directory, SCHEMAS)
 
     counts = state.counts_by_kind()
     assert counts["Application"] == 1
@@ -113,14 +113,14 @@ def test_importer_maps_ports_health_and_worker_semantics(
 ) -> None:
     targets, _result = _import(tmp_path)
 
-    api = (targets.config_directory / "components" / "acme-api.yaml").read_text(
+    api = (targets.project_directory / "components" / "acme-api.yaml").read_text(
         encoding="utf-8"
     )
     worker = (
-        targets.config_directory / "components" / "acme-worker.yaml"
+        targets.project_directory / "components" / "acme-worker.yaml"
     ).read_text(encoding="utf-8")
     domain = (
-        targets.config_directory / "domains" / "acme-example-test.yaml"
+        targets.project_directory / "domains" / "acme-example-test.yaml"
     ).read_text(encoding="utf-8")
 
     assert "type: http" in api
@@ -147,7 +147,7 @@ def test_importer_writes_environment_files_outside_state(
     assert "SECRET_KEY=" in content
     assert "DATABASE_URL=postgresql:///acme?host=/var/run/postgresql" in content
     assert "TZ=UTC" in content
-    assert not list(targets.config_directory.rglob("*.env"))
+    assert not list(targets.project_directory.rglob("*.env"))
     assert result.environment_files == (env_path,)
 
 
@@ -182,7 +182,7 @@ def test_importer_rejects_a_application_that_cannot_own_a_linux_user(
     targets = ImportTargets(
         application_id=ResourceId("a" * 40),
         server_id=ResourceId("h1"),
-        config_directory=tmp_path / "config",
+        project_directory=tmp_path / "config",
         environment_directory=tmp_path / "env",
     )
 
@@ -203,6 +203,8 @@ def test_cli_import_render_emits_structured_output(
         [
             "import",
             "render",
+            "--project",
+            str(tmp_path),
             str(blueprint),
             "--application",
             "acme",

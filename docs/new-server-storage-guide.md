@@ -495,10 +495,10 @@ of swap, boot, and root, or the total capacity of both drives.
 Validate, render, inspect, and audit:
 
 ```console
-task validate CONFIG_DIR=config/production
-task inventory CONFIG_DIR=config/production
-task inspect CONFIG_DIR=config/production
-task audit CONFIG_DIR=config/production
+task validate CONFIG_DIR=../my-project
+task inventory CONFIG_DIR=../my-project
+task inspect CONFIG_DIR=../my-project
+task audit CONFIG_DIR=../my-project
 ```
 
 `task inspect` also rebuilds the local dashboard. Review the generated

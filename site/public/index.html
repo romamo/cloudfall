@@ -271,7 +271,7 @@
           <div class="title">cloudfall migrate</div>
         </div>
         <pre><span class="p">$</span> <span class="cmd">uv run cloudfall import render render.yaml --application acme --server h1</span>
-<span class="p">$</span> <span class="cmd">uv run cloudfall migrate state --build web=main --yes</span>
+<span class="p">$</span> <span class="cmd">uv run cloudfall migrate --build web=main --yes</span>
   <span class="ok">✓ baseline</span>       <span class="step">converge every server to the managed baseline</span>
   <span class="ok">✓ services</span>       <span class="step">converge every declared infrastructure service</span>
   <span class="ok">✓ data:acme-db</span>   <span class="step">migrate external data with row-count verification</span>
@@ -279,7 +279,7 @@
   <span class="ok">✓ deploy:web</span>     <span class="step">deploy web behind its health gate</span>
   <span class="ok">✓ domains-http</span>   <span class="step">render every declared domain route over HTTP</span>
   <span class="pause">⏸ dns-verify</span>     <span class="step">paused: point acme.example.com at your server, then resume</span>
-<span class="p">$</span> <span class="cmd">uv run cloudfall migrate state --yes</span>   <span class="cm"># resume after the DNS flip</span>
+<span class="p">$</span> <span class="cmd">uv run cloudfall migrate --yes</span>   <span class="cm"># resume after the DNS flip</span>
   <span class="ok">✓ dns-verify</span>     <span class="step">public DNS points at the declared proxy servers</span>
   <span class="ok">✓ domains-tls</span>    <span class="step">Let's Encrypt issued, HTTPS routes enabled</span>
   <span class="ok">✓ inspect</span>        <span class="step">read-only server evidence collected</span>
@@ -459,7 +459,8 @@
       <div class="kicker">Get started</div>
       <h2>Sixty seconds to see how it thinks</h2>
       <div class="install"><span class="p">$</span> git clone https://github.com/romamo/cloudfall && cd cloudfall
-<span class="p">$</span> uv run cloudfall config validate config/examples</div>
+<span class="p">$</span> uv run cloudfall config validate --project config/examples
+<span class="p">$</span> uv run cloudfall init ../my-project</div>
       <div class="cta">
         <a class="btn btn-primary" href="https://github.com/romamo/cloudfall">Star on GitHub</a>
         <a class="btn btn-ghost" href="https://github.com/romamo/cloudfall/blob/main/ROADMAP.md">See the roadmap</a>

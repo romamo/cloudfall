@@ -42,7 +42,7 @@ EXPECTED_STEPS = [
 
 def _config(tmp_path: Path) -> AgentConfig:
     return AgentConfig(
-        config_directory=EXAMPLES,
+        project_directory=EXAMPLES,
         schema_directory=SCHEMAS,
         engine_directory=ENGINE,
         inventory_file=tmp_path / "inventory.json",
@@ -205,6 +205,7 @@ def test_cli_migrate_previews_without_executing(
     exit_code = main(
         [
             "migrate",
+            "--project",
             str(EXAMPLES),
             "--schemas",
             str(SCHEMAS),
@@ -231,6 +232,7 @@ def test_cli_migrate_rejects_malformed_component_pairs(
     exit_code = main(
         [
             "migrate",
+            "--project",
             str(EXAMPLES),
             "--schemas",
             str(SCHEMAS),

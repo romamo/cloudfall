@@ -60,16 +60,16 @@ def test_missing_server_reference_fails_semantic_validation() -> None:
 def test_component_install_root_must_stay_below_application_root(
     tmp_path: Path,
 ) -> None:
-    config_directory = tmp_path / "config"
-    shutil.copytree(ROOT / "config" / "examples", config_directory)
-    component_path = config_directory / "components" / "crm-backend.yaml"
+    project_directory = tmp_path / "config"
+    shutil.copytree(ROOT / "config" / "examples", project_directory)
+    component_path = project_directory / "components" / "crm-backend.yaml"
     component = component_path.read_text(encoding="utf-8").replace(
         "/srv/apps/crm/backend", "/opt/crm/backend"
     )
     component_path.write_text(component, encoding="utf-8")
 
     with pytest.raises(ConfigValidationError) as error:
-        validate_config(config_directory, SCHEMAS)
+        validate_config(project_directory, SCHEMAS)
 
     assert error.value.issue.code == "component_install_root_invalid"
 
@@ -77,16 +77,16 @@ def test_component_install_root_must_stay_below_application_root(
 def test_server_type_rejects_duplicate_configuration_paths(
     tmp_path: Path,
 ) -> None:
-    config_directory = tmp_path / "config"
-    shutil.copytree(ROOT / "config" / "examples", config_directory)
-    server_type_path = config_directory / "server-types" / "debian-application.yaml"
+    project_directory = tmp_path / "config"
+    shutil.copytree(ROOT / "config" / "examples", project_directory)
+    server_type_path = project_directory / "server-types" / "debian-application.yaml"
     duplicated = server_type_path.read_text(encoding="utf-8") + (
         "      - path: /etc/ssh/sshd_config\n        capture: metadata\n"
     )
     server_type_path.write_text(duplicated, encoding="utf-8")
 
     with pytest.raises(ConfigValidationError) as error:
-        validate_config(config_directory, SCHEMAS)
+        validate_config(project_directory, SCHEMAS)
 
     assert error.value.issue.code == "server_type_entry_duplicate"
 
@@ -94,9 +94,9 @@ def test_server_type_rejects_duplicate_configuration_paths(
 def test_ssh_public_key_algorithm_must_match_wire_payload(
     tmp_path: Path,
 ) -> None:
-    config_directory = tmp_path / "config"
-    shutil.copytree(ROOT / "config" / "examples", config_directory)
-    key_directory = config_directory / "ssh-public-keys"
+    project_directory = tmp_path / "config"
+    shutil.copytree(ROOT / "config" / "examples", project_directory)
+    key_directory = project_directory / "ssh-public-keys"
     example_key = (
         key_directory / "example-admin.yaml"
     ).read_text(encoding="utf-8")
@@ -106,7 +106,7 @@ def test_ssh_public_key_algorithm_must_match_wire_payload(
     (key_directory / "mismatched.yaml").write_text(mismatched, encoding="utf-8")
 
     with pytest.raises(ConfigValidationError) as error:
-        validate_config(config_directory, SCHEMAS)
+        validate_config(project_directory, SCHEMAS)
 
     assert error.value.issue.code == "ssh_public_key_invalid"
 
@@ -114,9 +114,9 @@ def test_ssh_public_key_algorithm_must_match_wire_payload(
 def test_server_type_rejects_duplicate_firewall_rules(
     tmp_path: Path,
 ) -> None:
-    config_directory = tmp_path / "config"
-    shutil.copytree(ROOT / "config" / "examples", config_directory)
-    server_type_path = config_directory / "server-types" / "debian-application.yaml"
+    project_directory = tmp_path / "config"
+    shutil.copytree(ROOT / "config" / "examples", project_directory)
+    server_type_path = project_directory / "server-types" / "debian-application.yaml"
     duplicated = server_type_path.read_text(encoding="utf-8").replace(
         "      - port: 443\n        protocol: tcp\n        description: https",
         "      - port: 80\n        protocol: tcp\n        description: duplicate",
@@ -124,7 +124,7 @@ def test_server_type_rejects_duplicate_firewall_rules(
     server_type_path.write_text(duplicated, encoding="utf-8")
 
     with pytest.raises(ConfigValidationError) as error:
-        validate_config(config_directory, SCHEMAS)
+        validate_config(project_directory, SCHEMAS)
 
     assert error.value.issue.code == "firewall_rule_duplicate"
 
@@ -132,25 +132,25 @@ def test_server_type_rejects_duplicate_firewall_rules(
 def test_service_database_must_reference_a_declared_application(
     tmp_path: Path,
 ) -> None:
-    config_directory = tmp_path / "config"
-    shutil.copytree(ROOT / "config" / "examples", config_directory)
-    service_path = config_directory / "services" / "postgresql-main.yaml"
+    project_directory = tmp_path / "config"
+    shutil.copytree(ROOT / "config" / "examples", project_directory)
+    service_path = project_directory / "services" / "postgresql-main.yaml"
     invalid = service_path.read_text(encoding="utf-8").replace(
         "application: crm", "application: billing"
     )
     service_path.write_text(invalid, encoding="utf-8")
 
     with pytest.raises(ConfigValidationError) as error:
-        validate_config(config_directory, SCHEMAS)
+        validate_config(project_directory, SCHEMAS)
 
     assert error.value.issue.code == "resource_reference_missing"
     assert "Application/billing" in error.value.issue.message
 
 
 def test_service_rejects_duplicate_database_names(tmp_path: Path) -> None:
-    config_directory = tmp_path / "config"
-    shutil.copytree(ROOT / "config" / "examples", config_directory)
-    service_path = config_directory / "services" / "postgresql-main.yaml"
+    project_directory = tmp_path / "config"
+    shutil.copytree(ROOT / "config" / "examples", project_directory)
+    service_path = project_directory / "services" / "postgresql-main.yaml"
     duplicated = service_path.read_text(encoding="utf-8").replace(
         "      - name: crm\n        application: crm",
         "      - name: crm\n        application: crm\n"
@@ -159,7 +159,7 @@ def test_service_rejects_duplicate_database_names(tmp_path: Path) -> None:
     service_path.write_text(duplicated, encoding="utf-8")
 
     with pytest.raises(ConfigValidationError) as error:
-        validate_config(config_directory, SCHEMAS)
+        validate_config(project_directory, SCHEMAS)
 
     assert error.value.issue.code == "service_database_duplicate"
 
@@ -167,18 +167,18 @@ def test_service_rejects_duplicate_database_names(tmp_path: Path) -> None:
 def test_second_service_of_one_kind_per_server_is_rejected(
     tmp_path: Path,
 ) -> None:
-    config_directory = tmp_path / "config"
-    shutil.copytree(ROOT / "config" / "examples", config_directory)
-    original = config_directory / "services" / "postgresql-main.yaml"
+    project_directory = tmp_path / "config"
+    shutil.copytree(ROOT / "config" / "examples", project_directory)
+    original = project_directory / "services" / "postgresql-main.yaml"
     second = original.read_text(encoding="utf-8").replace(
         "id: postgresql-main", "id: postgresql-second"
     ).replace("port: 5432", "port: 5433")
-    (config_directory / "services" / "postgresql-second.yaml").write_text(
+    (project_directory / "services" / "postgresql-second.yaml").write_text(
         second, encoding="utf-8"
     )
 
     with pytest.raises(ConfigValidationError) as error:
-        validate_config(config_directory, SCHEMAS)
+        validate_config(project_directory, SCHEMAS)
 
     assert error.value.issue.code == "service_placement_conflict"
 
@@ -186,16 +186,16 @@ def test_second_service_of_one_kind_per_server_is_rejected(
 def test_logging_stack_rejects_conflicting_listener_ports(
     tmp_path: Path,
 ) -> None:
-    config_directory = tmp_path / "config"
-    shutil.copytree(ROOT / "config" / "examples", config_directory)
-    logging_path = config_directory / "logging-stacks" / "operations.yaml"
+    project_directory = tmp_path / "config"
+    shutil.copytree(ROOT / "config" / "examples", project_directory)
+    logging_path = project_directory / "logging-stacks" / "operations.yaml"
     conflicting = logging_path.read_text(encoding="utf-8").replace(
         "port: 9090", "port: 3100", 1
     )
     logging_path.write_text(conflicting, encoding="utf-8")
 
     with pytest.raises(ConfigValidationError) as error:
-        validate_config(config_directory, SCHEMAS)
+        validate_config(project_directory, SCHEMAS)
 
     assert error.value.issue.code == "logging_port_conflict"
 
@@ -203,16 +203,16 @@ def test_logging_stack_rejects_conflicting_listener_ports(
 def test_logging_collector_must_reference_an_existing_server(
     tmp_path: Path,
 ) -> None:
-    config_directory = tmp_path / "config"
-    shutil.copytree(ROOT / "config" / "examples", config_directory)
-    logging_path = config_directory / "logging-stacks" / "operations.yaml"
+    project_directory = tmp_path / "config"
+    shutil.copytree(ROOT / "config" / "examples", project_directory)
+    logging_path = project_directory / "logging-stacks" / "operations.yaml"
     invalid = logging_path.read_text(encoding="utf-8").replace(
         "      - h2", "      - h9", 1
     )
     logging_path.write_text(invalid, encoding="utf-8")
 
     with pytest.raises(ConfigValidationError) as error:
-        validate_config(config_directory, SCHEMAS)
+        validate_config(project_directory, SCHEMAS)
 
     assert error.value.issue.code == "resource_reference_missing"
     assert "Server/h9" in error.value.issue.message
@@ -221,16 +221,16 @@ def test_logging_collector_must_reference_an_existing_server(
 def test_logging_migration_cannot_disable_legacy_agents(
     tmp_path: Path,
 ) -> None:
-    config_directory = tmp_path / "config"
-    shutil.copytree(ROOT / "config" / "examples", config_directory)
-    logging_path = config_directory / "logging-stacks" / "operations.yaml"
+    project_directory = tmp_path / "config"
+    shutil.copytree(ROOT / "config" / "examples", project_directory)
+    logging_path = project_directory / "logging-stacks" / "operations.yaml"
     invalid = logging_path.read_text(encoding="utf-8").replace(
         "preserveLegacyAgents: true", "preserveLegacyAgents: false"
     )
     logging_path.write_text(invalid, encoding="utf-8")
 
     with pytest.raises(ConfigValidationError) as error:
-        validate_config(config_directory, SCHEMAS)
+        validate_config(project_directory, SCHEMAS)
 
     assert error.value.issue.code == "schema_validation_failed"
 
@@ -238,16 +238,16 @@ def test_logging_migration_cannot_disable_legacy_agents(
 def test_logging_secret_paths_stay_in_managed_directory(
     tmp_path: Path,
 ) -> None:
-    config_directory = tmp_path / "config"
-    shutil.copytree(ROOT / "config" / "examples", config_directory)
-    logging_path = config_directory / "logging-stacks" / "operations.yaml"
+    project_directory = tmp_path / "config"
+    shutil.copytree(ROOT / "config" / "examples", project_directory)
+    logging_path = project_directory / "logging-stacks" / "operations.yaml"
     invalid = logging_path.read_text(encoding="utf-8").replace(
         "/etc/cloudfall/logging/server.key", "/var/lib/cloudfall-unsafe/server.key"
     )
     logging_path.write_text(invalid, encoding="utf-8")
 
     with pytest.raises(ConfigValidationError) as error:
-        validate_config(config_directory, SCHEMAS)
+        validate_config(project_directory, SCHEMAS)
 
     assert error.value.issue.code == "logging_secret_path_invalid"
 
@@ -259,6 +259,7 @@ def test_cli_emits_structured_success(
         [
             "config",
             "validate",
+            "--project",
             str(ROOT / "config" / "examples"),
             "--schemas",
             str(SCHEMAS),
@@ -294,6 +295,7 @@ def test_cli_emits_structured_failure(
         [
             "config",
             "validate",
+            "--project",
             str(invalid_state),
             "--schemas",
             str(SCHEMAS),

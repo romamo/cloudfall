@@ -21,7 +21,7 @@ The engine is a ~940-line Python wrapper that shells out to
 `ansible-playbook`. The roles, templates, and playbooks it drives (~5,200
 lines across 107 files) are the part that touches servers, and every proving
 run from M0 to M10 was executed through them. Users never write playbooks
-unless they add a fleet-specific role, so Ansible's ergonomics cost the
+unless they add a role of their own to a project, so Ansible's ergonomics cost the
 maintainer, not the user.
 
 ## Why Ansible stays
@@ -41,7 +41,7 @@ maintainer, not the user.
   engine-internal change, so there is no urgency to make it before the
   contract has been exercised by more than one workload
 - **Agents write it well.** The AI-native pitch depends on agents adding
-  fleet-specific roles; Ansible is the configuration language agents know
+  project roles; Ansible is the configuration language agents know
   best
 
 ## Where Ansible hurts this project

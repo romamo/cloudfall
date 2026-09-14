@@ -49,15 +49,15 @@ def _fixture_inventory(tmp_path: Path) -> PlatformInventory:
     _git("-C", str(repository), "add", ".")
     _git("-C", str(repository), "commit", "--quiet", "--message", "initial")
 
-    config_directory = tmp_path / "config"
-    shutil.copytree(EXAMPLES, config_directory)
-    component_path = config_directory / "components" / "crm-backend.yaml"
+    project_directory = tmp_path / "config"
+    shutil.copytree(EXAMPLES, project_directory)
+    component_path = project_directory / "components" / "crm-backend.yaml"
     component = component_path.read_text(encoding="utf-8").replace(
         "https://github.com/example/crm-backend.git",
         f"file://{repository}",
     )
     component_path.write_text(component, encoding="utf-8")
-    return PlatformInventory.from_state(validate_config(config_directory, SCHEMAS))
+    return PlatformInventory.from_state(validate_config(project_directory, SCHEMAS))
 
 
 def test_builder_packages_a_hashed_release_with_metadata(

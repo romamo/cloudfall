@@ -26,7 +26,7 @@ services:
 
 def _config(tmp_path: Path, observed: Path | None = None) -> AgentConfig:
     return AgentConfig(
-        config_directory=EXAMPLES,
+        project_directory=EXAMPLES,
         schema_directory=SCHEMAS,
         engine_directory=ENGINE,
         inventory_file=tmp_path / "inventory.json",

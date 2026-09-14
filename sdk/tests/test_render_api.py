@@ -164,7 +164,7 @@ def test_import_render_api_writes_state_and_resolved_env(
     targets = ImportTargets(
         application_id=ResourceId.from_boundary("acme"),
         server_id=ResourceId.from_boundary("h1"),
-        config_directory=tmp_path / "config",
+        project_directory=tmp_path / "config",
         environment_directory=tmp_path / "env",
     )
     client = FakeRenderClient()
@@ -244,6 +244,8 @@ def test_cli_render_api_reports_missing_key_file(
         [
             "import",
             "render-api",
+            "--project",
+            str(tmp_path),
             "--api-key-file",
             str(tmp_path / "missing"),
             "--application",
@@ -302,7 +304,7 @@ def test_import_refuses_an_empty_workspace_with_a_structured_error(
     targets = ImportTargets(
         application_id=ResourceId.from_boundary("legacy"),
         server_id=ResourceId.from_boundary("h1"),
-        config_directory=tmp_path / "config",
+        project_directory=tmp_path / "config",
         environment_directory=tmp_path / "env",
     )
 

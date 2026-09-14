@@ -27,7 +27,7 @@ age-keygen -o ~/.config/cloudfall/age.key
 export SOPS_AGE_KEY_FILE=~/.config/cloudfall/age.key
 ```
 
-Put a `.sops.yaml` at the root of your private repository so every secret
+Put a `.sops.yaml` at the root of your project so every secret
 file encrypts to your key automatically:
 
 ```yaml
@@ -65,7 +65,7 @@ belong in encrypted fragments — they belong in the component's declared
 like any other state:
 
 ```yaml
-# config/production/components/crm-backend.yaml
+# components/crm-backend.yaml
 spec:
   environment:
     FEATURE_SIGNUPS: "true"
@@ -85,7 +85,7 @@ component scope. Rendering merges them in that order — later scopes
 override earlier keys:
 
 ```sh
-uv run cloudfall secrets render config/production crm-backend \
+uv run cloudfall secrets render crm-backend \
   --secrets-dir secrets
 ```
 

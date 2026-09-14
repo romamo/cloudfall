@@ -51,14 +51,14 @@ class _RecordingClient:
 
 
 def _single_host_inventory(tmp_path: Path) -> PlatformInventory:
-    config_directory = tmp_path / "config"
-    shutil.copytree(EXAMPLES, config_directory)
-    domain_path = config_directory / "domains" / "crm-site.yaml"
+    project_directory = tmp_path / "config"
+    shutil.copytree(EXAMPLES, project_directory)
+    domain_path = project_directory / "domains" / "crm-site.yaml"
     single_host = domain_path.read_text(encoding="utf-8").replace(
         "    server: h1", "    server: h2"
     )
     domain_path.write_text(single_host, encoding="utf-8")
-    return PlatformInventory.from_state(validate_config(config_directory, SCHEMAS))
+    return PlatformInventory.from_state(validate_config(project_directory, SCHEMAS))
 
 
 def test_single_host_route_skips_the_origin_probe(tmp_path: Path) -> None:

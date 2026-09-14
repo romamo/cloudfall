@@ -62,7 +62,7 @@ def _sources(tmp_path: Path) -> EvidenceSources:
     observed = tmp_path / "observed"
     shutil.copytree(COMPLIANT, observed)
     return EvidenceSources(
-        config_directory=EXAMPLES,
+        project_directory=EXAMPLES,
         schema_directory=SCHEMAS,
         observed_directory=observed,
         service_observed_directory=tmp_path / "observed-services",

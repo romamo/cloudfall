@@ -72,6 +72,17 @@ operations execute through the engine's command-line and playbook contracts,
 never its internals. See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the
 full architecture and the long-term fleet vision.
 
+What you run all of this against is a **project**: one directory, usually a
+private repository, holding your fleet (servers, server types, SSH public
+keys), your applications (applications, components, services, domains), the
+declarations that operate them (alert rules, operator policies, logging
+stacks), and a `pyproject.toml` pinning the Cloudfall commit it runs with.
+Every `cloudfall` command runs inside a project: the current directory when
+it is one, or the directory named by `--project` or by the
+`CLOUDFALL_PROJECT` environment variable. Relative paths, including the
+`tmp/` defaults, resolve against the project, as if the command had been
+started there.
+
 ## Status
 
 Cloudfall is pre-1.0 and honestly labeled. Implemented today, and proven
@@ -110,7 +121,7 @@ do not need Python 3.14 preinstalled.
 git clone https://github.com/romamo/cloudfall.git
 cd cloudfall
 uv sync
-uv run cloudfall config validate config/examples
+uv run cloudfall config validate --project config/examples
 ```
 
 The command validates every YAML config document against the v1 JSON Schemas
@@ -121,20 +132,36 @@ Show the non-secret platform inventory and render it as deterministic Ansible
 JSON:
 
 ```console
-uv run cloudfall inventory show config/examples
-uv run cloudfall-engine inventory render config/examples
+uv run cloudfall inventory show --project config/examples
+uv run cloudfall-engine inventory render --project config/examples
 ```
 
-### Run it from your own fleet repository
+### Start your own project
 
-Your fleet config, evidence, and any fleet-specific playbooks belong in a
-repository of their own. Cloudfall's wheel bundles the schema catalog and the
-Ansible engine, so that repository needs no checkout of this one. Declare the
-package with `uv` and pin an exact revision:
+Your servers, applications, evidence, and any playbooks of your own belong in
+a project: a directory of its own, kept private. Cloudfall's wheel bundles the
+schema catalog and the Ansible engine, so the project needs no checkout of
+this repository. `cloudfall init` is the first command; run it straight from
+git or from a clone (`uv run cloudfall init ../my-project`), and it pins the
+project to the exact Cloudfall commit it ran from. Without a directory
+argument it initializes the current directory, which must be empty:
+
+```console
+uvx --from git+https://github.com/romamo/cloudfall.git cloudfall init my-project
+cd my-project
+uv sync
+```
+
+The project holds one directory per resource kind (`servers/`,
+`server-types/`, `ssh-public-keys/`, `applications/`, `components/`,
+`services/`, `domains/`, `alert-rules/`, `operator-policies/`,
+`logging-stacks/`), a README with the next steps, a `.gitignore` for the
+runtime `tmp/` directory where evidence and receipts land, and a
+`pyproject.toml`:
 
 ```toml
 [project]
-name = "my-fleet"
+name = "my-project"
 version = "0"
 requires-python = ">=3.14"
 dependencies = ["cloudfall"]
@@ -146,20 +173,30 @@ package = false
 cloudfall = { git = "https://github.com/romamo/cloudfall.git", rev = "<commit>" }
 ```
 
-Every command then runs from the fleet directory with bundled defaults, and
-playbooks run through the engine with its own Ansible configuration:
+Only the kind directories are read as resources, so playbooks, roles, docs,
+and tooling files may live anywhere else in the project. Commands find the
+project on their own: the current directory when it is one, else
+`--project`, else `CLOUDFALL_PROJECT`. Declare your SSH key and your first
+server with `cloudfall add`; the server's type is created from the bundled
+Debian 13 baseline when it does not exist yet, and every written file is
+plain YAML you can edit (the reference set under `config/examples/` shows
+every kind). Then validate, render, inspect, and audit from inside the
+project:
 
 ```console
-uv sync
-uv run cloudfall config validate config/production
-uv run cloudfall-engine inventory render config/production --output tmp/ansible-inventory.json
-uv run cloudfall-engine playbook run inspect --extra-vars cloudfall_inspect_output_directory=$PWD/tmp/observed
-uv run cloudfall-engine playbook run engine/ansible/playbooks/proxy.yml --roles engine/ansible/roles
+uv run cloudfall add ssh-key ~/.ssh/id_ed25519.pub --owner roman
+uv run cloudfall add server h1 --address 203.0.113.10
+uv run cloudfall config validate
+uv run cloudfall-engine inventory render --output tmp/ansible-inventory.json
+uv run cloudfall-engine playbook run inspect --inventory tmp/ansible-inventory.json --extra-vars cloudfall_inspect_output_directory=$PWD/tmp/observed
+uv run cloudfall audit --observed tmp/observed
+uv run cloudfall-engine playbook run playbooks/proxy.yml --roles roles
 ```
 
 Bundled playbooks are addressed by name (`cloudfall-engine playbook list`
-shows them); fleet playbooks by path, with `--roles` directories searched
-before the bundled roles.
+shows them); project playbooks by path, with `--roles` directories searched
+before the bundled roles. To move a project to a newer Cloudfall commit, bump
+`rev` and run `uv sync`.
 
 ## Migrate from Render
 
@@ -174,7 +211,7 @@ a service-active health gate instead of a fabricated HTTP check), managed
 PostgreSQL becomes a `Service` with application-owned peer-authentication
 databases, and custom domains become TLS-required `Domain` routes. Each web
 component receives an explicit listen port written as `PORT` into an
-environment file outside the config directory — the config never contains
+environment file rather than into any resource — the config never contains
 secret values. The full walkthrough, including the Render-to-Cloudfall name
 mapping, is in the [Render migration guide](docs/render-migration-guide.md).
 
@@ -186,8 +223,8 @@ server types, validate, then drive the whole migration with one resumable
 plan:
 
 ```console
-uv run cloudfall migrate config/production --build acme-api=main
-uv run cloudfall migrate config/production --build acme-api=main --yes
+uv run cloudfall migrate --build acme-api=main
+uv run cloudfall migrate --build acme-api=main --yes
 ```
 
 Without `--yes` the command shows the plan; with it, the plan executes step
@@ -227,7 +264,7 @@ task audit
 The direct equivalent of `task audit`, for example, is:
 
 ```console
-uv run cloudfall audit config/examples --observed tmp/observed
+uv run cloudfall audit --project config/examples --observed tmp/observed
 ```
 
 Snapshots are written to `tmp/observed/<server>.json` with mode `0600` and

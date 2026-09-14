@@ -4,7 +4,7 @@ Cloudfall runs in two shapes. Installed as a wheel, the versioned JSON
 schemas and the Ansible engine travel inside the package as bundled data.
 Run from a source checkout, they live in the repository tree next to the
 packages. Every command-line default resolves through this module so a
-fleet repository never has to know which shape it is talking to.
+project never has to know which shape it is talking to.
 """
 
 from __future__ import annotations

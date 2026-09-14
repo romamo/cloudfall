@@ -5,9 +5,8 @@ Schemas and the YAML resources they validate — servers, server types,
 applications, components, services, domains, logging stacks, and SSH public keys.
 
 It must not contain credentials or execution logic. Secret values live in
-environment files outside the config directory (generation from a central
-secrets manager is on the [roadmap](../ROADMAP.md)); state stores references
-only.
+environment files rendered under a project's `tmp/`, never in a resource;
+state stores references only.
 
 ## v1 contract
 
@@ -52,6 +51,8 @@ ready-to-deploy, deployed, configured, and healthy service states.
 contains deliberately invalid desired state, while
 `tests/observed/compliant/` contains validated audit fixtures.
 
-Real fleet inventory belongs in a separate private state repository. Keep
+Real servers and applications belong in a project of their own (created
+with `cloudfall init`), kept private. A project holds one directory per
+resource kind and only those directories are read as resources. Keep
 examples and test fixtures synthetic; provider identifiers, network
 allocations, and desired profiles for live hosts never belong here.

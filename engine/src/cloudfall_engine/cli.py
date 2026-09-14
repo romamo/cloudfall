@@ -4,11 +4,17 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from cloudfall.inventory import PlatformInventory
+from cloudfall.project import (
+    PROJECT_DIRECTORY_VARIABLE,
+    ProjectError,
+    project_context,
+)
 from cloudfall.resources import default_engine_directory, default_schema_directory
 from cloudfall.validation import ConfigValidationError, validate_config
 
@@ -26,6 +32,18 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
 
+def _add_project_directory_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--project",
+        type=Path,
+        default=None,
+        help=(
+            f"project directory to run in (default: ${PROJECT_DIRECTORY_VARIABLE}, "
+            "else the current directory when it is a project)"
+        ),
+    )
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="cloudfall-engine")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -39,7 +57,7 @@ def _parser() -> argparse.ArgumentParser:
     render_parser = inventory_commands.add_parser(
         "render", help="render Ansible JSON inventory"
     )
-    render_parser.add_argument("config_directory", type=Path)
+    _add_project_directory_argument(render_parser)
     render_parser.add_argument(
         "--schemas",
         type=Path,
@@ -59,7 +77,7 @@ def _parser() -> argparse.ArgumentParser:
     build_parser = artifact_commands.add_parser(
         "build", help="clone, package, and hash one component release"
     )
-    build_parser.add_argument("config_directory", type=Path)
+    _add_project_directory_argument(build_parser)
     build_parser.add_argument("component")
     build_parser.add_argument(
         "--ref",
@@ -145,7 +163,7 @@ def _add_engine_argument(parser: argparse.ArgumentParser) -> None:
 def _render_inventory(arguments: argparse.Namespace) -> int:
     try:
         state = validate_config(
-            Path(arguments.config_directory), Path(arguments.schemas)
+            Path(arguments.project_directory), Path(arguments.schemas)
         )
     except ConfigValidationError as error:
         sys.stderr.write(f"{json.dumps(error.as_dict(), sort_keys=True)}\n")
@@ -168,7 +186,7 @@ def _render_inventory(arguments: argparse.Namespace) -> int:
 def _build_artifact(arguments: argparse.Namespace) -> int:
     try:
         state = validate_config(
-            Path(arguments.config_directory), Path(arguments.schemas)
+            Path(arguments.project_directory), Path(arguments.schemas)
         )
     except ConfigValidationError as error:
         sys.stderr.write(f"{json.dumps(error.as_dict(), sort_keys=True)}\n")
@@ -227,14 +245,20 @@ def _run_playbook(arguments: argparse.Namespace) -> int:
 def main(argv: Sequence[str] | None = None) -> int:
     """Run one engine command and return a process exit code."""
     arguments = _parser().parse_args(argv)
-    if arguments.command == "inventory":
-        return _render_inventory(arguments)
-    if arguments.command == "artifact":
-        return _build_artifact(arguments)
     if arguments.command == "playbook":
         if arguments.playbook_command == "list":
             return _list_playbooks(arguments)
         return _run_playbook(arguments)
+    try:
+        with project_context(arguments.project, os.environ) as project_directory:
+            arguments.project_directory = project_directory
+            if arguments.command == "inventory":
+                return _render_inventory(arguments)
+            if arguments.command == "artifact":
+                return _build_artifact(arguments)
+    except ProjectError as error:
+        sys.stderr.write(f"{json.dumps(error.as_dict(), sort_keys=True)}\n")
+        return 2
     message = "argparse accepted an unsupported engine command"
     raise RuntimeError(message)
 

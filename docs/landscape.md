@@ -32,7 +32,7 @@ the place workloads come from.
 
 | Tool | Layer | Relationship | In one sentence |
 |---|---|---|---|
-| Ansible | OS configuration | Built on | Cloudfall's engine is Ansible behind a playbook contract; you never write playbooks unless you add a fleet-specific role |
+| Ansible | OS configuration | Built on | Cloudfall's engine is Ansible behind a playbook contract; you never write playbooks unless you add a role of your own to a project |
 | Terraform / OpenTofu, Pulumi | Server creation | Complements | Creates the Hetzner server, DNS zone, and network; hands a Debian host to Cloudfall and stops |
 | hcloud CLI, cloud-init | Server creation | Complements | The manual or scripted way to get the same Debian host; the proving runs use hcloud directly |
 | Debian | Operating system | Required | Stock Debian is a principle (any Linux admin can take over), not a placeholder |

@@ -93,6 +93,7 @@ def test_audit_reports_raid_package_service_and_config_drift(
     exit_code = main(
         [
             "audit",
+            "--project",
             str(EXAMPLES),
             "--schemas",
             str(SCHEMAS),
@@ -368,6 +369,7 @@ def test_missing_observation_is_unknown(
     exit_code = main(
         [
             "audit",
+            "--project",
             str(EXAMPLES),
             "--schemas",
             str(SCHEMAS),
@@ -401,6 +403,7 @@ def test_audit_cli_emits_json_and_compliance_exit_code(
     exit_code = main(
         [
             "audit",
+            "--project",
             str(EXAMPLES),
             "--schemas",
             str(SCHEMAS),

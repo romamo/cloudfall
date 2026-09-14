@@ -90,7 +90,7 @@ _CODE_INVALID_ARGUMENT = "invalid_argument"
 class AgentConfig:
     """Filesystem contract for one agent-facing server instance."""
 
-    config_directory: Path
+    project_directory: Path
     schema_directory: Path
     engine_directory: Path
     inventory_file: Path
@@ -112,7 +112,7 @@ class AgentConfig:
     def context(self) -> EngineContext:
         """Return the engine execution context shared by mutating tools."""
         return EngineContext(
-            config_directory=self.config_directory,
+            project_directory=self.project_directory,
             schema_directory=self.schema_directory,
             engine_directory=self.engine_directory,
             inventory_file=self.inventory_file,
@@ -255,7 +255,7 @@ class AgentToolset:
             targets = ImportTargets(
                 application_id=ResourceId.from_boundary(application),
                 server_id=ResourceId.from_boundary(server),
-                config_directory=self._path(output_directory),
+                project_directory=self._path(output_directory),
                 environment_directory=self._path(environment_directory),
             )
         except (TypeError, ValueError) as error:
@@ -281,7 +281,7 @@ class AgentToolset:
             targets = ImportTargets(
                 application_id=ResourceId.from_boundary(application),
                 server_id=ResourceId.from_boundary(server),
-                config_directory=self._path(output_directory),
+                project_directory=self._path(output_directory),
                 environment_directory=self._path(environment_directory),
             )
         except (TypeError, ValueError) as error:
@@ -730,7 +730,7 @@ class AgentToolset:
 
     def _state(self) -> ValidatedConfig:
         return validate_config(
-            self._config.config_directory, self._config.schema_directory
+            self._config.project_directory, self._config.schema_directory
         )
 
     def _path(self, value: str) -> Path:
