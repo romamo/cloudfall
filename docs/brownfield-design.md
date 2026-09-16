@@ -107,18 +107,37 @@ that have no baseline yet. They are optional.
 Ansible ships nothing that edits its own files: `ansible-inventory` exports,
 `ansible-config init` generates, ansible-lint validates. An agent editing
 Ansible today rewrites raw YAML with no schema and no gate. Cloudfall
-provides one edit primitive for every YAML file Ansible reads, and the
-concept commands are wrappers over it:
+provides one edit pipeline for every YAML file Ansible reads, exposed as
+narrow verbs that name the intent. The shape is `verb target name path
+value`:
 
 ```
-cloudfall edit host_vars/web-3.yml set cloudfall.owns '[firewall, nginx]' --check
-cloudfall edit hosts.yml set all.children.production.hosts.web-4 '{ansible_host: 10.0.0.14}'
-cloudfall edit playbooks/deploy.yml set '[0].tasks[3].retries' 5
-cloudfall edit playbooks/deploy.yml unset '[0].tasks[3].ignore_errors'
-cloudfall add server web-4 --address 10.0.0.14 --group production
+cloudfall get    host  web-4
+cloudfall set    host  web-4 ansible_host 10.0.0.14
+cloudfall set    host  web-4 cloudfall.owns '[firewall, nginx]' --check
+cloudfall unset  host  web-4 cloudfall.owns
+cloudfall set    group production cloudfall.environment production
+cloudfall set    play  deploy tasks[3].retries 5
+cloudfall unset  play  deploy tasks[3].ignore_errors
+cloudfall add    host  web-4 --address 10.0.0.14 --group production
+cloudfall remove host  web-4
+cloudfall set    file  hosts.yml all.children.production.hosts.web-4 '{ansible_host: 10.0.0.14}'
 ```
 
-Every call runs the same pipeline:
+| Target | Addresses | Resolved to |
+| --- | --- | --- |
+| `host` | An inventory host by name | Its entry in the inventory file, or its `host_vars` file for variables |
+| `group` | An inventory group by name | Its entry in the inventory file, or its `group_vars` file for variables |
+| `play` | A playbook by name | The playbook file, path relative to the first play |
+| `file` | Any YAML file by path | The file itself; the escape hatch for everything else |
+
+The agent addresses hosts, groups and plays, not files, because that is
+what it reasons about. Cloudfall resolves the file, picks the most specific
+existing one (`host_vars/web-4.yml` over `host_vars/web-4/main.yml` over
+the inventory entry), and names it in the output. `get` shows the merged
+value and which file wins, so precedence is visible before a write.
+
+Every mutating verb runs the same pipeline:
 
 1. **Parse round-trip** with ruamel so comments, anchors, ordering and
    quoting survive. Only the addressed path changes
@@ -136,10 +155,11 @@ Every call runs the same pipeline:
    pre-write copy, which is kept until the post-write check passes
 5. **Record** the path, the diff and the approver in the audit log
 
-Wrappers such as `add server`, `remove server`, `set` and `unset` add
-semantic checks on top: `add server` refuses a host that already exists in
-the merged inventory or a group that does not, and names the file it will
-write to.
+`add host` and `remove host` add semantic checks on top of `set` and
+`unset`: `add host` refuses a host that already exists in the merged
+inventory or a group that does not, and writes both the inventory entry and
+an empty `cloudfall` block. `set` and `unset` on the `cloudfall` key are
+what `cloudfall add server-type` and the other declaration commands become.
 
 Limits, stated to the user rather than worked around:
 
@@ -151,6 +171,8 @@ Limits, stated to the user rather than worked around:
 - **Jinja templates** are not YAML and are out of scope
 - **Cloudfall never rewrites a whole file** or restructures groups, roles or
   plays. Larger changes are drafted on a branch and merged by a human
+- **No bare `edit` verb.** Every command names what it changes, so an
+  agent's tool list reads as intents, not mechanisms
 
 ### 4. Observation
 
