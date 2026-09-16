@@ -48,11 +48,18 @@ not control.
 
 ### 1. Fleet reader
 
-Cloudfall declares no servers. It runs `ansible-inventory --list` against
-the team's inventory (static INI or YAML, or a dynamic plugin) and reads
-hosts, groups and connection variables. The typed model in
-`sdk/src/cloudfall/inventory.py` is populated from that output instead of
-from resource documents.
+Cloudfall declares no servers. It reads the team's inventory (static INI
+or YAML, or a dynamic plugin) through ansible-core's own loader, in
+process, and gets hosts, groups and merged variables with Ansible's
+precedence applied. The typed model in `sdk/src/cloudfall/inventory.py` is
+populated from that instead of from resource documents.
+
+The read is in-process on purpose. `get` and `set` are the agent's hot
+path and usually run with no playbook in flight, so a subprocess per call
+(`ansible-inventory --list`, several hundred milliseconds) would dominate.
+Importing ansible-core costs about 150 ms once per CLI invocation; every
+read after that is in memory, and dynamic plugins run inside the same call
+with no fallback path. See "In-process Ansible" below for the rules.
 
 Everything Ansible does not model lives in a `cloudfall` variable block in
 the team's own `group_vars` and `host_vars`:
@@ -150,9 +157,10 @@ Every mutating verb runs the same pipeline:
 3. **Diff and gate.** Without `--yes`, print the unified diff and stop.
    Edits are `mutating`: a playbook edit changes what future runs do, an
    inventory edit changes where they run
-4. **Write, then re-validate** on disk with the same checks, plus
-   `ansible-inventory --list` for inventory files. Any failure restores the
-   pre-write copy, which is kept until the post-write check passes
+4. **Write, then re-validate** on disk with the same checks, plus a fresh
+   in-process inventory load for inventory and vars files. Any failure
+   restores the pre-write copy, which is kept until the post-write check
+   passes
 5. **Record** the path, the diff and the approver in the audit log
 
 `add host` and `remove host` add semantic checks on top of `set` and
@@ -221,6 +229,41 @@ so that greenfield and brownfield share one code path.
 | | | `cloudfall init` emits a plain Ansible inventory |
 | Read-only dashboard | | Dashboard reads snapshots |
 | Engine roles and playbooks | | Registered as starter operations |
+
+## In-process Ansible
+
+Cloudfall stays Python. The [no Rust rewrite](decisions/2026-09-14-no-rust-rewrite.md)
+decision holds, and the agent hot path is served by importing ansible-core
+rather than by a compiled reader:
+
+| Need | How | Process cost |
+| --- | --- | --- |
+| Merged inventory, host and group vars, precedence, vault | `InventoryManager` and `VariableManager` in process | Import once, then in memory |
+| Module argument specs for validation | `module_loader` and plugin docs in process, cached to disk | Import once |
+| Playbook syntax check | `ansible-playbook --syntax-check` subprocess | Only at write time |
+| Running an operation | ansible-runner, structured events, check mode | Ansible forks per host anyway |
+
+Rules, because the internal API carries no stability promise:
+
+- **One wrapper module** (`cloudfall.ansible_api`) owns every import from
+  `ansible.*`. Nothing else in the SDK touches ansible-core directly
+- **Pin ansible-core exactly.** A release bump is a change to one module
+  with its own tests
+- **Subprocess fallback behind the same functions.** If the in-process
+  loader fails on a release, the wrapper falls back to
+  `ansible-inventory --list` and reports that it did
+- **One project per process.** ansible-core reads `ansible.cfg` and the
+  environment into module-level state at import; `context.CLIARGS` is set
+  once before any other call. A CLI invocation serves one project, which
+  is the case anyway
+- **Lazy imports.** ansible-core, the MCP server and the dashboard are
+  imported only by the commands that need them, so `cloudfall get` pays
+  for ansible-core and nothing else
+
+Target for the hot path: `cloudfall get host web-4` under 250 ms end to
+end on a static inventory. Measure before optimising further; if it is
+over budget after lazy imports, the next step is caching the merged
+inventory keyed on file mtimes, not a language change.
 
 ## Open questions
 
