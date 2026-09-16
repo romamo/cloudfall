@@ -1,8 +1,8 @@
 # Where Cloudfall sits: the tool landscape
 
 Status: reference positioning, written 2026-09-14, Ansible Automation
-Platform added 2026-09-16. This document places every neighboring tool at
-once. Each tool is classified by the
+Platform and the Ansible MCP servers added 2026-09-16. This document places
+every neighboring tool at once. Each tool is classified by the
 layer it occupies and by its relationship to Cloudfall: **built on**
 (Cloudfall uses it), **replaces** (Cloudfall does the same job a different
 way), **complements** (runs next to Cloudfall, no overlap), **alternative**
@@ -35,6 +35,7 @@ the place workloads come from.
 |---|---|---|---|
 | Ansible | OS configuration | Built on | Cloudfall's engine is Ansible behind a playbook contract; you never write playbooks unless you add a role of your own to a project |
 | Red Hat Ansible Automation Platform (AAP), AWX | Automation runner | Complements | Runs your playbooks at enterprise scale with RBAC, schedules, approvals, and event-driven rules; it brings no playbooks, no declared model, and no proof of results (see below) |
+| Ansible Development Tools (ADT) MCP server | Authoring aid | Complements | Helps an agent write Ansible: `ansible-lint` with auto-fix, `ansible-creator` scaffolding, `ansible-navigator` playbook runs, execution environment builds, best-practice guidance; it holds no model of servers or applications and decides nothing, so it can serve as the lint step for brownfield edits |
 | Terraform / OpenTofu, Pulumi | Server creation | Complements | Creates the Hetzner server, DNS zone, and network; hands a Debian host to Cloudfall and stops |
 | hcloud CLI, cloud-init | Server creation | Complements | The manual or scripted way to get the same Debian host; the proving runs use hcloud directly |
 | Debian | Operating system | Required | Stock Debian is a principle (any Linux admin can take over), not a placeholder |
@@ -113,7 +114,7 @@ with Cloudfall on running and reacting, not on knowing what to run:
 | `cloudfall operator approve` | Approval nodes in Automation Controller workflows |
 | Timer-driven jobs such as restore drills | Scheduled job templates |
 | Receipts | Job history and logs: a record that a job ran, not proof of its result |
-| Agent surface through `cloudfall-mcp` | Ansible Lightspeed, AI help for writing playbooks |
+| Agent surface through `cloudfall-mcp` | The AAP MCP server (jobs, inventory queries, monitoring through the controller API); Ansible Lightspeed and the ADT MCP server help write playbooks |
 | Read-only operations dashboard | Controller web UI, which also launches jobs |
 
 What AAP does not provide, and a team would have to write themselves:
