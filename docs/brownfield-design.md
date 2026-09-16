@@ -37,12 +37,14 @@ agent. Cloudfall is the operator layer an agent is missing:
 | Know what it may do | Any playbook, any host | A catalog of declared operations with risk levels |
 | See the result | Verbose text, JSON callback | Per-host outcome, diff, evidence |
 | Be stopped before harm | `--check` if remembered | A gate it cannot bypass |
+| Change config safely | Nothing; raw file writes | One edit primitive: round-trip, schema-checked, diffed, reversible |
 | Explain itself | Nothing | Audit log with the evidence behind each decision |
 
 The defensible part is the contract: an agent acts only through declared
-operations, on a fleet it can observe, behind a gate it does not control.
+operations and safe edits, on a fleet it can observe, behind a gate it does
+not control.
 
-## The six parts
+## The seven parts
 
 ### 1. Fleet reader
 
@@ -65,9 +67,10 @@ cloudfall:
 ```
 
 This is ordinary Ansible. Their playbooks can read the same variables.
-There is nothing to sync. Cloudfall writes only files under this key and
-never rewrites their inventory files; removing Cloudfall means deleting the
-`cloudfall` blocks.
+There is nothing to sync. Cloudfall's own state is confined to this key;
+removing Cloudfall means deleting the `cloudfall` blocks. Any other change
+to their files goes through the safe edit primitive in part 3, never
+through a whole-file rewrite.
 
 The `owns` list says which subsystems Cloudfall's own roles may touch on
 that host. Anything not listed belongs to the team's roles. This is the
@@ -99,14 +102,64 @@ Cloudfall's own roles (`cloudfall_bootstrap`, `cloudfall_firewall`,
 `cloudfall_postgresql`, ...) ship as a starter pack of operations for teams
 that have no baseline yet. They are optional.
 
-### 3. Observation
+### 3. Safe edits
+
+Ansible ships nothing that edits its own files: `ansible-inventory` exports,
+`ansible-config init` generates, ansible-lint validates. An agent editing
+Ansible today rewrites raw YAML with no schema and no gate. Cloudfall
+provides one edit primitive for every YAML file Ansible reads, and the
+concept commands are wrappers over it:
+
+```
+cloudfall edit host_vars/web-3.yml set cloudfall.owns '[firewall, nginx]' --check
+cloudfall edit hosts.yml set all.children.production.hosts.web-4 '{ansible_host: 10.0.0.14}'
+cloudfall edit playbooks/deploy.yml set '[0].tasks[3].retries' 5
+cloudfall edit playbooks/deploy.yml unset '[0].tasks[3].ignore_errors'
+cloudfall add server web-4 --address 10.0.0.14 --group production
+```
+
+Every call runs the same pipeline:
+
+1. **Parse round-trip** with ruamel so comments, anchors, ordering and
+   quoting survive. Only the addressed path changes
+2. **Validate by file kind** before writing. Inventory and vars files
+   against the ansible-lint inventory and vars schemas; playbooks against
+   the ansible-lint playbook schema and `ansible-playbook --syntax-check`;
+   task module arguments against `ansible-doc --json` argument specs; the
+   `cloudfall` key against Cloudfall's own schema. Malformed input fails
+   with a structured error and nothing is written
+3. **Diff and gate.** Without `--yes`, print the unified diff and stop.
+   Edits are `mutating`: a playbook edit changes what future runs do, an
+   inventory edit changes where they run
+4. **Write, then re-validate** on disk with the same checks, plus
+   `ansible-inventory --list` for inventory files. Any failure restores the
+   pre-write copy, which is kept until the post-write check passes
+5. **Record** the path, the diff and the approver in the audit log
+
+Wrappers such as `add server`, `remove server`, `set` and `unset` add
+semantic checks on top: `add server` refuses a host that already exists in
+the merged inventory or a group that does not, and names the file it will
+write to.
+
+Limits, stated to the user rather than worked around:
+
+- **INI inventories and dynamic sources** are not editable. The command
+  fails and names the file or plugin to change by hand
+- **Semantic correctness** of a playbook is not checked. Syntax check and
+  argument specs catch a wrong parameter, not a task that stops the wrong
+  service. Check mode on the next run is the gate for that
+- **Jinja templates** are not YAML and are out of scope
+- **Cloudfall never rewrites a whole file** or restructures groups, roles or
+  plays. Larger changes are drafted on a branch and merged by a human
+
+### 4. Observation
 
 Facts, service state, disk, recent logs and the last run result are
 gathered into one structured snapshot per host. The agent reads the
 snapshot, never raw SSH output. Snapshots are cached with a timestamp so
 the agent can tell how stale its view is and refresh only what it needs.
 
-### 4. Approval and audit
+### 5. Approval and audit
 
 | Risk | Behaviour |
 | --- | --- |
@@ -118,7 +171,7 @@ Every decision records the operation, the targets, the snapshot it was
 based on, the check-mode diff, who approved and the outcome. The audit
 log is the evidence the agent shows when asked why.
 
-### 5. Agent surface
+### 6. Agent surface
 
 One CLI and one MCP server, same commands for humans and agents, JSON
 output everywhere. The loop is fixed:
@@ -130,7 +183,7 @@ output everywhere. The loop is fixed:
 5. Run: execute through Ansible
 6. Verify: run the operation's verify step, update snapshots
 
-### 6. Starter roles
+### 7. Starter roles
 
 The existing engine roles stay, packaged as optional operations. A
 greenfield team gets a plain Ansible inventory generated by `cloudfall init`
@@ -142,7 +195,8 @@ so that greenfield and brownfield share one code path.
 | --- | --- | --- |
 | Typed domain and JSON schemas | Resource documents as the fleet source | Schemas validate the `cloudfall` var block instead of standalone files |
 | Operator, approval and audit logic | Outward inventory renderer | Renderer becomes a `group_vars` / `host_vars` writer |
-| MCP server and CLI | `cloudfall add server` | `cloudfall init` emits a plain Ansible inventory |
+| MCP server and CLI | `cloudfall add *` as resource writers | `cloudfall add *` become wrappers over the safe edit primitive |
+| | | `cloudfall init` emits a plain Ansible inventory |
 | Read-only dashboard | | Dashboard reads snapshots |
 | Engine roles and playbooks | | Registered as starter operations |
 
@@ -161,8 +215,8 @@ so that greenfield and brownfield share one code path.
 
 ## Not in scope
 
-- Replacing Ansible, editing the team's playbooks, or owning their
-  inventory files
+- Replacing Ansible or owning the team's inventory and playbook files;
+  Cloudfall edits them only through the safe edit primitive, path by path
 - A write UI; approvals stay in the CLI (see the UI scope decision)
 - Multi-tool execution (Terraform, Kubernetes); Ansible is the only hand
   for now
