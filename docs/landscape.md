@@ -1,7 +1,8 @@
 # Where Cloudfall sits: the tool landscape
 
-Status: reference positioning, written 2026-09-14. This document places
-every neighboring tool at once. Each tool is classified by the
+Status: reference positioning, written 2026-09-14, Ansible Automation
+Platform added 2026-09-16. This document places every neighboring tool at
+once. Each tool is classified by the
 layer it occupies and by its relationship to Cloudfall: **built on**
 (Cloudfall uses it), **replaces** (Cloudfall does the same job a different
 way), **complements** (runs next to Cloudfall, no overlap), **alternative**
@@ -33,6 +34,7 @@ the place workloads come from.
 | Tool | Layer | Relationship | In one sentence |
 |---|---|---|---|
 | Ansible | OS configuration | Built on | Cloudfall's engine is Ansible behind a playbook contract; you never write playbooks unless you add a role of your own to a project |
+| Red Hat Ansible Automation Platform (AAP), AWX | Automation runner | Complements | Runs your playbooks at enterprise scale with RBAC, schedules, approvals, and event-driven rules; it brings no playbooks, no declared model, and no proof of results (see below) |
 | Terraform / OpenTofu, Pulumi | Server creation | Complements | Creates the Hetzner server, DNS zone, and network; hands a Debian host to Cloudfall and stops |
 | hcloud CLI, cloud-init | Server creation | Complements | The manual or scripted way to get the same Debian host; the proving runs use hcloud directly |
 | Debian | Operating system | Required | Stock Debian is a principle (any Linux admin can take over), not a placeholder |
@@ -98,6 +100,41 @@ split them from Cloudfall:
 The migration axis is unclaimed by any of them: every self-hosted PaaS
 starts from an empty server, and the managed PaaS providers are
 structurally disincentivized to help you leave.
+
+## Ansible Automation Platform: a bigger hand, not a brain
+
+Red Hat Ansible Automation Platform (AAP), and AWX, its free upstream, is
+the one tool on the list that sits on Cloudfall's own engine. It overlaps
+with Cloudfall on running and reacting, not on knowing what to run:
+
+| Cloudfall | AAP equivalent |
+|---|---|
+| Always-on operator remediating alerts | Event-Driven Ansible rulebooks: "if this event arrives, run this playbook" |
+| `cloudfall operator approve` | Approval nodes in Automation Controller workflows |
+| Timer-driven jobs such as restore drills | Scheduled job templates |
+| Receipts | Job history and logs: a record that a job ran, not proof of its result |
+| Agent surface through `cloudfall-mcp` | Ansible Lightspeed, AI help for writing playbooks |
+| Read-only operations dashboard | Controller web UI, which also launches jobs |
+
+What AAP does not provide, and a team would have to write themselves:
+
+- Health-gated deploys, symlink rollback, and the nginx, PostgreSQL, and
+  Redis catalog
+- A declared model of the servers and a drift audit against it; check mode
+  is not an audit
+- Receipted backups and restore drills that prove a backup restorable
+- Any migration path off a PaaS: importers, guided data migration, cutover
+- A logging and alerting stack; AAP integrates with one, it does not
+  install one
+
+AAP is sold as a per-managed-node enterprise subscription and AWX is heavy
+to operate, so neither fits the one-to-two-server team Cloudfall targets.
+For a larger brownfield team already on AAP the two combine: AAP remains
+the hand that executes, Cloudfall is the brain that decides what should be
+true and proves it. One catch for the [brownfield design](brownfield-design.md):
+AAP teams often keep their inventory in the controller database rather than
+in files, so Cloudfall cannot read `group_vars`/`host_vars` there and would
+need either an inventory kept in git or the AAP API.
 
 ## A typical complete stack
 
