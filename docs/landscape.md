@@ -2,7 +2,8 @@
 
 Status: reference positioning, written 2026-09-14, Ansible Automation
 Platform, the Ansible MCP servers, and Ansible Lightspeed added
-2026-09-16. This document places every neighboring tool at once. Each tool is classified by the
+2026-09-16, re-centred on the operator's record 2026-09-17. This document
+places every neighboring tool at once. Each tool is classified by the
 layer it occupies and by its relationship to Cloudfall: **built on**
 (Cloudfall uses it), **replaces** (Cloudfall does the same job a different
 way), **complements** (runs next to Cloudfall, no overlap), **alternative**
@@ -12,6 +13,9 @@ way), **complements** (runs next to Cloudfall, no overlap), **alternative**
 ## The stack, top to bottom
 
 ```text
+  who decides        Claude Code, Codex, any MCP client   (the agent's brain)
+  what it may do,    Cloudfall record: catalog, gate, verify, audit entry
+  and the proof      |  AAP MCP server, ADT MCP server (run, no record)
   who runs it        Cloudfall operator, PagerDuty, Devopness, AI-SRE tools
   how you deploy     Cloudfall deploy, Coolify, Dokku, Kamal, Compose, k8s
   what it runs on    systemd + nginx + PostgreSQL   (Cloudfall's choice)
@@ -23,19 +27,23 @@ way), **complements** (runs next to Cloudfall, no overlap), **alternative**
   where              Hetzner, OVH, any VPS   |   Render, Heroku, Fly (PaaS)
 ```
 
-Cloudfall occupies three of these rows itself: how you deploy, how the OS is
-configured (through its embedded Ansible engine), and who runs it (the
-operator). It requires a specific answer for one row (Debian), has no
-opinion on the row below (server creation), and treats the PaaS column as
-the place workloads come from.
+Cloudfall occupies four of these rows itself: what the agent may do and
+the proof (the record, which is the product), who runs it (the operator),
+how you deploy, and how the OS is configured (through its embedded Ansible
+engine today, through the team's own Ansible under the
+[brownfield design](brownfield-design.md) next). It deliberately does not
+occupy the top row: the agent decides, Cloudfall declares what it may
+decide between, gates it, verifies it and records it. It requires a
+specific answer for one row (Debian), has no opinion on server creation,
+and treats the PaaS column as the place workloads come from.
 
 ## Tool by tool
 
 | Tool | Layer | Relationship | In one sentence |
 |---|---|---|---|
-| Ansible | OS configuration | Built on | Cloudfall's engine is Ansible behind a playbook contract; you never write playbooks unless you add a role of your own to a project |
+| Ansible | OS configuration | Built on | Cloudfall's engine is Ansible behind a playbook contract; today you write no playbooks unless you add a role of your own, and under the brownfield design your existing playbooks become the agent's declared operations |
 | Red Hat Ansible Automation Platform (AAP), AWX | Automation runner | Complements | Runs your playbooks at enterprise scale with RBAC, schedules, approvals, and event-driven rules; it brings no playbooks, no declared model, and no proof of results (see below) |
-| Ansible Development Tools (ADT) MCP server | Authoring aid | Complements | Helps an agent write Ansible: `ansible-lint` with auto-fix, `ansible-creator` scaffolding, `ansible-navigator` playbook runs, execution environment builds, best-practice guidance; it holds no model of servers or applications and decides nothing, so it can serve as the lint step for brownfield edits |
+| Ansible Development Tools (ADT) MCP server | Authoring aid | Complements | Helps an agent write Ansible: `ansible-lint` with auto-fix, `ansible-creator` scaffolding, `ansible-navigator` playbook runs, execution environment builds, best-practice guidance; it can run a playbook but attaches no risk level, verify step or audit entry to the run, holds no model of servers, and can serve as the lint step for brownfield edits |
 | Red Hat Ansible Lightspeed | Authoring aid and AAP help | Complements | Two AI services sold with AAP: a coding assistant in the Ansible VS Code extension that generates tasks, playbooks, and roles from plain English, explains existing content, and matches suggestions to their Galaxy sources; and an intelligent assistant, a chat in the AAP web UI that answers AAP install, configure, and troubleshooting questions from Red Hat docs (and, as a technology preview, from live AAP data through the AAP MCP server); it writes code and answers questions, it holds no model of servers, runs no audit, and decides nothing about a fleet |
 | Terraform / OpenTofu, Pulumi | Server creation | Complements | Creates the Hetzner server, DNS zone, and network; hands a Debian host to Cloudfall and stops |
 | hcloud CLI, cloud-init | Server creation | Complements | The manual or scripted way to get the same Debian host; the proving runs use hcloud directly |
@@ -59,26 +67,31 @@ the place workloads come from.
 | pgBackRest, Barman, restic, Borg | Backups | Alternative today | Cloudfall runs its own receipted dumps and restore drills; point-in-time recovery on the roadmap may adopt one of these |
 | PagerDuty, Opsgenie | Operations | Replaces at this scale | The operator remediates what its receipts prove reversible and pages you only for what it cannot undo |
 | Devopness | Operations SaaS | Competes | The closest operational twin: closed SaaS, imperative dashboard; Cloudfall is AGPL with typed state the user owns |
-| AI SRE agents (generic) | Operations | Alternative | Agents bolted onto imperative tools; Cloudfall grants autonomy per operation class from verified receipt history |
-| Claude Code, Codex, any MCP client | Agent surface | Complements | Drive Cloudfall through `cloudfall-mcp`; read-only tools free, mutating tools behind a confirmation handshake |
+| AI SRE agents (generic) | Operations | Alternative | Agents bolted onto imperative tools; their log says a tool was called. Cloudfall keeps the record of what the fleet looked like, what was proposed, who approved and what verify reported, and grants autonomy per operation class from it |
+| Claude Code, Codex, any MCP client | Agent surface | Complements | The brain. They drive Cloudfall through `cloudfall-mcp`, gate on its tool annotations with their own permission modes, and leave the record to Cloudfall; read-only tools free, mutating tools behind a confirmation handshake |
 
 ## What Cloudfall adds and what it replaces
 
-Cloudfall **adds** something no tool on the list has: a layer of evidence
-between "the command exited zero" and "the platform is healthy". Receipts
-for every mutation, read-only observations, an audit that reports drift
-with exit codes, restore drills that prove a backup, and an operator whose
-autonomy is derived from that evidence. Every other tool here treats
-success as the absence of an error.
+Cloudfall **adds** something no tool on the list has: the record. A layer
+of evidence between "the command exited zero" and "the platform is
+healthy", and between "the agent called a tool" and "the agent can say
+why". Receipts for every mutation, a verify step that turns a run into a
+per-host outcome, an audit that reports drift with exit codes, restore
+drills that prove a backup, one audit entry per decision holding the
+snapshot, the diff, the approver and the verify result, and an operator
+whose autonomy is derived from that record. Every other tool here treats
+success as the absence of an error, and every agent surface here treats a
+tool call as its own explanation.
 
 Cloudfall **replaces** the self-hosted PaaS category (Coolify, Dokku,
 Kamal), the managed PaaS bill (Render, Heroku), hand-rolled Ansible, and,
 at one-to-two-server scale, observability and paging SaaS.
 
 Cloudfall **does not replace** server provisioning (Terraform, hcloud),
-the operating system (Debian), or the agent that talks to it (any MCP
-client). It uses Ansible, Grafana/Loki, sops/age, and certbot underneath
-and does not pretend otherwise.
+the operating system (Debian), the agent that decides (any MCP client), or
+the gate that client already applies from tool annotations. It is not the
+brain and does not want to be. It uses Ansible, Grafana/Loki, sops/age,
+and certbot underneath and does not pretend otherwise.
 
 Cloudfall **rejects** orchestration (Kubernetes and friends), containers
 as the application unit, and NixOS as the base, each as a deliberate
@@ -87,8 +100,9 @@ nothing but Debian knowledge.
 
 ## The two axes that separate Cloudfall from its closest rivals
 
-The self-hosted PaaS tools are the real category rivals, and two axes
-split them from Cloudfall:
+The self-hosted PaaS tools are the category rivals on the deploy row, and
+the Ansible MCP servers are the rivals on the agent row. Three axes split
+them from Cloudfall:
 
 1. **Where the truth lives.** Coolify, Dokploy, and CapRover hold state in
    their own database behind a dashboard; Kamal holds it in a YAML file plus
@@ -98,6 +112,11 @@ split them from Cloudfall:
    when the container starts or the health check passes once. Cloudfall
    writes a receipt, keeps observing, and the operator acts on drift and
    alerts afterwards
+3. **Whether the agent can explain itself.** The AAP and ADT MCP servers
+   let an agent run a playbook and log that it did. Cloudfall lets it run
+   only a declared operation, and records what the fleet looked like, what
+   the agent proposed, who approved and what verify reported. After an
+   incident, one of these has a page to open
 
 The migration axis is unclaimed by any of them: every self-hosted PaaS
 starts from an empty server, and the managed PaaS providers are
@@ -156,3 +175,17 @@ For the wedge use case, the full toolchain is:
   host, watching alerts and audits
 
 Nothing on that list is NixOS, Kubernetes, Docker, or a PaaS.
+
+For a team that already runs Ansible, the intended stack (designed, not
+built) is shorter:
+
+- Their inventory and playbooks stay where they are; Cloudfall adds one
+  `cloudfall` key per host and reads the rest in process
+- Each playbook they choose to expose is declared as an operation with a
+  risk level and a verify step; the MCP tool list is generated from that
+- Claude Code or Codex drives it, gating on the tool annotations
+- Cloudfall writes the audit entry for every run and the operator watches
+  their existing alerts
+
+Nothing on that list replaces Ansible, and nothing on it is Cloudfall's
+own config format.
