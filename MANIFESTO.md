@@ -70,15 +70,13 @@ of deliberately bad releases. What has not been proven live is listed as
 such in the README and the roadmap. "Pre-1.0, honestly labeled" is not
 marketing copy; it is the release policy.
 
-## 8 · Open, business model included
+## 8 · Open core, never crippled
 
-Cloudfall is AGPL-3.0, and the business model is developed in the open next
-to the code: the lean canvas, the pricing hypotheses, the revenue plan. The
-free tool must be genuinely sufficient to leave a PaaS and run your own
-server; sustainability comes from the autonomous operator, support, and
-commercial licensing, never from crippling the open core. You should be
-able to read exactly how this project intends to survive, and hold it to
-that.
+Cloudfall is AGPL-3.0. The free tool must be genuinely sufficient to leave
+a PaaS and run your own server; sustainability comes from the hosted
+operator and commercial licensing, never from holding back the open core.
+What is free stays free, and the line between the two is stated in the
+README, not discovered at checkout.
 
 ---
 

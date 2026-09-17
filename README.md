@@ -350,9 +350,9 @@ confirmation. See the [operator guide](docs/operator-guide.md).
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
 Notable changes are recorded in the [changelog](CHANGELOG.md).
 
-Cloudfall is developed in the open, business model included: the
-[lean canvas](docs/lean-canvas.md) describes the problem, the wedge, and
-how the application intends to sustain itself.
+Everything in this repository is free under the AGPL and sufficient on its
+own. The hosted always-on operator and commercial licensing are how the
+project sustains itself; neither holds back the open core.
 
 ## License
 
