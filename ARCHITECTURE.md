@@ -1,32 +1,56 @@
 # Architecture
 
-Cloudfall is built wedge-first: take a SaaS off a cloud PaaS such as Render and
-run it on one fresh Debian host with a hardened baseline, monitoring, deploys,
-and rollback. The architecture, however, is designed from day one for the
-larger goal behind the wedge: an AI agent safely operating 10–100 standalone
-SaaS applications across a fleet of dedicated Debian servers without
-Kubernetes (see the [fleet goals](docs/fleet-goals.md)). This document
-describes the durable design shared by both stories;
-[`ROADMAP.md`](ROADMAP.md) is the authoritative source for what is implemented
-today.
+Cloudfall is the operator's record for a small fleet run by an AI agent.
+The agent decides, Ansible executes, and Cloudfall sits between them: it
+declares what the agent may do, checks every result, and keeps the evidence
+behind every decision. Ansible is the hand, the agent is the brain,
+Cloudfall is the conscience.
+
+It was built wedge-first: take a SaaS off a cloud PaaS such as Render and
+run it on one fresh Debian host with a hardened baseline, monitoring,
+deploys, and rollback, then let an always-on operator run it there. The
+architecture is designed for the goal behind the wedge: an agent safely
+operating 10–100 standalone SaaS applications across a fleet of dedicated
+Debian servers without Kubernetes (see the [fleet goals](docs/fleet-goals.md)),
+on a config the team already owns. This document describes the durable
+design; [`ROADMAP.md`](ROADMAP.md) is the authoritative source for what is
+implemented today, and the [brownfield design](docs/brownfield-design.md)
+describes the proposed next step, none of which is built.
 
 Every layer keeps the same invariants: no action without declared config, no
-status without evidence, no compliance without audit.
+status without evidence, no compliance without audit, no decision without a
+record.
 
 ## Control plane stack
 
 ```text
 Human / AI agent ──edits──► Config (YAML)
-Human / AI agent ──runs───► CLI / Python API ──► Execution engine ──► Servers
+Human / AI agent ──runs───► CLI / MCP / Python API ──► Gate ──► Execution engine ──► Servers
+                                     │                                   │
+                                     └──────────── Record ◄── Verify ◄───┘
 ```
 
 The config is a store, not a pipeline stage: humans and agents edit it
 directly, the CLI validates and reads it, and the engine converges servers
-to it. The agent operates against structured config through a stable CLI
-and Python API instead of inventing shell commands or discovering
+to it. The agent operates through a stable CLI, the `cloudfall-mcp` server
+and a Python API instead of inventing shell commands or discovering
 infrastructure over SSH. Every mutating operation goes through the engine's
-explicit playbook contracts and produces receipts; status is derived from
-validated observations, never inferred.
+explicit playbook contracts, waits behind a gate the agent does not control
+(a confirmation handshake, or an `OperatorPolicy` that licenses the
+operation class), and produces receipts. Status is derived from validated
+observations, never inferred.
+
+The record is the durable output. Every operator decision is written as a
+schema-validated receipt that holds the evidence it was based on, the
+diagnosis, the exact operation, who approved it and the outcome; deploys,
+backups, restore drills and data migrations write receipts of their own.
+The agent's own log says a tool was called. The record says what the fleet
+looked like when it was, and it is what licenses autonomy later.
+
+The loop the agent runs is fixed: observe (read evidence), decide (pick an
+operation and targets, state why), preview (check mode and diff), approve
+(gate by risk), run (execute through the engine), verify (check the result
+and update the evidence).
 
 ## Project
 
@@ -55,6 +79,13 @@ Runtime state (observations, receipts, rendered inventory, built artifacts,
 rendered environment files, the persisted migration plan) lands under `tmp/`
 and is never committed. `cloudfall init` lays out a new project and
 `cloudfall add` declares its first fleet resources.
+
+Proposed, not built: for a team that already runs Ansible, the project is
+their existing repository. The fleet is read from their inventory instead of
+`Server` resources, Cloudfall's declarations live under one `cloudfall` key
+in their `group_vars` and `host_vars`, and their playbooks are registered as
+operations. One config, theirs; no import and no second copy. See the
+[brownfield design](docs/brownfield-design.md).
 
 ## Module boundaries
 
@@ -86,6 +117,13 @@ The config never contains secret values; schemas and validation reject them.
 Secrets exist as references, rendered from a sops/age-encrypted secrets
 directory into environment files under the project's `tmp/`, never into a
 resource, and consumed by systemd via `EnvironmentFile`.
+
+The typed resources are today's config, not the point. The point is that
+there is one description of the fleet, the team owns it, it is plain files
+in a repository, and nothing rewrites it silently. The brownfield design
+keeps every one of those properties while moving the description into the
+team's own Ansible inventory; the schemas then validate the `cloudfall`
+block instead of standalone documents.
 
 ## Application and component model
 
@@ -166,13 +204,44 @@ Operating servers is the same evidence discipline running continuously:
   declared `OperatorPolicy` and earned by verified receipt history, never
   globally; DNS cutover, data deletion, and database promotion stay behind
   explicit confirmation regardless of autonomy level
+- **Record** — receipts are the audit log: schema-validated, written under
+  the project's `tmp/`, one per decision or operation, holding the evidence,
+  the action, the approver and the outcome. "Why did the agent do that" is
+  answered from the record, not from the agent's memory
+- **Verify** — a run is not an outcome. Deploys are gated on health, backups
+  on a timer-driven restore drill, migrations on row counts, audits on
+  observed drift. The brownfield design generalises this into a verify step
+  declared on every operation
+
+## Direction: the team's Ansible as the config
+
+The wedge proves the model on one host that Cloudfall set up. Most teams
+that would use the record already have a fleet and an Ansible repository.
+The [brownfield design](docs/brownfield-design.md) re-roots the same
+machinery on that repository, in this build order:
+
+- **Operations catalog** — each of the team's playbooks becomes a declared
+  tool with typed inputs, a risk level exported as MCP tool annotations,
+  preconditions and a verify step
+- **Approval and audit** — the gate and the audit entry, unchanged in
+  principle from the operator above, applied to every declared operation
+- **Agent surface** — the same CLI and MCP server, with the tool list
+  generated from the catalog
+- **Fleet reader** — hosts, groups and merged variables read through
+  ansible-core in process, with the `cloudfall` block as the only addition
+- **Observation, safe edits, starter roles** — last; the existing engine
+  roles become optional operations for teams with no baseline yet
+
+None of this is implemented. The module boundaries above hold: the reader
+is one wrapper module around ansible-core, and mutating operations still
+execute through the engine's contracts.
 
 ## Long-term vision: fleet operation
 
-The wedge proves the model on one host. The same config, audit, and deploy
-machinery is designed to extend to fleet operation without architectural
-change; the [fleet goals](docs/fleet-goals.md) state the requirements this
-must deliver and their current status:
+The same config, record, and deploy machinery is designed to extend to
+fleet operation without architectural change; the
+[fleet goals](docs/fleet-goals.md) state the requirements this must deliver
+and their current status:
 
 - **Catalog breadth** — MySQL, Elasticsearch, RabbitMQ, and Node runtime
   services following the PostgreSQL and Redis pattern: pinned installs,
