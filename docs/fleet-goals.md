@@ -5,13 +5,18 @@ must deliver and is the reference the roadmap sequences against. The
 [architecture](../ARCHITECTURE.md) describes the durable design;
 [`availability-design.md`](availability-design.md) and
 [`hybrid-storage-design.md`](hybrid-storage-design.md) specify two of the
-mechanisms referenced here.
+mechanisms referenced here, and the
+[brownfield design](brownfield-design.md) specifies the record and the
+operations catalog for requirements 12–14.
 
 ## Goal
 
 Host 10–100 applications on the shared resources of a small fleet of bare
 metal or VPS nodes, at a fixed and predictable cost per node, operated from
-one management host by one operator (human or AI agent) without Kubernetes.
+one management host by an AI agent without Kubernetes, on a config the
+team owns, with a record that answers why for every change on every node.
+The fleet may be one Cloudfall set up or one the team already runs with
+Ansible; the requirements are the same.
 
 ## Requirements
 
@@ -74,6 +79,27 @@ on shared nodes fails in practice:
     drain of an aging node and recovery from a failed one are distinct,
     both routine
 
+Added by the agent-operated goal — an agent at this density is only
+acceptable if the following hold:
+
+12. **Every operation is declared, with a risk level and a verify step.**
+    The agent's tool list is a catalog of operations the team registered,
+    each with typed inputs, a risk level it cannot change, preconditions,
+    and a verify step that reports per host. A run without a verify result
+    is not an outcome. Anything not in the catalog is not available to the
+    agent
+13. **Every decision leaves an audit entry.** One record per decision
+    holding the evidence snapshot it was based on, the proposed diff, who
+    approved (human, policy, or client handshake) and the verify result.
+    "Why did the agent do that" is answered from the record for any node,
+    operation or time window, and autonomy per operation class is granted
+    on that record, never globally
+14. **One config, and it is the team's.** The fleet is described once, in
+    plain files the team owns; where the team already runs Ansible, that
+    is their inventory with one `cloudfall` key, not an import and not a
+    second copy. Cloudfall never rewrites a file it does not own the key
+    in, and never keeps state the team cannot delete by removing the key
+
 ## Current status against the requirements
 
 | # | Requirement | Mechanism | Status |
@@ -89,26 +115,36 @@ on shared nodes fails in practice:
 | 9 | Data movement verb | `data migrate` + file-storage move + receipts | Partial: databases yes, file storage no |
 | 10 | Routing follows placement | Domain re-render on convergence | Partial: rendering exists, not wired to placement change |
 | 11 | Drain / decommission | Evacuation procedure over 9 + 10 | Missing |
+| 12 | Declared operations with verify | `Operation` catalog, MCP annotations, verify playbook | Partial: MCP tools are annotated and confirm-gated; deploys, backups and migrations verify; no catalog over arbitrary playbooks, no declared verify step |
+| 13 | Audit entry per decision | Receipts as the record, `cloudfall why` | Partial: operator proposals and every deploy, backup and drill write receipts; no single entry joining snapshot, diff, approver and verify; no query |
+| 14 | One config, the team's | Fleet reader over their inventory, `cloudfall` key | Missing: the config is Cloudfall's own resources today (design written) |
 
 ## Sequencing implications
 
 In value order for the roadmap, after M10 (proven restores and real
 alerting — the floor everything above stands on):
 
-1. Requirement 8, resource declarations and enforcement (roadmap M11) —
-   the first thing that fails at density, and the cheapest of the missing
-   items
-2. Requirements 9 and 10, then 11 (M12) — data movement and routing make
+1. Requirements 12 and 13, the operations catalog and the audit entry
+   (roadmap M15) — the product in its smallest form; the record only
+   compounds on fleets that exist, so it comes before anything that adds
+   density
+2. Requirement 14, the team's Ansible as the config (M16) — the entry
+   point for every fleet that was not set up by Cloudfall, which is most
+   of them
+3. Requirement 8, resource declarations and enforcement (M11) — the first
+   thing that fails at density, and the cheapest of the remaining items
+4. Requirements 9 and 10, then 11 (M12) — data movement and routing make
    requirement 4 true, which is what "ready to scale" means here, and
    drain is needed the first time a node ages out; any real fleet's aging
    hardware guarantees that day comes
-3. PostgreSQL point-in-time recovery, the availability schema, and the
+5. PostgreSQL point-in-time recovery, the availability schema, and the
    expansion-ready-at-one-node prerequisites (M13) — the schema and
    prerequisites land here because they are cheap and make the formation
    purchasable later
-4. Requirement 6 implementation, the formation (M14) — demand-gated:
+6. Requirement 6 implementation, the formation (M14) — demand-gated:
    built when a service's revenue justifies a standby, not before
-5. Bare-metal provisioning closes the last gap in requirement 7
+7. Safe edits and the hosted record (M17), and bare-metal provisioning
+   closing the last gap in requirement 7 — each when a workload needs it
 
 ## Non-goals
 
@@ -121,3 +157,6 @@ alerting — the floor everything above stands on):
   the architecture says otherwise
 - Autoscaling: capacity changes are deliberate config changes by the
   operator
+- Being the brain: the agent decides what to run; Cloudfall declares what
+  it may run, gates it, verifies it and records it. It proposes nothing on
+  its own beyond the operator's alert-driven remediations
