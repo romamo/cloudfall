@@ -115,6 +115,53 @@ Consequences for the build:
 - If the market for the harness closes entirely, the operator with receipts
   is still worth having for Cloudfall's own hosts. That is the floor
 
+## The moat
+
+The moat is not the code. It is the record.
+
+- **Receipt history that compounds.** Every run adds an audit entry with
+  the fleet snapshot, the diff, the approver and the verify result. After
+  six months a team holds evidence nobody else has: which operations always
+  succeed, on which hosts, under what conditions. That history is what lets
+  autonomy be granted per operation class. The schema can be copied in a
+  week; the six months cannot
+- **Verify as a first-class field.** Ansible reports that tasks changed.
+  Cloudfall reports that the thing is now true, per host. Verify playbooks
+  for real operations (backup restored, service healthy, cert renewed) are
+  slow domain work and accumulate as a library the same way receipts do
+- **Brownfield with zero migration.** Their inventory, their playbooks, one
+  `cloudfall` key. Trying costs an afternoon; leaving costs deleting a key
+- **The scale nobody serves.** One to twenty hosts, no AAP, no Kubernetes.
+  Red Hat will not price for it, Coolify and Kamal do not audit, the AI SRE
+  startups target Datadog-sized fleets
+- **Open source with typed state the user owns.** Devopness is the closest
+  twin and is closed SaaS. A tool that gates what an agent does to your
+  servers should be readable
+
+What the moat is not:
+
+- Not a technology moat; anyone can wrap playbooks in MCP
+- Not a gate moat; clients supply the gate now
+- Not a defence against Red Hat at enterprise scale, and it does not need
+  to be
+
+Why it is still worth building:
+
+- **Cloudfall is its own first user.** The operator with receipts pays for
+  itself on Cloudfall's own hosts whether or not anyone else adopts it.
+  That is the floor and it is already above zero
+- **The parts that matter are small.** A thin MCP server over playbooks, an
+  audit entry, a verify field. The expensive parts (safe edits, snapshot
+  cache, in-process reader) are explicitly last
+- **The compounding starts on day one.** The moat is time-based, so
+  starting late is the only way to lose it
+- **The proven operations are already the hardest part.** Backups, restore
+  drills and cross-host alerting are done and exercised. The harness is
+  the cheap layer on top of the expensive layer that exists
+
+A year from now, a schema and a CLI is no moat. A year of receipts on real
+hosts and a library of verify steps is the product.
+
 ## The seven parts
 
 ### 1. Operations catalog
