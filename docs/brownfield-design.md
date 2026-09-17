@@ -7,6 +7,49 @@ own resource documents. It builds on the decision in
 and changes the [project vocabulary](../ARCHITECTURE.md): the fleet is no
 longer declared by Cloudfall, it is read from Ansible.
 
+## The product
+
+Cloudfall is the operator's record for a small fleet run by an AI agent.
+
+Point your agent at the Ansible repository you already have. Cloudfall
+turns your playbooks into a tool list, checks every result, and keeps the
+evidence.
+
+What it is:
+
+- **A thin MCP server over your playbooks.** Each playbook becomes a tool
+  with a risk annotation; any client gates it
+- **A verify step per operation.** Not "the playbook ran" but "the service
+  is healthy on 3 of 3 hosts"
+- **An audit entry per decision.** What the fleet looked like, what the
+  agent proposed, who approved, what verify said
+- **Receipted operations that ship with it.** Backups, restore drills,
+  alerting to a second host; proven and optional
+
+Who it is for: a team with one to twenty Debian hosts, an Ansible
+repository, and Claude Code or Codex already in the loop. No AAP, no
+Kubernetes, no SRE.
+
+What it is not:
+
+- **Not a new config format.** Your inventory is the config; Cloudfall adds
+  one key
+- **Not the brain.** The agent decides; Cloudfall says what it may do and
+  records what it did
+- **Not a gate product.** The client gates; Cloudfall supplies the
+  annotations and the evidence
+- **Not a dashboard.** One read-only view of the record; approvals stay in
+  the CLI
+
+The promise: after a month you can answer "why did the agent do that" for
+every change on every host. After six months you can let it run some
+operations unattended, because the record shows they always succeed.
+
+For contrast, Cloudfall was a typed fleet description with an Ansible
+engine behind it and an operator on top. The typed description is gone as
+the entry point. The engine roles stay as optional operations. The operator
+and its receipts are the product.
+
 ## Problem
 
 Most teams that would benefit from Cloudfall already run Ansible. They have
