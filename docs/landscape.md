@@ -103,7 +103,7 @@ The migration axis is unclaimed by any of them: every self-hosted PaaS
 starts from an empty server, and the managed PaaS providers are
 structurally disincentivized to help you leave.
 
-## Ansible Automation Platform: a bigger hand, not a brain
+## Ansible Automation Platform: a bigger hand, not a conscience
 
 Red Hat Ansible Automation Platform (AAP), and AWX, its free upstream, is
 the one tool on the list that sits on Cloudfall's own engine. It overlaps
@@ -133,8 +133,9 @@ What AAP does not provide, and a team would have to write themselves:
 AAP is sold as a per-managed-node enterprise subscription and AWX is heavy
 to operate, so neither fits the one-to-two-server team Cloudfall targets.
 For a larger brownfield team already on AAP the two combine: AAP remains
-the hand that executes, Cloudfall is the brain that decides what should be
-true and proves it. One catch for the [brownfield design](brownfield-design.md):
+the hand that executes, the agent decides, and Cloudfall is the conscience
+that gates what it may do and proves what it did. One catch for the
+[brownfield design](brownfield-design.md):
 AAP teams often keep their inventory in the controller database rather than
 in files, so Cloudfall cannot read `group_vars`/`host_vars` there and would
 need either an inventory kept in git or the AAP API.
