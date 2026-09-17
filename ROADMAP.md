@@ -1,14 +1,35 @@
 # Roadmap
 
-Cloudfall is built toward one complete story first:
+Cloudfall is the operator's record for a small fleet run by an AI agent:
+the agent decides, Ansible executes, Cloudfall declares what the agent may
+do, checks every result and keeps the evidence behind every decision. The
+roadmap reaches that in two stories.
+
+The first story, proven live in M0–M10:
 
 > A SaaS running on a PaaS such as Render gets one fresh Debian bare-metal or
 > VPS host, runs Cloudfall, and within an hour has: a hardened baseline, firewall,
 > monitoring, logging, PostgreSQL, Nginx with TLS, its application deployed
 > from GitHub with health checks and rollback, and a DNS cutover checklist.
+> An always-on operator then runs it there, with a receipt for every action.
+
+The second story, designed and not yet built (M15–M17, see the
+[brownfield design](docs/brownfield-design.md)):
+
+> A team that already runs Ansible points its agent at its own repository.
+> Cloudfall reads their inventory as the only config, exposes each of their
+> playbooks as a declared operation with a risk level and a verify step,
+> and writes an audit entry for every decision: what the fleet looked like,
+> what was proposed, who approved, what verify reported.
 
 Every milestone keeps the invariants that define Cloudfall: no action without
-declared config, no status without evidence, no compliance without audit.
+declared config, no status without evidence, no compliance without audit, no
+decision without a record.
+
+Milestone numbers are labels, not order. After M10 the priority is the
+brownfield track (M15–M17), because the record only compounds on fleets
+that exist; the density and PostgreSQL tracks (M11–M14) are demand-gated
+and follow.
 
 ## M0 — Publishable base
 
@@ -310,6 +331,86 @@ payload to a second machine across the public network at T0+113 s — see the
 run caught and fixed a real bug (the typed inventory silently dropped the
 new drill schedule, so no timer was installed until the audit's
 required-unit check exposed it), which is the point of proving runs.
+
+## M15 — Brownfield: operations catalog, gate and record
+
+The first milestone of the second story, and the product in its smallest
+form. Nothing here needs the fleet reader: the catalog can be declared
+against a Cloudfall project first and re-rooted in M16.
+
+- **Operations catalog** — an `Operation` resource that registers an
+  existing playbook with typed inputs, a risk level (`read`, `mutating`,
+  `destructive`), a target scope, preconditions and a verify playbook; the
+  existing engine roles ship as a starter catalog
+- **Risk as MCP annotations** — the MCP tool list is generated from the
+  catalog, with `readOnlyHint` and `destructiveHint` set from the risk
+  level, so any client gates on it without Cloudfall's help
+- **Audit entry per decision** — one schema-validated record per operation
+  run holding the evidence snapshot it was based on, the check-mode diff,
+  the approver (human, policy, or client handshake) and the verify result;
+  the operator's proposal receipts become one kind of audit entry
+- **Verify as a first-class field** — a run is not an outcome until its
+  verify step reports per host; the existing health gate, restore drill and
+  row-count checks are re-expressed as verify steps
+- **`cloudfall why`** — the question "why did the agent do that" answered
+  from the record for any host, operation or time window, in JSON and as a
+  page
+
+Exit: an agent drives a declared mutating operation through the MCP server
+on a proving host, the client gates it from the annotation alone, the run
+is refused until its precondition holds, and afterwards `cloudfall why`
+returns the audit entry with snapshot, diff, approver and verify result
+without any human having written a note.
+
+## M16 — Brownfield: the team's Ansible as the config
+
+Re-roots M15 on an existing Ansible repository. One config, theirs; no
+import, no second copy.
+
+- **Fleet reader** — hosts, groups and merged variables read through
+  ansible-core in process behind one wrapper module, with subprocess
+  fallback; the typed inventory model is populated from it instead of from
+  `Server` resources
+- **The `cloudfall` block** — Cloudfall's declarations (environment, server
+  type, owned subsystems, components) live under one key in the team's own
+  `group_vars` and `host_vars`, validated by the existing schemas; removing
+  Cloudfall means deleting the key
+- **Operations from their playbooks** — the M15 catalog registers the
+  team's playbooks, not only the starter roles; `owns` says which
+  subsystems Cloudfall's roles may touch on a host
+- **Observation** — facts, service state, disk and last-run result as one
+  timestamped snapshot per host, referenced by every audit entry
+- **Greenfield on the same path** — `cloudfall init` emits a plain Ansible
+  inventory, so both stories share one code path
+
+Exit: on a proving repository with an INI or YAML inventory and playbooks
+Cloudfall did not write, `cloudfall get host` returns the merged variables
+and the file that wins, an operation declared over one of their playbooks
+runs through the M15 gate and record, and no file outside the `cloudfall`
+key has changed.
+
+## M17 — Brownfield: safe edits and hosted record
+
+The parts that wait for a workload to need them.
+
+- **Safe edits** — `get`, `set`, `unset`, `add host`, `remove host` over
+  inventory, vars and playbook files: ruamel round-trip, schema and
+  syntax-check validation before and after the write, diff and gate,
+  restore on failure, audit entry; INI and dynamic sources refused with the
+  file named
+- **Hosted record** — the audit log kept off the management host with
+  retention and search across hosts, which is where autonomy-from-history
+  is computed; local receipts stay the free path
+- **Autonomy from the record** — `OperatorPolicy` may license an operation
+  class on evidence ("succeeded N times on these hosts") computed from the
+  record, not only on a declared allow-list
+- **Per-tenant policy** — policy and approvers scoped per inventory group
+  for teams that run many fleets from one repository
+
+Exit: an agent edits a host variable in a proving repository through
+`cloudfall set` with comments and ordering preserved, the record shows the
+edit with its diff and approver, and an operation class is promoted to
+unattended by policy on the strength of the record alone.
 
 ## M11 — Fleet density: enforced resource sharing
 
