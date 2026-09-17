@@ -1,9 +1,11 @@
 # The Cloudfall Manifesto
 
-Cloudfall exists because leaving a PaaS should not require a platform team,
-and letting an AI agent run a server should not require trusting its word.
-These are the principles the project is built on. They are constraints we
-accept, not aspirations we advertise.
+Cloudfall exists because letting an AI agent run your servers should not
+require trusting its word, and leaving a PaaS should not require a platform
+team. Ansible is the hand, the agent is the brain, Cloudfall is the
+conscience: it says what the agent may do, checks every result, and keeps
+the record. These are the principles the project is built on. They are
+constraints we accept, not aspirations we advertise.
 
 ## 1 · You should own your infrastructure
 
@@ -19,30 +21,36 @@ computers, not margins.
 ## 2 · Evidence over inference
 
 Status is derived from validated observations, never from the fact that a
-command exited zero or a playbook exists. Deploys produce receipts. Audits
-compare the declared state with what a read-only inspection actually found
-on the host, and report drift with distinct exit codes. Cloudfall never
-reports success it cannot prove; when it does not know, it says `unknown`
-instead of guessing.
+command exited zero or a playbook exists. Every operation has a verify
+step: not "the playbook ran" but "the service is healthy on every host it
+touched". Audits compare the declared state with what a read-only
+inspection actually found, and report drift with distinct exit codes.
+Cloudfall never reports success it cannot prove; when it does not know, it
+says `unknown` instead of guessing.
 
-## 3 · An agent that can't fake success
+## 3 · The record answers why
 
 AI agents will operate infrastructure. The question is on what terms. An
-agent improvising shell commands over SSH is unauditable and unaccountable:
-no rollback, no proof, no record. Cloudfall gives agents a stable CLI and
-structured JSON results instead of a terminal, exposes read-only evidence
-freely, and gates every server-changing action behind an explicit
-confirmation handshake. The same evidence rules bind the agent that bind a
-human: it cannot claim an outcome the receipts do not show.
+agent's own log says a tool was called; that is not a record. Cloudfall
+writes an audit entry for every decision: what the fleet looked like, what
+the agent proposed, the diff it previewed, who approved, and what verify
+reported. The agent acts only through declared operations, each with a risk
+level it cannot change, and every server-changing action waits behind a
+gate the agent does not control. Autonomy is earned from that record, per
+operation class, never switched on globally. The same evidence rules bind
+the agent that bind a human: it cannot claim an outcome the receipts do not
+show, and it cannot do something it cannot later explain.
 
-## 4 · The state is the interface
+## 4 · One config, and it is yours
 
-The whole platform is typed YAML validated against JSON Schemas: servers,
-services, applications, domains. It is versionable, diffable, and readable
-by humans and agents alike. No execution logic hides in it, no engine
-silently rewrites it, and no secret values ever live in it. If a fact about
-your platform matters, it is either declared in the state or observed as
-evidence; there is no third place.
+There is one description of your fleet and you own it: plain files in your
+repository, versionable, diffable, readable by humans and agents alike.
+Today that is typed YAML validated against JSON Schemas; where a team
+already runs Ansible, it will be their own inventory with one `cloudfall`
+key added, never a second copy that drifts. No execution logic hides in
+it, no engine silently rewrites it, and no secret values ever live in it.
+If a fact about your platform matters, it is either declared in the config
+or observed as evidence; there is no third place.
 
 ## 5 · Boring on purpose
 
@@ -80,6 +88,7 @@ README, not discovered at checkout.
 
 ---
 
-If Cloudfall ever reports a deploy it cannot prove, hides a gap it knows
-about, or requires Cloudfall itself to keep your server running, that is a
-bug against this document. File it.
+If Cloudfall ever reports a deploy it cannot prove, cannot say why the
+agent did something, hides a gap it knows about, or requires Cloudfall
+itself to keep your server running, that is a bug against this document.
+File it.
