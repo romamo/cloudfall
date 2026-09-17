@@ -1,23 +1,27 @@
 # Cloudfall
 
-Cloudfall is an open-source control plane that moves your applications and
-databases off cloud PaaS onto one or two servers you own, plus an always-on
-AI operator that runs them there. Every action produces a receipt; Cloudfall
-never reports success it cannot prove. No Kubernetes.
+Cloudfall is the operator's record for a small fleet run by an AI agent.
+The agent decides; Ansible executes; Cloudfall says what the agent may do,
+checks every result, and keeps the evidence. Every operation has a verify
+step and every decision an audit entry: what the fleet looked like, what
+was proposed, who approved, what verify reported. Cloudfall never reports
+success it cannot prove. Open source, plain Debian, no Kubernetes.
 
-It is built for founders and small teams at the scaling stage. The month
-your cloud bill crosses $1,000 you are paying roughly $12,000 a year for
-compute and managed databases that fit on one or two Hetzner-class servers
-at a tenth of the price. Cloudfall's job is to make leaving safe: the
-operational feel of a PaaS on hardware you own, with health-gated deploys,
-rollback, monitoring, and backups that provably restore.
+It is built for teams with one to twenty servers and no platform hire:
+founders leaving a PaaS whose bill crossed $1,000 a month, and anyone whose
+servers are already run by Claude Code, Codex or another agent. Today it
+moves your applications and databases onto one or two Hetzner-class servers
+you own (hardened baseline, monitoring, PostgreSQL and Redis with backups
+that provably restore, health-gated deploys with rollback, a real DNS
+cutover) and an always-on operator runs them there with a receipt for every
+action. The wedge use case is a migration from Render; see the
+[roadmap](ROADMAP.md) for the milestone plan and the
+[manifesto](MANIFESTO.md) for the principles behind the project.
 
-The target workflow: take one fresh Debian host, run Cloudfall, and get a
-hardened baseline, firewall, monitoring, logging, PostgreSQL and Redis, and
-your application deployed with health checks and rollback. Then cut DNS and
-stop paying margins. The wedge use case is a migration from Render onto a
-Hetzner-class server; see the [roadmap](ROADMAP.md) for the milestone plan
-and the [manifesto](MANIFESTO.md) for the principles behind the project.
+Where it is going: your existing Ansible inventory and playbooks as the
+only config, with each playbook exposed to the agent as a declared tool.
+That design is written up and not yet built; see
+[Direction](#direction-your-ansible-not-ours) below.
 
 > **Proven live, not promised.** Everything implemented has run on
 > disposable Hetzner Cloud Debian 13 servers: an application actually hosted
@@ -33,24 +37,30 @@ and the [manifesto](MANIFESTO.md) for the principles behind the project.
 
 ## Why Cloudfall
 
-- **The bill buys computers, not margins.** A steady $1,000/mo cloud bill is
-  mostly margin on commodity compute and managed databases. On servers you
-  own, that difference becomes runway, every year
-- **Evidence over inference.** Deployments produce receipts; status is
-  derived from validated observations, and `cloudfall audit` reports drift
-  between the declared config and the observed servers with distinct exit
-  codes. Cloudfall never reports success it cannot prove
-- **Good-enough databases, with proof.** Managed PostgreSQL is mostly
-  insurance. Cloudfall keeps the coverage and drops the premium: loopback
-  PostgreSQL and Redis with receipted backups and timer-driven restore
-  drills that prove a real backup restorable instead of assuming it
-- **An operator, not a pager.** The always-on operator watches declared
-  alerts and audited drift, remediates what its receipts prove reversible
-  under declared policy, and asks you only about what can't be undone
+- **A record that answers "why did the agent do that".** Every deploy,
+  remediation and drill leaves a receipt; every operator decision records
+  the evidence it was based on, the proposal, the approval and the outcome.
+  An agent's own log says a tool was called. This says what the fleet looked
+  like when it was
+- **Verified, not just ran.** Status is derived from validated observations,
+  `cloudfall audit` reports drift between declared config and observed
+  servers with distinct exit codes, deploys are gated on health and rolled
+  back when it fails. Cloudfall never reports success it cannot prove
+- **Autonomy earned from the record.** The always-on operator watches
+  declared alerts and audited drift, remediates what its receipt history
+  proves reversible under declared policy, and asks you only about what
+  can't be undone
 - **AI-agent native.** Agents operate through a stable CLI and Python API
   with structured JSON results instead of inventing shell commands over SSH.
   The `cloudfall-mcp` server exposes read-only evidence tools freely and
   gates every server-changing tool behind an explicit confirmation handshake
+- **The bill buys computers, not margins.** A steady $1,000/mo cloud bill is
+  mostly margin on commodity compute and managed databases. On servers you
+  own, that difference becomes runway, every year
+- **Good-enough databases, with proof.** Managed PostgreSQL is mostly
+  insurance. Cloudfall keeps the coverage and drops the premium: loopback
+  PostgreSQL and Redis with receipted backups and timer-driven restore
+  drills that prove a real backup restorable instead of assuming it
 - **Boring on purpose.** Applications run as native systemd services with
   artifact releases and symlink rollback, behind nginx, on stock Debian. Any
   Linux admin can take over the server without Cloudfall installed
@@ -109,6 +119,18 @@ provisioning. Next up is the fleet-density track: enforced resource sharing,
 application mobility with node drain, PostgreSQL point-in-time recovery, and
 the demand-gated failover formation, alongside broader catalog breadth. See
 the [roadmap](ROADMAP.md) for the milestone plan.
+
+## Direction: your Ansible, not ours
+
+Most teams that would use Cloudfall already run Ansible. The next step is
+to read their inventory as the only config instead of Cloudfall's own
+resource documents, keep Cloudfall's declarations under one `cloudfall` key
+in their `group_vars` and `host_vars`, and expose each of their playbooks to
+the agent as a declared operation with a risk level, a verify step and an
+audit entry. Ansible is the hand, the agent is the brain, Cloudfall is the
+conscience. The design, its build order and what it deliberately leaves out
+are in [docs/brownfield-design.md](docs/brownfield-design.md). None of it
+is implemented yet; everything below this line is.
 
 ## Quickstart
 

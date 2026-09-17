@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Cloudfall — own your stack, keep the autopilot</title>
-<meta name="description" content="For founders whose cloud bill crossed $1,000/mo: Cloudfall moves your apps and databases onto one or two servers you own, and an always-on AI operator runs them there with a receipt for every action. Open source, no Kubernetes.">
+<title>Cloudfall — the record behind your AI operator</title>
+<meta name="description" content="Cloudfall is the operator's record for a small fleet run by an AI agent: it moves your apps and databases onto servers you own, an always-on operator runs them, and every decision leaves evidence that answers why. Open source, no Kubernetes.">
 <link rel="canonical" href="https://cloudfall.dev/">
-<meta property="og:title" content="Cloudfall — own your stack, keep the autopilot">
-<meta property="og:description" content="Open-source control plane that moves your apps and databases onto servers you own, plus an always-on AI operator that can't fake success. No Kubernetes.">
+<meta property="og:title" content="Cloudfall — the record behind your AI operator">
+<meta property="og:description" content="The operator's record for a small fleet run by an AI agent: servers you own, an always-on operator, and evidence for every decision. Open source. No Kubernetes.">
 <meta property="og:url" content="https://cloudfall.dev/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Cloudfall">
@@ -15,10 +15,10 @@
 <meta property="og:image" content="https://cloudfall.dev/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Cloudfall — own your stack, keep the autopilot">
+<meta property="og:image:alt" content="Cloudfall — the record behind your AI operator">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Cloudfall — own your stack, keep the autopilot">
-<meta name="twitter:description" content="Open-source control plane that moves your apps and databases onto servers you own, plus an always-on AI operator that can't fake success. No Kubernetes.">
+<meta name="twitter:title" content="Cloudfall — the record behind your AI operator">
+<meta name="twitter:description" content="The operator's record for a small fleet run by an AI agent: servers you own, an always-on operator, and evidence for every decision. Open source. No Kubernetes.">
 <meta name="twitter:image" content="https://cloudfall.dev/og.png">
 <meta name="theme-color" content="#0b1017">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -216,7 +216,7 @@
   "@type": "SoftwareApplication",
   "name": "Cloudfall",
   "url": "https://cloudfall.dev/",
-  "description": "Open-source control plane that moves a SaaS's applications and databases off cloud PaaS onto one or two Debian servers you own, plus an always-on AI operator that runs them there with a receipt for every action. No Kubernetes.",
+  "description": "The operator's record for a small fleet run by an AI agent. Cloudfall moves a SaaS's applications and databases onto one or two Debian servers you own, an always-on operator runs them, and every decision leaves evidence that answers why. No Kubernetes.",
   "applicationCategory": "DeveloperApplication",
   "operatingSystem": "Linux",
   "license": "https://www.gnu.org/licenses/agpl-3.0.html",
@@ -251,14 +251,15 @@
   <div class="hero">
     <div class="wrap">
       <div class="badge"><span class="dot"></span>Migration and operator proven live · open source · AGPL-3.0</div>
-      <h1>Own your stack.<br>Keep the <span class="accent">autopilot</span>.</h1>
+      <h1>Your servers, run by an agent.<br>With a <span class="accent">record</span> that answers why.</h1>
       <p class="sub">
-        Your cloud bill crossed $1,000 a month: that is $12,000 a year for
-        compute and managed databases that fit on one or two servers you own.
-        Cloudfall moves your applications and data there — hardened baseline,
-        monitoring, health-gated deploys with rollback, a real DNS cutover —
-        and an always-on operator runs them with a receipt for every action.
-        Plain systemd and nginx. No Kubernetes.
+        Cloudfall is the operator's record for a small fleet run by an AI
+        agent. It moves your applications and data onto one or two servers
+        you own — hardened baseline, monitoring, health-gated deploys with
+        rollback, a real DNS cutover — and an always-on operator runs them
+        there. Every operation is verified, every decision leaves evidence:
+        what the fleet looked like, what was proposed, who approved, what
+        happened. Plain systemd and nginx. No Kubernetes.
       </p>
       <div class="cta">
         <a class="btn btn-primary" href="https://github.com/romamo/cloudfall">View on GitHub</a>
@@ -312,23 +313,22 @@
       <div class="kicker">Why Cloudfall</div>
       <h2>An operator that can't fake success</h2>
       <p class="section-sub">
-        Leaving the cloud is a money decision blocked by a trust problem.
-        Cloudfall answers both: every dollar stops buying margins, and every
-        claim about your servers is backed by evidence collected from the
-        servers themselves.
+        Agents can already run your servers. What they lack is a record:
+        what they may do, whether it worked, and why they did it. Cloudfall
+        is that record, and it happens to make leaving the cloud safe too.
       </p>
       <div class="grid">
         <div class="card">
-          <h3>The bill buys computers, not margins</h3>
+          <h3>A record that answers why</h3>
           <p>
-            A steady cloud bill is mostly margin on commodity compute and
-            managed databases. The same workload runs on one or two
-            Hetzner-class servers for a tenth of the price, and the
-            difference is runway, every year.
+            An agent's own log says a tool was called. Cloudfall's record
+            says what the fleet looked like when it was, what was proposed,
+            who approved, and what verify reported. After an incident, that
+            is the page you open.
           </p>
         </div>
         <div class="card">
-          <h3>Evidence over inference</h3>
+          <h3>Verified, not just ran</h3>
           <p>
             Deployments produce receipts. Status is derived from validated
             observations, and <code>cloudfall audit</code> reports drift between
@@ -356,12 +356,12 @@
           </p>
         </div>
         <div class="card">
-          <h3>Typed state you own</h3>
+          <h3>The bill buys computers, not margins</h3>
           <p>
-            Servers, applications, and domains are declared in YAML validated
-            against JSON Schemas: versionable, diffable, agent-readable. The
-            config is the whole interface; no imperative dashboard holds your
-            infrastructure hostage.
+            A steady cloud bill is mostly margin on commodity compute and
+            managed databases. The same workload runs on one or two
+            Hetzner-class servers for a tenth of the price, and the
+            difference is runway, every year.
           </p>
         </div>
         <div class="card">
@@ -410,8 +410,8 @@
           <p>
             Cut DNS and the bill starts buying computers. The always-on
             operator watches declared alerts and audited drift, remediates
-            what its receipts prove reversible, and delivers a receipt for
-            every action; you approve only what can't be undone.
+            what its record proves reversible, and writes an audit entry for
+            every decision; you approve only what can't be undone.
           </p>
         </div>
       </div>
@@ -448,6 +448,7 @@
             <li>Broader service catalog: MySQL, Elasticsearch, RabbitMQ, Node runtimes</li>
             <li>Enforced per-component resource limits for shared nodes</li>
             <li>Importers beyond Render</li>
+            <li>Your existing Ansible inventory and playbooks as the config and the agent's tool list: <a href="https://github.com/romamo/cloudfall/blob/main/docs/brownfield-design.md">design written</a>, nothing built</li>
           </ul>
         </div>
       </div>
