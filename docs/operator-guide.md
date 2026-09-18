@@ -1,10 +1,13 @@
 # Operator guide
 
-The operator is the always-on half of Cloudfall: a management-host process
-that watches declared alerts and audited drift, writes evidence-backed
-remediation proposals, and executes them only after an explicit approval.
-It is deliberately deterministic — it never invents actions, only maps
-declared triggers onto the engine entry points you already use.
+The operator is the always-on half of Cloudfall and the part that writes
+the record: a management-host process that watches declared alerts and
+audited drift, writes evidence-backed remediation proposals, executes them
+only after an approval it does not grant itself, and verifies the result
+before calling it done. It is deliberately deterministic — it never invents
+actions, only maps declared triggers onto the engine entry points you
+already use. The deciding is left to you or to your agent; the operator's
+job is that every decision is gated, verified and on the record.
 
 ## Prerequisites
 
@@ -52,6 +55,26 @@ drifted checks), a diagnosis, the exact operation, and later its outcome.
 An open or failed proposal blocks duplicates for the same trigger — a
 failed remediation deliberately stays visible until a human looks at it.
 
+## The record
+
+The proposal store is the audit log. Each receipt answers "why did the
+operator do that" without anyone writing a note:
+
+- **What it saw**: the alert labels or the drifted checks that triggered it
+- **What it proposed**: the diagnosis and the exact engine operation
+- **Who approved**: a human through `operator approve`, an agent through
+  the MCP confirm handshake, or a declared `OperatorPolicy`
+  (`approval.mode: autonomous` with the policy id)
+- **What happened**: `verified` or `failed`, with timestamps, from the
+  verify step below, never from the playbook's exit code
+
+`operator list` and `operator show` read the record; the dashboard renders
+it. Autonomy in the next section is computed from it. The
+[brownfield design](brownfield-design.md) generalises this entry to every
+declared operation, adds the fleet snapshot and the check-mode diff to it,
+and gives it a query (`cloudfall why`); none of that is built yet, and the
+receipts here are what it will be built from.
+
 To run persistently, wrap the command in a systemd service on the
 management host:
 
@@ -87,9 +110,9 @@ trigger actually resolved: an alert-triggered proposal must see its alert
 stop firing, a drift-triggered proposal must see its drifted checks audit
 compliant again (`--verify-timeout`, default 180 s). The receipt records
 `verified` or `failed` with timestamps either way — the operator never
-reports success it cannot prove. Gateway TLS flags are only needed when
-approving alert-triggered proposals; drift approvals verify through the
-audit.
+reports success it cannot prove. A playbook that ran is not an outcome; the
+verify step is. Gateway TLS flags are only needed when approving
+alert-triggered proposals; drift approvals verify through the audit.
 
 ## Graduated autonomy
 
@@ -155,5 +178,9 @@ uv run cloudfall-mcp \
 - `operator_approve` — previews the exact command and diagnosis, then
   requires `confirm=true` to execute and verify
 
-The human stays the approver: the agent can watch, read, and relay the
-diagnosis, but nothing mutates a server without the explicit confirm.
+The agent is the brain here and the operator is the record. The agent can
+watch, read, relay the diagnosis and decide to approve; the tools are
+annotated so the client gates the mutating one with its own permission
+mode, and nothing mutates a server without the explicit confirm. Whichever
+way a proposal is approved, the receipt is the same, so an agent-approved
+remediation is as explainable afterwards as a human-approved one.
