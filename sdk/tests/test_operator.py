@@ -144,6 +144,7 @@ def test_run_once_writes_a_schema_valid_proposal(tmp_path: Path) -> None:
     assert report.open_proposals == 1
     proposal = store.load(ResourceId.from_boundary(report.proposed[0]))
     assert proposal.status is ProposalStatus.PROPOSED
+    assert proposal.alert is not None
     assert proposal.alert.service.value == "postgresql-main"
     assert proposal.operation_kind.value == "converge-services"
     assert "converging declared services" in proposal.diagnosis_summary

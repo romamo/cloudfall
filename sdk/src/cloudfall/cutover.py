@@ -21,6 +21,8 @@ from cloudfall.domain import HttpScheme, PositiveCount, TcpPort
 from cloudfall.service_evidence import ProbeTarget
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from cloudfall.inventory import DomainInventory, PlatformInventory
     from cloudfall.service_evidence import DomainNetworkClient
 
@@ -192,7 +194,7 @@ def parallel_run(
 
 
 def rollback_instructions(
-    previous: dict[str, object],
+    previous: Mapping[str, object],
     window_hours: int,
     switched_at: str,
     window_ends_at: str,

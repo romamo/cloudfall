@@ -418,7 +418,9 @@ def test_audit_cli_emits_json_and_compliance_exit_code(
     assert captured.err == ""
 
 
-def _environment_evidence(sha256: str | None, *, exists: bool = True) -> dict:
+def _environment_evidence(
+    sha256: str | None, *, exists: bool = True
+) -> dict[str, object]:
     return {
         "component": "crm-backend",
         "path": "/srv/apps/crm/backend/shared/env/crm-backend.env",
