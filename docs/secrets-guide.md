@@ -7,6 +7,14 @@ and are decrypted only on the controller, at render time, into one `0600`
 environment file per component. A value never appears in state, receipts,
 logs, output envelopes, or the agent surface.
 
+This is the one place the record is deliberately incomplete. Cloudfall
+keeps evidence for every decision an agent makes about your fleet, and
+that record must be safe to read, share and keep for years. So it holds
+key names and content hashes, enough to prove which secrets a release
+carried and whether the installed file matches, and never a value. An
+agent that runs the fleet gets the same view: it can render, deploy and
+audit secrets without ever being able to read one.
+
 ## First: prefer secrets that don't exist
 
 The best credential story is elimination. PostgreSQL uses peer
@@ -109,6 +117,12 @@ them: a tampered, stale, or missing installed file surfaces as
 deployed shows the same way. Components without a receipt are skipped —
 nothing rendered means nothing to compare.
 
+The receipt is the record's entry for the secret: it answers "which keys
+did this release carry, and is that still what is installed" without
+answering "what were they". A rotation therefore shows up twice, as a
+commit in the private repository and as a hash change in the next
+receipt, and the audit proves the new file reached the server.
+
 ## Through an agent
 
 `cloudfall-mcp` exposes `render_secrets` (started with `--secrets-dir` and
@@ -116,8 +130,21 @@ nothing rendered means nothing to compare.
 stays on the controller. Rotation is a git commit in the private
 repository — which means rotation has history.
 
+The agent is the brain and it decides when to render and deploy; it is
+never a party to the values. `render_secrets` is a mutating tool behind
+the confirmation handshake because it writes a file, and its envelope is
+what lands in the record. Nothing an agent can call returns a secret, and
+a tool that did would be a bug against the [manifesto](../MANIFESTO.md).
+
 ## Other backends
 
 The provider boundary is deliberately small (`fetch(reference) → pairs`).
 A managed backend such as Infisical can implement the same interface later
 without touching state, references, or the render surface.
+
+Under the [brownfield design](brownfield-design.md), where the team's own
+Ansible inventory is the config, the same rule holds: the `cloudfall` key
+in their `group_vars` and `host_vars` carries references, never values.
+A team that already keeps secrets in ansible-vault or sops-encrypted vars
+keeps them there; reading them through the same provider boundary is a
+backend, not a migration. None of that is built yet.
