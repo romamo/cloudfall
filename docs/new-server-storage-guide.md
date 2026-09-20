@@ -16,6 +16,21 @@ bootable after either drive fails, but services whose unmirrored data was on
 that drive may remain stopped while replicas on other servers provide fleet
 availability.
 
+This is the one procedure in Cloudfall that a human runs by hand and that no
+agent should ever run. Cloudfall is the operator's record for a fleet run by
+an AI agent, and a record only makes sense for operations that are declared,
+gated and verifiable; wiping two drives on a machine that is not yet in any
+inventory is none of those. There is no Cloudfall command, no MCP tool and no
+operator policy that reaches this layer, by construction. What the guide
+does instead is get the server to the point where the record can start:
+step 11 registers it and takes the first observation, and step 12 is the
+verify step for everything before it. Keep the installation record and the
+failure-test evidence; they are the first entries about this host, written
+by you.
+
+Bare-metal RAID and storage provisioning is the one implemented layer not
+yet exercised in a live proving run (see the [roadmap](../ROADMAP.md)).
+
 ## 1. Complete the installation record
 
 Record these values before opening the Rescue System:
@@ -160,7 +175,8 @@ lsblk -o NAME,PATH,PARTTYPE,FSTYPE,MOUNTPOINTS
 ```
 
 Do not assume that seeing two MD members proves that either physical disk can
-boot. The controlled failure test in step 12 is the acceptance test.
+boot. The controlled failure test in step 12 is the acceptance test: a layout
+that looks right is not an outcome, a server that boots on either drive is.
 
 Install the storage and monitoring tools if the selected image does not already
 provide them:
@@ -429,6 +445,11 @@ smartctl -x /dev/nvme1n1
 
 ## 11. Register and inspect the server with Cloudfall
 
+This is where the record starts. Everything above happened outside
+Cloudfall; from here the host is declared, observed and audited like any
+other, and every later change to it goes through a gated operation with a
+receipt.
+
 Add the new `Server` only after the operating system and SSH access are stable.
 Create a dedicated hybrid-storage `ServerType`; do not reuse
 `debian-application` if its full-disk RAID and root thresholds do not match this
@@ -508,12 +529,27 @@ mount capacities, and service results.
 Cloudfall v1 does not yet prove that every MD array has two healthy members, parse
 `nofail`, verify physical-to-VG placement, or inspect `RequiresMountsFor=`.
 Complete the manual checklist below even when `task audit` reports compliance.
+The audit says the host matches what was declared; it does not yet say the
+storage contract holds, and Cloudfall does not report what it cannot prove.
+
+Under the [brownfield design](brownfield-design.md), where the team's own
+Ansible inventory is the config, this step becomes adding the host to their
+inventory with a `cloudfall` block naming its server type; the observation
+and audit are the same. Not built yet.
 
 ## 12. Run the new-server failure acceptance test
 
 Run this test before production data is admitted, while rebuilding the server
 is still acceptable. Confirm replicas and backups first. Do not use any
 current production server for this drill.
+
+This is the verify step for the whole guide. Cloudfall's rule that a run is
+not an outcome until it is verified applies to hand work too: the layout is
+not done because every command exited zero, it is done because the server
+booted with each drive missing and came back to `[UU]`. Save the output of
+the checks below from each boot next to the installation record; it is the
+evidence that this host's failure contract was tested, and nothing in
+Cloudfall can produce it later.
 
 Use Hetzner's console/rescue capabilities or a provider-coordinated method to
 make one complete physical drive unavailable. A software-only MD member failure
@@ -569,6 +605,8 @@ or loss of the host/replica breaks cluster quorum.
 - [ ] Both one-drive boot tests passed and the arrays returned to `[UU]`.
 - [ ] Cloudfall config validates, inspection is current, audit results were reviewed,
       and the operations dashboard has no unexplained critical task.
+- [ ] The installation record and the failure-test output are kept with the
+      project as the first evidence about this host.
 
 ## Troubleshooting
 
