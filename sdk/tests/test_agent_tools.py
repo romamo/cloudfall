@@ -8,7 +8,13 @@ from pathlib import Path
 import pytest
 import yaml
 from cloudfall.agent_tools import AgentConfig, AgentToolset
-from cloudfall.project import GitRevision, InitOptions, ProjectName, init_project
+from cloudfall.project import (
+    GitPin,
+    GitRevision,
+    InitOptions,
+    ProjectName,
+    init_project,
+)
 
 ROOT = Path(__file__).parents[2]
 SCHEMAS = ROOT / "config" / "schemas" / "v1"
@@ -141,7 +147,7 @@ def _fresh_project(tmp_path: Path) -> AgentToolset:
         InitOptions(
             directory=directory,
             name=ProjectName("project"),
-            revision=GitRevision(REVISION),
+            pin=GitPin(GitRevision(REVISION)),
         )
     )
     return AgentToolset(_config(tmp_path, project_directory=directory))

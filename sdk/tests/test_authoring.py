@@ -17,7 +17,13 @@ from cloudfall.authoring import (
 )
 from cloudfall.cli import main
 from cloudfall.domain import ConnectionAddress, LinuxUser, ResourceId, TcpPort
-from cloudfall.project import GitRevision, InitOptions, ProjectName, init_project
+from cloudfall.project import (
+    GitPin,
+    GitRevision,
+    InitOptions,
+    ProjectName,
+    init_project,
+)
 from cloudfall.validation import ConfigValidationError, validate_config
 
 ROOT = Path(__file__).parents[2]
@@ -46,7 +52,7 @@ def _project(tmp_path: Path) -> Path:
         InitOptions(
             directory=directory,
             name=ProjectName("project"),
-            revision=GitRevision(REVISION),
+            pin=GitPin(GitRevision(REVISION)),
         )
     )
     return directory

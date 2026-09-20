@@ -98,6 +98,7 @@ from cloudfall.operator import (
 from cloudfall.project import (
     DEFAULT_SOURCE_URL,
     PROJECT_DIRECTORY_VARIABLE,
+    GitPin,
     GitRevision,
     GitSourceUrl,
     InitOptions,
@@ -106,7 +107,7 @@ from cloudfall.project import (
     ProjectName,
     init_project,
     project_context,
-    resolve_installed_revision,
+    resolve_installed_pin,
 )
 from cloudfall.render_api import (
     HttpRenderApiClient,
@@ -202,8 +203,9 @@ def _add_init_parser(
     init_parser.add_argument(
         "--rev",
         help=(
-            "Cloudfall commit to pin (default: the commit the running "
-            "cloudfall was installed from)"
+            "Cloudfall commit to pin, installed from --source (default: the "
+            "released version of the running cloudfall, or the commit it was "
+            "installed from when that was a git or source install)"
         ),
     )
     init_parser.add_argument(
@@ -217,7 +219,8 @@ def _add_init_parser(
         "--source",
         default=DEFAULT_SOURCE_URL,
         help=(
-            f"git location of Cloudfall to install from (default: {DEFAULT_SOURCE_URL})"
+            "git location of Cloudfall to install from, with --rev "
+            f"(default: {DEFAULT_SOURCE_URL})"
         ),
     )
 
@@ -1030,16 +1033,18 @@ def _run_init(arguments: Namespace) -> int:
             if arguments.name is not None
             else ProjectName.from_directory(directory)
         )
-        revision = (
-            GitRevision.from_boundary(arguments.rev)
+        pin = (
+            GitPin(
+                GitRevision.from_boundary(arguments.rev),
+                GitSourceUrl.from_boundary(arguments.source),
+            )
             if arguments.rev is not None
-            else resolve_installed_revision()
+            else resolve_installed_pin()
         )
         options = InitOptions(
             directory=directory,
             name=name,
-            revision=revision,
-            source=GitSourceUrl.from_boundary(arguments.source),
+            pin=pin,
             description=(
                 ProjectDescription.from_boundary(arguments.description)
                 if arguments.description is not None

@@ -14,16 +14,19 @@ from cloudfall.commands import COMMANDS, CommandEffect
 from cloudfall.domain import ResourceKind
 from cloudfall.project import (
     CheckoutState,
+    GitPin,
     GitRevision,
     GitSetup,
     GitSourceUrl,
+    IndexPin,
     InitOptions,
     ProjectDescription,
     ProjectError,
     ProjectName,
+    ReleaseVersion,
     init_project,
     project_context,
-    resolve_installed_revision,
+    resolve_installed_pin,
     resolve_project_directory,
 )
 from cloudfall.validation import ConfigValidationError, validate_config
@@ -32,6 +35,7 @@ ROOT = Path(__file__).parents[2]
 SCHEMAS = ROOT / "config" / "schemas" / "v1"
 EXAMPLES = ROOT / "config" / "examples"
 REVISION = "5dea76ae7fdf4f99f5e8eb84b939dfa68b12ef3b"
+VERSION = "0.2.1"
 
 
 def _options(
@@ -40,8 +44,16 @@ def _options(
     return InitOptions(
         directory=directory,
         name=ProjectName.from_directory(directory),
-        revision=GitRevision(REVISION),
+        pin=GitPin(GitRevision(REVISION)),
         description=description,
+    )
+
+
+def _index_options(directory: Path) -> InitOptions:
+    return InitOptions(
+        directory=directory,
+        name=ProjectName.from_directory(directory),
+        pin=IndexPin(ReleaseVersion(VERSION)),
     )
 
 
@@ -91,6 +103,36 @@ def test_init_links_the_guide_and_examples_at_the_pinned_revision(
     assert f"[cloudfall]: {base}\n" in readme
     assert f"[secrets-guide]: {base}/blob/{REVISION}/docs/secrets-guide.md\n" in readme
     assert f"[examples]: {base}/tree/{REVISION}/config/examples\n" in readme
+
+
+def test_init_pins_a_released_version_with_no_source_override(
+    tmp_path: Path,
+) -> None:
+    """An index install must produce a project that installs from the index."""
+    directory = tmp_path / "fleet"
+
+    scaffold = init_project(_index_options(directory))
+
+    pyproject = (directory / "pyproject.toml").read_text(encoding="utf-8")
+    assert f'dependencies = ["cloudfall=={VERSION}"]' in pyproject
+    assert "[tool.uv.sources]" not in pyproject
+    assert "rev = " not in pyproject
+    assert pyproject.endswith("package = false\n")
+    assert scaffold.pin.as_dict() == {"kind": "index", "version": VERSION}
+
+
+def test_init_links_the_guide_and_examples_at_the_release_tag(
+    tmp_path: Path,
+) -> None:
+    directory = tmp_path / "fleet"
+
+    init_project(_index_options(directory))
+
+    readme = (directory / "README.md").read_text(encoding="utf-8")
+    base = "https://github.com/romamo/cloudfall"
+    assert f"[secrets-guide]: {base}/blob/v{VERSION}/docs/secrets-guide.md\n" in readme
+    assert f"[examples]: {base}/tree/v{VERSION}/config/examples\n" in readme
+
 
 
 def test_init_lays_out_the_secrets_setup(tmp_path: Path) -> None:
@@ -217,7 +259,7 @@ def test_installed_revision_comes_from_a_git_install() -> None:
         }
     )
 
-    assert str(resolve_installed_revision(lambda: record)) == REVISION
+    assert resolve_installed_pin(lambda: record) == GitPin(GitRevision(REVISION))
 
 
 def test_installed_revision_reads_head_of_a_source_checkout(tmp_path: Path) -> None:
@@ -228,7 +270,9 @@ def test_installed_revision_reads_head_of_a_source_checkout(tmp_path: Path) -> N
         seen.append(checkout)
         return CheckoutState(head=REVISION, clean=True, published=True)
 
-    assert str(resolve_installed_revision(lambda: record, inspect)) == REVISION
+    pin = resolve_installed_pin(lambda: record, inspect)
+
+    assert pin == GitPin(GitRevision(REVISION))
     assert seen == [tmp_path]
 
 
@@ -238,7 +282,7 @@ def test_installed_revision_refuses_a_head_that_is_not_the_running_code(
     record = json.dumps({"url": tmp_path.as_uri(), "dir_info": {"editable": True}})
 
     with pytest.raises(ProjectError) as error:
-        resolve_installed_revision(
+        resolve_installed_pin(
             lambda: record,
             lambda _: CheckoutState(head=REVISION, clean=False, published=True),
         )
@@ -253,7 +297,7 @@ def test_installed_revision_refuses_a_head_that_uv_could_not_fetch(
     record = json.dumps({"url": tmp_path.as_uri(), "dir_info": {"editable": True}})
 
     with pytest.raises(ProjectError) as error:
-        resolve_installed_revision(
+        resolve_installed_pin(
             lambda: record,
             lambda _: CheckoutState(head=REVISION, clean=True, published=False),
         )
@@ -262,14 +306,24 @@ def test_installed_revision_refuses_a_head_that_uv_could_not_fetch(
     assert "push" in error.value.detail
 
 
-def test_installed_revision_fails_without_an_origin() -> None:
-    with pytest.raises(ProjectError) as error:
-        resolve_installed_revision(lambda: None)
+def test_installed_pin_without_an_origin_is_the_released_version() -> None:
+    """An index install records no origin: its version is the pin."""
+    pin = resolve_installed_pin(lambda: None, read_version=lambda: VERSION)
 
-    assert error.value.code == "project_revision_unresolved"
+    assert pin == IndexPin(ReleaseVersion(VERSION))
 
+
+def test_installed_pin_refuses_an_unreleased_version_without_an_origin() -> None:
     with pytest.raises(ProjectError) as error:
-        resolve_installed_revision(lambda: json.dumps({"url": "file:///x"}))
+        resolve_installed_pin(lambda: None, read_version=lambda: "0.2.1+local.build")
+
+    assert error.value.code == "project_version_unresolved"
+    assert "--rev" in error.value.detail
+
+
+def test_installed_pin_fails_on_an_origin_it_cannot_read() -> None:
+    with pytest.raises(ProjectError) as error:
+        resolve_installed_pin(lambda: json.dumps({"url": "file:///x"}))
 
     assert error.value.code == "project_revision_unresolved"
 
@@ -296,7 +350,11 @@ def test_cli_init_from_this_checkout_pins_its_head_only_when_fetchable(
         assert exit_code == 0
         assert payload["status"] == "ok"
         assert payload["project"]["name"] == "fleet"
-        assert payload["project"]["revision"] == head
+        assert payload["project"]["pin"] == {
+            "kind": "git",
+            "revision": head,
+            "source": "https://github.com/romamo/cloudfall.git",
+        }
         assert payload["project"]["git"] == "initialized"
         assert payload["next"][-1] == "uv run cloudfall config validate"
     else:
