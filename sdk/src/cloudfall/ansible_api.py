@@ -14,6 +14,7 @@ slower read rather than to no read at all.
 
 from __future__ import annotations
 
+import configparser
 import json
 import re
 import shutil
@@ -33,6 +34,12 @@ _HOSTVARS_KEY = "hostvars"
 _HOSTS_KEY = "hosts"
 _ALL_GROUP = "all"
 
+ANSIBLE_CONFIG_FILE = "ansible.cfg"
+"""Ansible's own configuration file, which names the team's inventory."""
+
+_CONFIG_SECTION = "defaults"
+_CONFIG_INVENTORY_KEY = "inventory"
+_ERROR_CONFIG_UNREADABLE = "ansible_config_unreadable"
 _ERROR_SOURCE_MISSING = "ansible_inventory_missing"
 _ERROR_INVENTORY_UNREADABLE = "ansible_inventory_unreadable"
 _ERROR_COMMAND_UNAVAILABLE = "ansible_command_unavailable"
@@ -169,6 +176,36 @@ class AnsibleInventory:
                 for host in self.hosts
             ],
         }
+
+
+def inventory_from_config(directory: Path) -> InventorySource | None:
+    """Return the inventory an ``ansible.cfg`` in this directory names.
+
+    The team's own configuration is the only place Cloudfall looks, so a
+    brownfield repository needs no Cloudfall-side setting to be read from.
+    ``None`` means the directory is not an Ansible control repository.
+    Ansible accepts a comma-separated list of sources here; the first one
+    is the fleet, and a second source is a merge Cloudfall does not model.
+    """
+    configuration = directory / ANSIBLE_CONFIG_FILE
+    if not configuration.is_file():
+        return None
+    parser = configparser.ConfigParser()
+    try:
+        parser.read(configuration, encoding="utf-8")
+    except configparser.Error as error:
+        message = f"{configuration} is not readable as an ini file: {error}"
+        raise AnsibleReadError(_ERROR_CONFIG_UNREADABLE, message) from error
+    declared = parser.get(_CONFIG_SECTION, _CONFIG_INVENTORY_KEY, fallback="").strip()
+    if not declared:
+        return None
+    first = declared.split(",")[0].strip()
+    if not first:
+        return None
+    candidate = Path(first).expanduser()
+    if not candidate.is_absolute():
+        candidate = directory / candidate
+    return InventorySource(candidate)
 
 
 def read_inventory(

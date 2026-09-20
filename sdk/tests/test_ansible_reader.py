@@ -2,22 +2,23 @@
 
 from __future__ import annotations
 
+import json
+import os
 import textwrap
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 import pytest
 from cloudfall.ansible_api import (
+    ANSIBLE_CONFIG_FILE,
     AnsibleReadError,
     InventorySource,
     read_inventory,
 )
 from cloudfall.ansible_reader import read_fleet
+from cloudfall.cli import main
 from cloudfall.inventory import PlatformInventory
 from cloudfall.resources import default_schema_directory
 from cloudfall.validation import ConfigValidationError
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 SCHEMAS = default_schema_directory()
 
@@ -288,3 +289,78 @@ def test_an_unknown_server_type_fails_the_reference_check(tmp_path: Path) -> Non
         read_fleet(read_inventory(source), SCHEMAS)
 
     assert error.value.issue.code == "resource_reference_missing"
+
+
+def test_the_cli_reads_the_fleet_from_a_named_inventory(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    source = _inventory(tmp_path)
+
+    exit_code = main(["inventory", "show", "--inventory", str(source)])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert [server["id"] for server in payload["inventory"]["servers"]] == [
+        "web-1",
+        "web-2",
+    ]
+    assert payload["ansible"]["managed"] == ["web-1", "web-2"]
+    assert payload["ansible"]["unmanaged"] == ["build-1"]
+
+
+def test_the_cli_finds_the_inventory_an_ansible_cfg_names(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """An Ansible control repository needs no Cloudfall-side configuration."""
+    source = _inventory(tmp_path)
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    (repository / ANSIBLE_CONFIG_FILE).write_text(
+        f"[defaults]\ninventory = {source}\n", encoding="utf-8"
+    )
+
+    before = Path.cwd()
+    os.chdir(repository)
+    try:
+        exit_code = main(["inventory", "show"])
+    finally:
+        os.chdir(before)
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["ansible"]["inProcess"] is True
+    assert [server["id"] for server in payload["inventory"]["servers"]] == [
+        "web-1",
+        "web-2",
+    ]
+
+
+def test_the_cli_refuses_two_fleets_at_once(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    source = _inventory(tmp_path)
+
+    exit_code = main(
+        [
+            "inventory",
+            "show",
+            "--inventory",
+            str(source),
+            "--project",
+            str(tmp_path),
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().err)
+    assert exit_code == 2
+    assert payload["error"]["code"] == "project_source_ambiguous"
+
+
+def test_the_cli_reports_a_missing_inventory_as_json(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    exit_code = main(["inventory", "show", "--inventory", str(tmp_path / "absent")])
+
+    payload = json.loads(capsys.readouterr().err)
+    assert exit_code == 2
+    assert payload["error"]["code"] == "ansible_inventory_missing"

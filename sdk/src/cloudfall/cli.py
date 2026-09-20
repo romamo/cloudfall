@@ -12,13 +12,21 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import argparse
     from argparse import Namespace
-    from collections.abc import Callable, Sequence
+    from collections.abc import Callable, Mapping, Sequence
 
     from cloudfall.operations import FleetOperations
     from cloudfall.operator import AlertFeed, OperatorProposal
     from cloudfall.validation import ValidatedConfig
 
 from cloudfall.agent_tools import AgentConfig
+from cloudfall.ansible_api import (
+    ANSIBLE_CONFIG_FILE,
+    AnsibleReadError,
+    InventorySource,
+    inventory_from_config,
+    read_inventory,
+)
+from cloudfall.ansible_reader import FleetRead, read_fleet
 from cloudfall.arguments import (
     StrictArgumentParser,
     parse_arguments,
@@ -102,6 +110,7 @@ from cloudfall.project import (
     ProjectError,
     ProjectName,
     init_project,
+    is_project,
     project_context,
     resolve_installed_version,
 )
@@ -159,6 +168,7 @@ def _add_config_parsers(
         "show", help="show non-secret platform inventory"
     )
     _add_project_directory_argument(show_parser)
+    _add_inventory_argument(show_parser)
     show_parser.add_argument(
         "--schemas",
         type=Path,
@@ -201,6 +211,19 @@ def _add_init_parser(
         help=(
             "one line saying what the project manages, written to the README "
             "and pyproject.toml"
+        ),
+    )
+
+
+def _add_inventory_argument(parser: StrictArgumentParser) -> None:
+    """Let a command read the fleet from the team's own Ansible inventory."""
+    parser.add_argument(
+        "--inventory",
+        type=Path,
+        help=(
+            "Ansible inventory to read the fleet from instead of a project "
+            f"(default: the inventory an {ANSIBLE_CONFIG_FILE} in the current "
+            "directory names)"
         ),
     )
 
@@ -274,6 +297,7 @@ def _parser() -> StrictArgumentParser:
         "audit", help="compare the config with observed server snapshots"
     )
     _add_project_directory_argument(audit_parser)
+    _add_inventory_argument(audit_parser)
     audit_parser.add_argument(
         "--observed",
         type=project_path_argument,
@@ -991,6 +1015,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     if arguments.command == "init":
         return _run_init(arguments)
     try:
+        source = _inventory_source(arguments, os.environ)
+        if source is not None:
+            return _dispatch_from_inventory(arguments, source)
         with project_context(arguments.project, os.environ) as project_directory:
             arguments.project_directory = project_directory
             if arguments.command == "add":
@@ -1000,9 +1027,50 @@ def main(argv: Sequence[str] | None = None) -> int:
             schema_directory = Path(arguments.schemas)
             state = validate_config(project_directory, schema_directory)
             return _dispatch(arguments, state, schema_directory)
-    except (ProjectError, ConfigValidationError) as error:
+    except (ProjectError, ConfigValidationError, AnsibleReadError) as error:
         sys.stderr.write(f"{json.dumps(error.as_dict(), sort_keys=True)}\n")
         return 2
+
+
+_ERROR_SOURCE_AMBIGUOUS = "project_source_ambiguous"
+
+
+def _inventory_source(
+    arguments: Namespace, environment: Mapping[str, str]
+) -> InventorySource | None:
+    """Return the Ansible inventory this run reads the fleet from, if any.
+
+    Precedence: ``--inventory``, then an ``ansible.cfg`` in the current
+    directory when no project was asked for. A command that declares no
+    ``--inventory`` never reads one, so brownfield support is stated per
+    command rather than implied for all of them.
+    """
+    if not hasattr(arguments, "inventory"):
+        return None
+    if arguments.inventory is not None:
+        if arguments.project is not None:
+            message = "--inventory and --project name two fleets; pass one"
+            raise ProjectError(_ERROR_SOURCE_AMBIGUOUS, message)
+        return InventorySource.from_boundary(arguments.inventory)
+    if arguments.project is not None or environment.get(PROJECT_DIRECTORY_VARIABLE):
+        return None
+    if is_project(Path.cwd()):
+        return None
+    return inventory_from_config(Path.cwd())
+
+
+def _dispatch_from_inventory(arguments: Namespace, source: InventorySource) -> int:
+    """Run the command against a fleet read from the team's inventory.
+
+    The Ansible repository is the working directory, so relative paths such
+    as the ``tmp/`` defaults land beside their playbooks rather than in a
+    Cloudfall project that does not exist here.
+    """
+    schema_directory = Path(arguments.schemas)
+    read = read_fleet(read_inventory(source), schema_directory)
+    arguments.project_directory = Path.cwd()
+    arguments.fleet_read = read
+    return _dispatch(arguments, read.config, schema_directory)
 
 
 def _run_init(arguments: Namespace) -> int:
@@ -1163,14 +1231,16 @@ def _run_config_validate(
 
 
 def _run_inventory_show(
-    _arguments: Namespace, state: ValidatedConfig, _schema_directory: Path
+    arguments: Namespace, state: ValidatedConfig, _schema_directory: Path
 ) -> int:
-    _write_json(
-        {
-            "status": "ok",
-            "inventory": PlatformInventory.from_state(state).as_dict(),
-        }
-    )
+    payload: dict[str, object] = {
+        "status": "ok",
+        "inventory": PlatformInventory.from_state(state).as_dict(),
+    }
+    read = getattr(arguments, "fleet_read", None)
+    if isinstance(read, FleetRead):
+        payload["ansible"] = read.as_dict()
+    _write_json(payload)
     return 0
 
 
