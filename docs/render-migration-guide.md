@@ -5,10 +5,20 @@ self-hosted Debian server with Cloudfall. It covers what maps automatically,
 what needs manual work, and the vocabulary differences between the two
 platforms.
 
-> **Status:** the importer and the `migrate` orchestrator are exercised by
-> tests and CI; the end-to-end live migration is still in the proving batch
-> (see the [roadmap](../ROADMAP.md)). Expect rough edges and read the import
-> report carefully.
+It is also the greenfield way into Cloudfall. Cloudfall is the operator's
+record for a fleet run by an AI agent; a team that already has servers and
+Ansible brings them (the [brownfield design](brownfield-design.md), not
+built yet), and a team leaving a PaaS gets a fleet this way. Either way the
+result is the same: every step below leaves a receipt, the migration ends
+with an audit rather than a green light, and the always-on operator takes
+over afterwards with a record of everything it does. An agent can drive
+the whole guide through `cloudfall-mcp`; the proving run did.
+
+> **Status:** proven live. An application actually hosted on Render was
+> cut over with its data and a real DNS flip on an owned domain, driven by
+> an AI agent through `cloudfall-mcp`; see the
+> [proving-run reports](proving-runs/). Read the import report carefully
+> all the same; it is where the importer tells you what it did not do.
 
 ## Name mapping
 
@@ -25,7 +35,8 @@ Render and Cloudfall describe the same things with different words:
 | Environment variables and env groups | Environment files under the project's `tmp/`, never in a resource; the config never contains secret values |
 | Instance type / plan | Your server (VPS or bare metal) plus its server type (`ServerType`) |
 | Deploy from GitHub | `cloudfall deploy`: artifact built from a git ref, health-check gate, symlink switch, automatic rollback |
-| Render dashboard | Local operations dashboard (`task dashboard`) |
+| Render dashboard | Local read-only operations dashboard (`task dashboard`), rendered from receipts and observations; it shows the record, it does not act |
+| Deploy log | Receipts: every deploy, data migration, backup and operator decision writes a schema-validated record of what it saw, did and verified |
 | Service (Render's umbrella term) | Split into two concepts: infrastructure **services** (PostgreSQL, Nginx) and application **components** |
 
 Not imported today; each lands in the gap report instead of being guessed at:
@@ -34,7 +45,7 @@ Not imported today; each lands in the gap report instead of being guessed at:
 |---|---|
 | Cron job (`type: cron`) | Recreate the schedule as a systemd timer; timers are modeled and audited |
 | Static site (`type: static`) | Serve via an Nginx site manually for now |
-| Redis / key-value (`type: redis`, `keyvalue`) | Not in the v1 service catalog yet |
+| Redis / key-value (`type: redis`, `keyvalue`) | Not mapped by the importer; declare a Redis `Service` by hand (loopback-only, receipted RDB backups) and point the component at it |
 | Docker runtime (`runtime: docker` / `image`) | Not supported in v1; native Python and Node builds only |
 
 ## What you need
@@ -125,22 +136,50 @@ a failure or the DNS pause resumes exactly where it stopped.
 
 ## Step 6: migrate the data
 
-Managed-Postgres dump and restore is currently a required-action item in the
-import report rather than an automated step: dump from Render's managed
-database, restore into the Cloudfall-managed PostgreSQL, and verify row
-counts before cutting over. A guided playbook is on the roadmap.
+Save the Render database's connection URL alone into a local file, then
+either run the data migration directly or add it to the plan:
+
+```console
+uv run cloudfall data migrate acme-postgresql --database acme --source-url-file ~/.render/acme-db.url
+uv run cloudfall migrate --build acme-api=main --data acme=~/.render/acme-db.url --yes
+```
+
+Without `--yes` the command shows the plan. The engine dumps on the target
+host, restores over the peer-authenticated socket, refuses a non-empty
+target database, verifies per-table row counts, and writes a
+`DataMigrationReceipt`. The row-count check is the verify step: the
+migration is not done because the restore exited zero, it is done because
+the counts match.
 
 ## Step 7: cut over DNS
 
-The migrate plan pauses at the cutover moment. Lower DNS TTLs ahead of time,
-point your domains at the new server, verify the routes, then resume the
-plan; it finishes with TLS issuance and the final audit.
+The plan carries the cutover as explicit steps rather than a checklist:
+`ttl-lower` measures the authoritative TTLs and pauses while they are
+above 300 s, `parallel-run` requires the new server to serve every domain
+before DNS changes, `dns-verify` pauses until public DNS points at the
+declared proxy servers, and `rollback-window` records the pre-switch
+answers with an exact revert recipe. Point your domains at the new server
+when the plan pauses, then resume it; it finishes with TLS issuance and
+the final evidence pass, which requires a compliant audit and healthy
+routes. Each step writes to the persisted plan, so the record shows when
+DNS moved and what was verified before and after.
 
 ## After the migration
 
 - `task audit` proves the server matches the config, with distinct exit
   codes for drift
-- `task dashboard` renders the evidence-derived operations dashboard
+- `task dashboard` renders the read-only operations dashboard from the
+  receipts and observations
 - `cloudfall deploy` / `rollback` / `restart` / `health` replace Render's
   deploy buttons, with structured JSON results; the first three show a
   validated plan and change servers only with `--yes`
+- The always-on operator replaces the pager: it watches declared alerts
+  and audited drift, proposes remediations with the evidence attached,
+  runs them after approval or under a declared policy, and verifies the
+  result; see the [operator guide](operator-guide.md)
+- Backups are restore-drilled on a timer with receipts, so "we have
+  backups" is something the record can prove
+
+What you have at the end is not a server that works but a fleet with a
+record: who changed what, on which evidence, with what result. That
+record is what lets you hand the routine work to the agent later.
