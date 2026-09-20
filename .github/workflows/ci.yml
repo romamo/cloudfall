@@ -35,7 +35,7 @@ jobs:
       - name: Render Ansible inventory
         run: >-
           uv run cloudfall-engine inventory render --project config/examples
-          --schemas config/schemas/v1 --output tmp/ansible-inventory.json
+          --output tmp/ansible-inventory.json
 
       - name: Ansible syntax checks
         env:
@@ -43,7 +43,7 @@ jobs:
         run: |
           for playbook in baseline bootstrap data deploy domains health inspect logging restart rollback services time; do
             uv run ansible-playbook --syntax-check \
-              --inventory tmp/ansible-inventory.json \
+              --inventory config/examples/tmp/ansible-inventory.json \
               "engine/ansible/playbooks/${playbook}.yml"
           done
 
