@@ -18,10 +18,9 @@ from cloudfall.authoring import (
 from cloudfall.cli import main
 from cloudfall.domain import ConnectionAddress, LinuxUser, ResourceId, TcpPort
 from cloudfall.project import (
-    GitPin,
-    GitRevision,
     InitOptions,
     ProjectName,
+    ReleaseVersion,
     init_project,
 )
 from cloudfall.validation import ConfigValidationError, validate_config
@@ -29,7 +28,7 @@ from cloudfall.validation import ConfigValidationError, validate_config
 ROOT = Path(__file__).parents[2]
 SCHEMAS = ROOT / "config" / "schemas" / "v1"
 EXAMPLES = ROOT / "config" / "examples"
-REVISION = "5dea76ae7fdf4f99f5e8eb84b939dfa68b12ef3b"
+VERSION = "0.3.0"
 
 
 def _example_key() -> str:
@@ -52,7 +51,7 @@ def _project(tmp_path: Path) -> Path:
         InitOptions(
             directory=directory,
             name=ProjectName("project"),
-            pin=GitPin(GitRevision(REVISION)),
+            version=ReleaseVersion(VERSION),
         )
     )
     return directory

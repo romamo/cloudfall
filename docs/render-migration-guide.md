@@ -55,7 +55,7 @@ Not imported today; each lands in the gap report instead of being guessed at:
 - Your `render.yaml` blueprint and access to your application repositories
 - Python 3.14 and [`uv`](https://docs.astral.sh/uv/) on the machine you run
   Cloudfall from (your workstation works; no management server is required)
-- A project: `uvx --from git+https://github.com/romamo/cloudfall.git cloudfall init my-project`,
+- A project: `uvx cloudfall init my-project`,
   then `cd my-project && uv sync`. Every command below runs from inside it
 
 ## Step 1: import the blueprint

@@ -4,8 +4,7 @@ A project is one directory holding everything Cloudfall needs to run one
 user's stack: the fleet (servers, server types, SSH public keys), the
 applications (applications, components, services, domains), the operating
 declarations (alert rules, operator policies, logging stacks), and the
-``pyproject.toml`` that pins the Cloudfall the project runs with: a
-released version from the package index, or a commit in the repository.
+``pyproject.toml`` that pins the released Cloudfall the project runs with.
 Every ``cloudfall`` command runs inside a project: the current directory
 when it is one, else ``--project``, else ``CLOUDFALL_PROJECT``.
 Evidence, receipts, and rendered files land under ``tmp/`` inside the
@@ -14,7 +13,6 @@ project and are never committed.
 
 from __future__ import annotations
 
-import json
 import os
 import re
 import shutil
@@ -26,7 +24,6 @@ from enum import Enum
 from importlib import metadata
 from pathlib import Path
 from typing import TYPE_CHECKING
-from urllib.parse import urlparse
 
 from cloudfall.commands import CommandEffect, commands_with_effect
 from cloudfall.domain import ResourceKind
@@ -34,20 +31,17 @@ from cloudfall.domain import ResourceKind
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Mapping
 
-_GIT_REVISION_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 _PROJECT_NAME_PATTERN = re.compile(r"^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$")
 _RELEASE_VERSION_PATTERN = re.compile(
     r"^\d+(?:\.\d+)*(?:(?:a|b|rc)\d+)?(?:\.post\d+)?(?:\.dev\d+)?$"
-)
-_SCP_LIKE_SOURCE_PATTERN = re.compile(
-    r"^(?P<user>[\w.-]+)@(?P<host>[\w.-]+):(?P<path>[\w./-]+)$"
 )
 _PROJECT_NAME_MAX_LENGTH = 64
 _PROJECT_DESCRIPTION_MAX_LENGTH = 512
 _GIT_TIMEOUT_SECONDS = 30
 _GIT_NOT_A_REPOSITORY_EXIT_CODE = 128
 
-DEFAULT_SOURCE_URL = "https://github.com/romamo/cloudfall.git"
+REPOSITORY_URL = "https://github.com/romamo/cloudfall"
+"""Location of the Cloudfall repository, for links to its files."""
 
 SECRETS_DIRECTORY = "secrets"
 """Project directory holding sops-encrypted secret fragments."""
@@ -70,9 +64,6 @@ CLAUDE_POINTER_FILE = "CLAUDE.md"
 _ERROR_NAME_UNDERIVED = "project_name_underived"
 _ERROR_DIRECTORY_MISSING = "project_directory_missing"
 _ERROR_DIRECTORY_UNRESOLVED = "project_directory_unresolved"
-_ERROR_REVISION_UNRESOLVED = "project_revision_unresolved"
-_ERROR_REVISION_UNCOMMITTED = "project_revision_uncommitted"
-_ERROR_REVISION_UNPUBLISHED = "project_revision_unpublished"
 _ERROR_VERSION_UNRESOLVED = "project_version_unresolved"
 _ERROR_NOT_A_DIRECTORY = "project_directory_not_a_directory"
 _ERROR_NOT_EMPTY = "project_directory_not_empty"
@@ -105,76 +96,6 @@ class ProjectError(RuntimeError):
 
 
 @dataclass(frozen=True, slots=True)
-class GitRevision:
-    """Full 40-character commit hash a project pins Cloudfall to."""
-
-    value: str
-
-    def __post_init__(self) -> None:
-        """Enforce the full-hash invariant at construction time."""
-        if not _GIT_REVISION_PATTERN.fullmatch(self.value):
-            message = f"git revision must be a full 40-hex commit hash: {self.value!r}"
-            raise ValueError(message)
-
-    @classmethod
-    def from_boundary(cls, value: object) -> GitRevision:
-        """Coerce a boundary value while keeping internal APIs strictly typed."""
-        if not isinstance(value, str):
-            message = f"git revision must be a string, got {type(value).__name__}"
-            raise TypeError(message)
-        return cls(value.strip().lower())
-
-    def __str__(self) -> str:
-        """Return the serialized hash."""
-        return self.value
-
-
-@dataclass(frozen=True, slots=True)
-class GitSourceUrl:
-    """Location of the Cloudfall repository a project installs from."""
-
-    value: str
-
-    def __post_init__(self) -> None:
-        """Accept https and ssh git locations only."""
-        parsed = urlparse(self.value)
-        https = parsed.scheme == "https" and bool(parsed.netloc)
-        ssh = parsed.scheme == "ssh" and bool(parsed.netloc)
-        scp_like = _SCP_LIKE_SOURCE_PATTERN.fullmatch(self.value) is not None
-        if not (https or ssh or scp_like):
-            message = f"git source must be an https or ssh location: {self.value!r}"
-            raise ValueError(message)
-
-    @classmethod
-    def from_boundary(cls, value: object) -> GitSourceUrl:
-        """Coerce a boundary value while keeping internal APIs strictly typed."""
-        if not isinstance(value, str):
-            message = f"git source must be a string, got {type(value).__name__}"
-            raise TypeError(message)
-        return cls(value.strip())
-
-    @property
-    def browse_url(self) -> str:
-        """Return the https location of the repository for links to its files.
-
-        ``https://host/owner/repo.git``, ``ssh://git@host/owner/repo.git``, and
-        ``git@host:owner/repo.git`` all browse at ``https://host/owner/repo``.
-        """
-        scp_like = _SCP_LIKE_SOURCE_PATTERN.fullmatch(self.value)
-        if scp_like is not None:
-            host, path = scp_like.group("host"), scp_like.group("path")
-        else:
-            parsed = urlparse(self.value)
-            host, path = parsed.hostname or "", parsed.path
-        path = path.strip("/").removesuffix(".git")
-        return f"https://{host}/{path}"
-
-    def __str__(self) -> str:
-        """Return the serialized location."""
-        return self.value
-
-
-@dataclass(frozen=True, slots=True)
 class ReleaseVersion:
     """Released Cloudfall version a project pins from the package index."""
 
@@ -197,84 +118,6 @@ class ReleaseVersion:
     def __str__(self) -> str:
         """Return the serialized version."""
         return self.value
-
-
-@dataclass(frozen=True, slots=True)
-class GitPin:
-    """A project that installs Cloudfall from a commit in the repository."""
-
-    revision: GitRevision
-    source: GitSourceUrl = GitSourceUrl(DEFAULT_SOURCE_URL)
-
-    @property
-    def requirement(self) -> str:
-        """Return the dependency specifier for the project's ``pyproject``."""
-        return "cloudfall"
-
-    @property
-    def sources_table(self) -> str:
-        """Return the ``[tool.uv.sources]`` table that resolves the commit."""
-        return f"""
-# Cloudfall is an installed package: the schema catalog and the Ansible engine
-# ship inside the wheel. Bump `rev` to move this project to a newer Cloudfall
-# commit, then run `uv sync`. Add the `mcp` extra (`cloudfall[mcp]`) to run
-# the `cloudfall-mcp` agent server.
-[tool.uv.sources]
-cloudfall = {{ git = "{self.source}", rev = "{self.revision}" }}
-"""
-
-    @property
-    def browse_url(self) -> str:
-        """Return the https location of the repository the pin reads from."""
-        return self.source.browse_url
-
-    @property
-    def browse_ref(self) -> str:
-        """Return the git ref whose files match the pinned Cloudfall."""
-        return str(self.revision)
-
-    def as_dict(self) -> dict[str, object]:
-        """Serialize the pin for system boundaries."""
-        return {
-            "kind": "git",
-            "revision": str(self.revision),
-            "source": str(self.source),
-        }
-
-
-@dataclass(frozen=True, slots=True)
-class IndexPin:
-    """A project that installs a released Cloudfall from the package index."""
-
-    version: ReleaseVersion
-
-    @property
-    def requirement(self) -> str:
-        """Return the dependency specifier for the project's ``pyproject``."""
-        return f"cloudfall=={self.version}"
-
-    @property
-    def sources_table(self) -> str:
-        """Return nothing: a released version needs no source override."""
-        return ""
-
-    @property
-    def browse_url(self) -> str:
-        """Return the https location of the repository the release came from."""
-        return GitSourceUrl(DEFAULT_SOURCE_URL).browse_url
-
-    @property
-    def browse_ref(self) -> str:
-        """Return the release tag whose files match the pinned Cloudfall."""
-        return f"v{self.version}"
-
-    def as_dict(self) -> dict[str, object]:
-        """Serialize the pin for system boundaries."""
-        return {"kind": "index", "version": str(self.version)}
-
-
-type ProjectPin = GitPin | IndexPin
-"""What a project pins Cloudfall to: a released version, or a commit."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -363,7 +206,7 @@ class InitOptions:
 
     directory: Path
     name: ProjectName
-    pin: ProjectPin
+    version: ReleaseVersion
     description: ProjectDescription | None = None
 
 
@@ -383,7 +226,7 @@ class ProjectScaffold:
 
     directory: Path
     name: ProjectName
-    pin: ProjectPin
+    version: ReleaseVersion
     files: tuple[str, ...]
     git: GitSetup
 
@@ -394,7 +237,7 @@ class ProjectScaffold:
             "project": {
                 "directory": str(self.directory),
                 "name": str(self.name),
-                "pin": self.pin.as_dict(),
+                "version": str(self.version),
                 "git": self.git.value,
             },
             "files": list(self.files),
@@ -405,17 +248,6 @@ class ProjectScaffold:
                 "uv run cloudfall config validate",
             ],
         }
-
-
-@dataclass(frozen=True, slots=True)
-class CheckoutState:
-    """What a source checkout says about the commit it is running."""
-
-    head: str
-    clean: bool
-    """No tracked file differs from ``HEAD``, so ``HEAD`` is the running code."""
-    published: bool
-    """``HEAD`` is reachable from a remote-tracking branch, so it can be fetched."""
 
 
 def is_project(directory: Path) -> bool:
@@ -493,87 +325,30 @@ def project_path(value: str) -> Path:
     return path
 
 
-def resolve_installed_pin(
-    read_direct_url: Callable[[], str | None] | None = None,
-    inspect_checkout: Callable[[Path], CheckoutState] | None = None,
-    read_version: Callable[[], str] | None = None,
-) -> ProjectPin:
-    """Return what the running Cloudfall pins a new project to.
-
-    An install from the package index records no origin, and its version is
-    the pin: the project depends on ``cloudfall==<version>`` and resolves it
-    the ordinary way. A wheel installed from git records its commit in
-    ``direct_url.json``; an editable source checkout records the checkout
-    location, whose ``HEAD`` is the commit, provided the checkout is clean
-    (else ``HEAD`` is not the code that is running) and ``HEAD`` is on a
-    remote branch (else ``uv sync`` cannot fetch it). Anything else cannot be
-    pinned and must be given explicitly.
-    """
-    direct_url = (read_direct_url or _installed_direct_url)()
-    if direct_url is None:
-        return IndexPin(_installed_release_version(read_version))
-    record = json.loads(direct_url)
-    if not isinstance(record, dict):
-        message = f"direct_url.json is not an object: {direct_url!r}"
-        raise ProjectError(_ERROR_REVISION_UNRESOLVED, message)
-    vcs_info = record.get("vcs_info")
-    if isinstance(vcs_info, dict) and "commit_id" in vcs_info:
-        return GitPin(GitRevision.from_boundary(vcs_info["commit_id"]))
-    dir_info = record.get("dir_info")
-    url = record.get("url")
-    if (
-        isinstance(dir_info, dict)
-        and isinstance(url, str)
-        and url.startswith("file://")
-    ):
-        checkout = Path(urlparse(url).path)
-        inspect = inspect_checkout or _inspect_checkout
-        return GitPin(_pinnable_head(checkout, inspect(checkout)))
-    message = (
-        "the installed cloudfall distribution is neither a git install nor a "
-        f"source checkout ({url!r}); pass --rev with the commit to pin"
-    )
-    raise ProjectError(_ERROR_REVISION_UNRESOLVED, message)
-
-
-def _pinnable_head(checkout: Path, state: CheckoutState) -> GitRevision:
-    head = GitRevision.from_boundary(state.head)
-    if not state.clean:
-        message = (
-            f"the source checkout {checkout} has uncommitted changes, so HEAD "
-            f"{head} is not the code that is running; commit them or pass --rev"
-        )
-        raise ProjectError(_ERROR_REVISION_UNCOMMITTED, message)
-    if not state.published:
-        message = (
-            f"HEAD {head} of the source checkout {checkout} is on no remote "
-            "branch, so `uv sync` could not fetch it; push it or pass --rev"
-        )
-        raise ProjectError(_ERROR_REVISION_UNPUBLISHED, message)
-    return head
-
-
-def _installed_release_version(
+def resolve_installed_version(
     read_version: Callable[[], str] | None = None,
 ) -> ReleaseVersion:
+    """Return the released version of the running Cloudfall.
+
+    A project depends on ``cloudfall==<version>`` and resolves it from the
+    package index like any other dependency. An install whose version is not
+    a release cannot be pinned that way, which is a checkout of this
+    repository between releases.
+    """
     raw = (read_version or _installed_version)()
     try:
         return ReleaseVersion.from_boundary(raw)
     except ValueError as error:
         message = (
-            "the installed cloudfall distribution records no origin and its "
-            f"version {raw!r} is not a release, so there is nothing to pin; "
-            "pass --rev with the commit to pin"
+            f"the installed cloudfall version {raw!r} is not a release, so a "
+            "project cannot pin it; install a released cloudfall, or set the "
+            "dependency in the project's pyproject.toml by hand"
         )
         raise ProjectError(_ERROR_VERSION_UNRESOLVED, message) from error
 
 
 def _installed_version() -> str:
     return metadata.version("cloudfall")
-
-
-def _installed_direct_url() -> str | None:
-    return metadata.distribution("cloudfall").read_text("direct_url.json")
 
 
 def _git_binary() -> str:
@@ -607,15 +382,6 @@ def _git_or_fail(directory: Path, *arguments: str) -> str:
         )
         raise ProjectError(_ERROR_GIT_FAILED, message)
     return completed.stdout
-
-
-def _inspect_checkout(checkout: Path) -> CheckoutState:
-    head = _git_or_fail(checkout, "rev-parse", "HEAD").strip()
-    changes = _git_or_fail(checkout, "status", "--porcelain", "--untracked-files=no")
-    remote_branches = _git_or_fail(checkout, "branch", "--remotes", "--contains", head)
-    return CheckoutState(
-        head=head, clean=not changes.strip(), published=bool(remote_branches.strip())
-    )
 
 
 def _initialize_git(directory: Path) -> GitSetup:
@@ -666,7 +432,7 @@ def init_project(
     return ProjectScaffold(
         directory=directory,
         name=options.name,
-        pin=options.pin,
+        version=options.version,
         files=tuple(files),
         git=git,
     )
@@ -684,14 +450,14 @@ version = "0"
 description = "{description}"
 requires-python = ">=3.14"
 # Cloudfall is an installed package: the schema catalog and the Ansible engine
-# ship inside the wheel. Bump this pin to move the project to a newer
+# ship inside the wheel. Bump this version to move the project to a newer
 # Cloudfall, then run `uv sync`. Add the `mcp` extra (`cloudfall[mcp]`) to run
 # the `cloudfall-mcp` agent server.
-dependencies = ["{options.pin.requirement}"]
+dependencies = ["cloudfall=={options.version}"]
 
 [tool.uv]
 package = false
-{options.pin.sources_table}"""
+"""
 
 
 _GITIGNORE = f"""# Runtime state: evidence, receipts, rendered inventory, built
@@ -722,8 +488,8 @@ creation_rules:
 def _readme(options: InitOptions, git: GitSetup) -> str:
     tmp = RUNTIME_DIRECTORY
     secrets = SECRETS_DIRECTORY
-    browse = options.pin.browse_url
-    ref = options.pin.browse_ref
+    browse = REPOSITORY_URL
+    ref = f"v{options.version}"
     secrets_guide = f"{browse}/blob/{ref}/{SECRETS_GUIDE_PATH}"
     examples = f"{browse}/tree/{ref}/{EXAMPLES_PATH}"
     about = (
@@ -808,9 +574,9 @@ uv run cloudfall migrate --build <component>=main
 uv run cloudfall migrate --build <component>=main --yes
 ```
 
-Cloudfall is pinned to one commit in `pyproject.toml`; bump `rev` and run
-`uv sync` to move the project to a newer release. The links below point at
-the pinned commit.
+Cloudfall is pinned to one released version in `pyproject.toml`; bump it
+and run `uv sync` to move the project to a newer release. The links below
+point at the pinned release.
 
 [cloudfall]: {browse}
 [secrets-guide]: {secrets_guide}

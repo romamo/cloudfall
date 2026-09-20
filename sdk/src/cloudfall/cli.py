@@ -96,18 +96,14 @@ from cloudfall.operator import (
     run_once as operator_run_once,
 )
 from cloudfall.project import (
-    DEFAULT_SOURCE_URL,
     PROJECT_DIRECTORY_VARIABLE,
-    GitPin,
-    GitRevision,
-    GitSourceUrl,
     InitOptions,
     ProjectDescription,
     ProjectError,
     ProjectName,
     init_project,
     project_context,
-    resolve_installed_pin,
+    resolve_installed_version,
 )
 from cloudfall.render_api import (
     HttpRenderApiClient,
@@ -201,26 +197,10 @@ def _add_init_parser(
         help="package name written to pyproject.toml (default: the directory name)",
     )
     init_parser.add_argument(
-        "--rev",
-        help=(
-            "Cloudfall commit to pin, installed from --source (default: the "
-            "released version of the running cloudfall, or the commit it was "
-            "installed from when that was a git or source install)"
-        ),
-    )
-    init_parser.add_argument(
         "--description",
         help=(
             "one line saying what the project manages, written to the README "
             "and pyproject.toml"
-        ),
-    )
-    init_parser.add_argument(
-        "--source",
-        default=DEFAULT_SOURCE_URL,
-        help=(
-            "git location of Cloudfall to install from, with --rev "
-            f"(default: {DEFAULT_SOURCE_URL})"
         ),
     )
 
@@ -1033,18 +1013,10 @@ def _run_init(arguments: Namespace) -> int:
             if arguments.name is not None
             else ProjectName.from_directory(directory)
         )
-        pin = (
-            GitPin(
-                GitRevision.from_boundary(arguments.rev),
-                GitSourceUrl.from_boundary(arguments.source),
-            )
-            if arguments.rev is not None
-            else resolve_installed_pin()
-        )
         options = InitOptions(
             directory=directory,
             name=name,
-            pin=pin,
+            version=resolve_installed_version(),
             description=(
                 ProjectDescription.from_boundary(arguments.description)
                 if arguments.description is not None

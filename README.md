@@ -172,10 +172,8 @@ Your servers, applications, evidence, and any playbooks of your own belong in
 a project: a directory of its own, kept private. Cloudfall's wheel bundles the
 schema catalog and the Ansible engine, so the project needs no checkout of
 this repository. `cloudfall init` is the first command, and it pins the
-project to the Cloudfall that ran it: the released version when that came
-from PyPI, the exact commit when it came from git or a clone. Without a
-directory argument it initializes the current directory, which must be
-empty:
+project to the released Cloudfall that ran it. Without a directory argument
+it initializes the current directory, which must be empty:
 
 ```console
 uvx cloudfall init my-project
@@ -204,10 +202,11 @@ dependencies = ["cloudfall==<version>"]
 package = false
 ```
 
-Bump that pin and run `uv sync` to move the project to a newer Cloudfall. A
-project initialized from a git or source install pins a commit instead, with
-a `[tool.uv.sources]` table naming the repository and revision; `--rev` asks
-for that explicitly.
+Bump that version and run `uv sync` to move the project to a newer
+Cloudfall. To run an unreleased Cloudfall in a project, point the dependency
+at a checkout or a commit with uv's own
+[`[tool.uv.sources]`](https://docs.astral.sh/uv/concepts/projects/dependencies/#dependency-sources);
+Cloudfall itself only ever pins a release.
 
 Only the kind directories are read as resources, so playbooks, roles, docs,
 and tooling files may live anywhere else in the project. Commands find the

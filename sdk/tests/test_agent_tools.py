@@ -9,10 +9,9 @@ import pytest
 import yaml
 from cloudfall.agent_tools import AgentConfig, AgentToolset
 from cloudfall.project import (
-    GitPin,
-    GitRevision,
     InitOptions,
     ProjectName,
+    ReleaseVersion,
     init_project,
 )
 
@@ -32,7 +31,7 @@ services:
 """
 
 
-REVISION = "5dea76ae7fdf4f99f5e8eb84b939dfa68b12ef3b"
+VERSION = "0.3.0"
 
 
 def _config(
@@ -147,7 +146,7 @@ def _fresh_project(tmp_path: Path) -> AgentToolset:
         InitOptions(
             directory=directory,
             name=ProjectName("project"),
-            pin=GitPin(GitRevision(REVISION)),
+            version=ReleaseVersion(VERSION),
         )
     )
     return AgentToolset(_config(tmp_path, project_directory=directory))

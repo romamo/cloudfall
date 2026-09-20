@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import subprocess
+from importlib import metadata
 from pathlib import Path
 
 import pytest
@@ -13,12 +14,7 @@ from cloudfall.cli import main
 from cloudfall.commands import COMMANDS, CommandEffect
 from cloudfall.domain import ResourceKind
 from cloudfall.project import (
-    CheckoutState,
-    GitPin,
-    GitRevision,
     GitSetup,
-    GitSourceUrl,
-    IndexPin,
     InitOptions,
     ProjectDescription,
     ProjectError,
@@ -26,7 +22,7 @@ from cloudfall.project import (
     ReleaseVersion,
     init_project,
     project_context,
-    resolve_installed_pin,
+    resolve_installed_version,
     resolve_project_directory,
 )
 from cloudfall.validation import ConfigValidationError, validate_config
@@ -34,8 +30,7 @@ from cloudfall.validation import ConfigValidationError, validate_config
 ROOT = Path(__file__).parents[2]
 SCHEMAS = ROOT / "config" / "schemas" / "v1"
 EXAMPLES = ROOT / "config" / "examples"
-REVISION = "5dea76ae7fdf4f99f5e8eb84b939dfa68b12ef3b"
-VERSION = "0.2.1"
+VERSION = "0.3.0"
 
 
 def _options(
@@ -44,16 +39,8 @@ def _options(
     return InitOptions(
         directory=directory,
         name=ProjectName.from_directory(directory),
-        pin=GitPin(GitRevision(REVISION)),
+        version=ReleaseVersion(VERSION),
         description=description,
-    )
-
-
-def _index_options(directory: Path) -> InitOptions:
-    return InitOptions(
-        directory=directory,
-        name=ProjectName.from_directory(directory),
-        pin=IndexPin(ReleaseVersion(VERSION)),
     )
 
 
@@ -78,8 +65,7 @@ def test_init_lays_out_every_resource_directory_and_pins_cloudfall(
         assert (directory / kind.directory / ".gitkeep").is_file()
     pyproject = (directory / "pyproject.toml").read_text(encoding="utf-8")
     assert 'name = "acme-fleet"' in pyproject
-    assert f'rev = "{REVISION}"' in pyproject
-    assert 'git = "https://github.com/romamo/cloudfall.git"' in pyproject
+    assert f'dependencies = ["cloudfall=={VERSION}"]' in pyproject
     assert "tmp/" in (directory / ".gitignore").read_text(encoding="utf-8")
     readme = (directory / "README.md").read_text(encoding="utf-8")
     assert "# acme-fleet" in readme
@@ -89,7 +75,7 @@ def test_init_lays_out_every_resource_directory_and_pins_cloudfall(
     assert "servers/.gitkeep" in scaffold.files
 
 
-def test_init_links_the_guide_and_examples_at_the_pinned_revision(
+def test_init_links_the_guide_and_examples_at_the_pinned_release(
     tmp_path: Path,
 ) -> None:
     directory = tmp_path / "fleet"
@@ -101,37 +87,23 @@ def test_init_links_the_guide_and_examples_at_the_pinned_revision(
     assert "[secrets guide][secrets-guide]" in readme
     assert "[reference set][examples]" in readme
     assert f"[cloudfall]: {base}\n" in readme
-    assert f"[secrets-guide]: {base}/blob/{REVISION}/docs/secrets-guide.md\n" in readme
-    assert f"[examples]: {base}/tree/{REVISION}/config/examples\n" in readme
+    assert f"[secrets-guide]: {base}/blob/v{VERSION}/docs/secrets-guide.md\n" in readme
+    assert f"[examples]: {base}/tree/v{VERSION}/config/examples\n" in readme
 
 
-def test_init_pins_a_released_version_with_no_source_override(
-    tmp_path: Path,
-) -> None:
-    """An index install must produce a project that installs from the index."""
+def test_init_pins_the_version_with_no_source_override(tmp_path: Path) -> None:
+    """A project resolves Cloudfall from the index like any dependency."""
     directory = tmp_path / "fleet"
 
-    scaffold = init_project(_index_options(directory))
+    scaffold = init_project(_options(directory))
 
     pyproject = (directory / "pyproject.toml").read_text(encoding="utf-8")
     assert f'dependencies = ["cloudfall=={VERSION}"]' in pyproject
     assert "[tool.uv.sources]" not in pyproject
     assert "rev = " not in pyproject
+    assert "git = " not in pyproject
     assert pyproject.endswith("package = false\n")
-    assert scaffold.pin.as_dict() == {"kind": "index", "version": VERSION}
-
-
-def test_init_links_the_guide_and_examples_at_the_release_tag(
-    tmp_path: Path,
-) -> None:
-    directory = tmp_path / "fleet"
-
-    init_project(_index_options(directory))
-
-    readme = (directory / "README.md").read_text(encoding="utf-8")
-    base = "https://github.com/romamo/cloudfall"
-    assert f"[secrets-guide]: {base}/blob/v{VERSION}/docs/secrets-guide.md\n" in readme
-    assert f"[examples]: {base}/tree/v{VERSION}/config/examples\n" in readme
+    assert str(scaffold.version) == VERSION
 
 
 
@@ -226,147 +198,45 @@ def test_project_name_is_strict() -> None:
         ProjectName("has space")
 
 
-def test_git_revision_requires_a_full_hash() -> None:
-    assert str(GitRevision.from_boundary(REVISION.upper())) == REVISION
-    with pytest.raises(ValueError, match="40-hex"):
-        GitRevision("5dea76a")
+def test_release_version_requires_a_release() -> None:
+    assert str(ReleaseVersion.from_boundary(" 1.2.3 ")) == "1.2.3"
+    ReleaseVersion("0.3.0rc1")
+    ReleaseVersion("1.0")
+    for unreleased in ("0.3.0+local.build", "0.3.0.dirty", "v0.3.0", ""):
+        with pytest.raises(ValueError, match="release version"):
+            ReleaseVersion(unreleased)
 
 
-def test_git_source_accepts_https_and_ssh_only() -> None:
-    GitSourceUrl("https://github.com/romamo/cloudfall.git")
-    GitSourceUrl("git@github.com:romamo/cloudfall.git")
-    GitSourceUrl("ssh://git@github.com/romamo/cloudfall.git")
-    with pytest.raises(ValueError, match="git source"):
-        GitSourceUrl("/local/checkout")
+def test_installed_version_comes_from_the_distribution() -> None:
+    assert resolve_installed_version(lambda: VERSION) == ReleaseVersion(VERSION)
 
 
-def test_git_source_browses_over_https_whatever_the_transport() -> None:
-    expected = "https://github.com/romamo/cloudfall"
-    for source in (
-        "https://github.com/romamo/cloudfall.git",
-        "https://github.com/romamo/cloudfall",
-        "git@github.com:romamo/cloudfall.git",
-        "ssh://git@github.com/romamo/cloudfall.git",
-    ):
-        assert GitSourceUrl(source).browse_url == expected
-
-
-def test_installed_revision_comes_from_a_git_install() -> None:
-    record = json.dumps(
-        {
-            "url": "https://github.com/romamo/cloudfall.git",
-            "vcs_info": {"vcs": "git", "commit_id": REVISION},
-        }
-    )
-
-    assert resolve_installed_pin(lambda: record) == GitPin(GitRevision(REVISION))
-
-
-def test_installed_revision_reads_head_of_a_source_checkout(tmp_path: Path) -> None:
-    record = json.dumps({"url": tmp_path.as_uri(), "dir_info": {"editable": True}})
-    seen: list[Path] = []
-
-    def inspect(checkout: Path) -> CheckoutState:
-        seen.append(checkout)
-        return CheckoutState(head=REVISION, clean=True, published=True)
-
-    pin = resolve_installed_pin(lambda: record, inspect)
-
-    assert pin == GitPin(GitRevision(REVISION))
-    assert seen == [tmp_path]
-
-
-def test_installed_revision_refuses_a_head_that_is_not_the_running_code(
-    tmp_path: Path,
-) -> None:
-    record = json.dumps({"url": tmp_path.as_uri(), "dir_info": {"editable": True}})
-
+def test_installed_version_refuses_a_version_no_project_can_pin() -> None:
     with pytest.raises(ProjectError) as error:
-        resolve_installed_pin(
-            lambda: record,
-            lambda _: CheckoutState(head=REVISION, clean=False, published=True),
-        )
-
-    assert error.value.code == "project_revision_uncommitted"
-    assert "--rev" in error.value.detail
-
-
-def test_installed_revision_refuses_a_head_that_uv_could_not_fetch(
-    tmp_path: Path,
-) -> None:
-    record = json.dumps({"url": tmp_path.as_uri(), "dir_info": {"editable": True}})
-
-    with pytest.raises(ProjectError) as error:
-        resolve_installed_pin(
-            lambda: record,
-            lambda _: CheckoutState(head=REVISION, clean=True, published=False),
-        )
-
-    assert error.value.code == "project_revision_unpublished"
-    assert "push" in error.value.detail
-
-
-def test_installed_pin_without_an_origin_is_the_released_version() -> None:
-    """An index install records no origin: its version is the pin."""
-    pin = resolve_installed_pin(lambda: None, read_version=lambda: VERSION)
-
-    assert pin == IndexPin(ReleaseVersion(VERSION))
-
-
-def test_installed_pin_refuses_an_unreleased_version_without_an_origin() -> None:
-    with pytest.raises(ProjectError) as error:
-        resolve_installed_pin(lambda: None, read_version=lambda: "0.2.1+local.build")
+        resolve_installed_version(lambda: "0.3.0+local.build")
 
     assert error.value.code == "project_version_unresolved"
-    assert "--rev" in error.value.detail
+    assert "by hand" in error.value.detail
 
 
-def test_installed_pin_fails_on_an_origin_it_cannot_read() -> None:
-    with pytest.raises(ProjectError) as error:
-        resolve_installed_pin(lambda: json.dumps({"url": "file:///x"}))
-
-    assert error.value.code == "project_revision_unresolved"
-
-
-def test_cli_init_from_this_checkout_pins_its_head_only_when_fetchable(
+def test_cli_init_pins_the_version_it_runs(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """The pin must be a commit `uv sync` can fetch and that is the running code.
-
-    A checkout mid-change (tracked files modified) or ahead of every remote
-    is refused with the code that says why, so the outcome depends on the
-    state of this repository when the test runs.
-    """
+    """Whatever ran `init` is what the project depends on."""
     directory = tmp_path / "fleet"
-    head = _git(ROOT, "rev-parse", "HEAD")
-    clean = not _git(ROOT, "status", "--porcelain", "--untracked-files=no")
-    published = bool(_git(ROOT, "branch", "--remotes", "--contains", head))
+    installed = metadata.version("cloudfall")
 
     exit_code = main(["init", str(directory)])
 
-    captured = capsys.readouterr()
-    if clean and published:
-        payload = json.loads(captured.out)
-        assert exit_code == 0
-        assert payload["status"] == "ok"
-        assert payload["project"]["name"] == "fleet"
-        assert payload["project"]["pin"] == {
-            "kind": "git",
-            "revision": head,
-            "source": "https://github.com/romamo/cloudfall.git",
-        }
-        assert payload["project"]["git"] == "initialized"
-        assert payload["next"][-1] == "uv run cloudfall config validate"
-    else:
-        payload = json.loads(captured.err)
-        assert exit_code == 2
-        expected = (
-            "project_revision_uncommitted"
-            if not clean
-            else "project_revision_unpublished"
-        )
-        assert payload["error"]["code"] == expected
-        assert not directory.exists()
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["status"] == "ok"
+    assert payload["project"]["name"] == "fleet"
+    assert payload["project"]["version"] == installed
+    assert payload["project"]["git"] == "initialized"
+    assert payload["next"][-1] == "uv run cloudfall config validate"
+    pyproject = (directory / "pyproject.toml").read_text(encoding="utf-8")
+    assert f'dependencies = ["cloudfall=={installed}"]' in pyproject
 
 
 def test_cli_init_accepts_a_description(
@@ -374,18 +244,14 @@ def test_cli_init_accepts_a_description(
 ) -> None:
     directory = tmp_path / "fleet"
 
-    exit_code = main(
-        ["init", str(directory), "--rev", REVISION, "--description", "Acme CRM hosts"]
-    )
+    exit_code = main(["init", str(directory), "--description", "Acme CRM hosts"])
 
     payload = json.loads(capsys.readouterr().out)
     assert exit_code == 0
     assert payload["project"]["git"] == "initialized"
     assert "Acme CRM hosts" in (directory / "README.md").read_text(encoding="utf-8")
 
-    exit_code = main(
-        ["init", str(tmp_path / "other"), "--rev", REVISION, "--description", " "]
-    )
+    exit_code = main(["init", str(tmp_path / "other"), "--description", " "])
 
     payload = json.loads(capsys.readouterr().err)
     assert exit_code == 2
@@ -395,14 +261,16 @@ def test_cli_init_accepts_a_description(
 def test_cli_init_reports_errors_as_json(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    exit_code = main(["init", str(tmp_path), "--rev", "abc"])
+    with pytest.raises(SystemExit) as exit_info:
+        main(["init", str(tmp_path), "--rev", "abc"])
 
     payload = json.loads(capsys.readouterr().err)
-    assert exit_code == 2
+    assert exit_info.value.code == 2
     assert payload["error"]["code"] == "invalid_argument"
+    assert "--rev" in payload["error"]["message"]
 
     (tmp_path / "x").write_text("", encoding="utf-8")
-    exit_code = main(["init", str(tmp_path), "--rev", REVISION])
+    exit_code = main(["init", str(tmp_path)])
 
     payload = json.loads(capsys.readouterr().err)
     assert exit_code == 2
