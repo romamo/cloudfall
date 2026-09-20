@@ -1142,6 +1142,14 @@ class SourceLocation:
 
 
 @dataclass(frozen=True, slots=True)
+class RawDocument:
+    """A resource document before validation, from a file or from a reader."""
+
+    content: Mapping[str, object]
+    source: SourceLocation
+
+
+@dataclass(frozen=True, slots=True)
 class ResourceDocument:
     """A schema-validated resource document."""
 

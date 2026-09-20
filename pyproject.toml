@@ -88,3 +88,9 @@ ignore = [
 python_version = "3.14"
 strict = true
 files = ["sdk/src", "sdk/tests", "engine/src", "engine/tests"]
+
+# ansible-core ships no type information. Only cloudfall.ansible_api imports
+# it, and it converts what it reads into typed value objects at that edge.
+[[tool.mypy.overrides]]
+module = ["ansible.*"]
+ignore_missing_imports = true

@@ -20,6 +20,7 @@ from referencing import Registry, Resource
 
 from cloudfall.domain import (
     OpenSshPublicKey,
+    RawDocument,
     ResourceDocument,
     ResourceId,
     ResourceKey,
@@ -298,6 +299,36 @@ class StateValidator:
         self._validate_references(documents, index)
         return ValidatedConfig(documents=tuple(documents), _index=index)
 
+    def validate_documents(
+        self, raw_documents: Iterable[RawDocument]
+    ) -> ValidatedConfig:
+        """Validate documents already in memory, whatever assembled them.
+
+        A reader that derives resources from somewhere other than the
+        project directory gets the same schemas, the same reference checks
+        and the same error codes as a file on disk.
+        """
+        documents: list[ResourceDocument] = []
+        index: dict[ResourceKey, ResourceDocument] = {}
+        for raw in raw_documents:
+            document = self._validate_document(raw.content, raw.source)
+            if document.key in index:
+                first = index[document.key]
+                issue = ValidationIssue(
+                    code="resource_duplicate",
+                    message=(
+                        f"{document.key.kind.value}/{document.key.resource_id} "
+                        f"already defined at {first.source.display()}"
+                    ),
+                    source=document.source,
+                )
+                raise ConfigValidationError(issue)
+            index[document.key] = document
+            documents.append(document)
+
+        self._validate_references(documents, index)
+        return ValidatedConfig(documents=tuple(documents), _index=index)
+
     def _load_file(self, path: Path) -> Iterable[ResourceDocument]:
         try:
             with path.open(encoding="utf-8") as stream:
@@ -331,23 +362,28 @@ class StateValidator:
                 )
                 raise ConfigValidationError(issue)
             content = cast("Mapping[str, object]", raw)
-            kind = self._resource_kind(content, source)
-            try:
-                self._schemas.validate(kind, content)
-            except ValidationError as error:
-                issue = ValidationIssue(
-                    code="schema_validation_failed",
-                    message=error.message,
-                    source=source,
-                    field_path=tuple(error.absolute_path),
-                )
-                raise ConfigValidationError(issue) from error
-            resource_id = self._resource_id(content, source)
-            yield ResourceDocument(
-                key=ResourceKey(kind=kind, resource_id=resource_id),
-                content=content,
+            yield self._validate_document(content, source)
+
+    def _validate_document(
+        self, content: Mapping[str, object], source: SourceLocation
+    ) -> ResourceDocument:
+        kind = self._resource_kind(content, source)
+        try:
+            self._schemas.validate(kind, content)
+        except ValidationError as error:
+            issue = ValidationIssue(
+                code="schema_validation_failed",
+                message=error.message,
                 source=source,
+                field_path=tuple(error.absolute_path),
             )
+            raise ConfigValidationError(issue) from error
+        resource_id = self._resource_id(content, source)
+        return ResourceDocument(
+            key=ResourceKey(kind=kind, resource_id=resource_id),
+            content=content,
+            source=source,
+        )
 
     @staticmethod
     def _resource_kind(
