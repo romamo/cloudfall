@@ -134,10 +134,18 @@ is implemented yet; everything below this line is.
 
 ## Quickstart
 
-Cloudfall is not on PyPI yet; run it from a clone of this repository. The
-only prerequisite is [`uv`](https://docs.astral.sh/uv/): it provisions the
-required Python 3.14 interpreter and all dependencies automatically, so you
-do not need Python 3.14 preinstalled.
+Cloudfall is on PyPI. The only prerequisite is
+[`uv`](https://docs.astral.sh/uv/): it provisions the required Python 3.14
+interpreter and all dependencies automatically, so you do not need Python
+3.14 preinstalled.
+
+```console
+uv tool install cloudfall
+cloudfall --help
+```
+
+The reference resource set lives in this repository, so validating it means
+a clone:
 
 ```console
 git clone https://github.com/romamo/cloudfall.git
@@ -163,13 +171,14 @@ uv run cloudfall-engine inventory render --project config/examples
 Your servers, applications, evidence, and any playbooks of your own belong in
 a project: a directory of its own, kept private. Cloudfall's wheel bundles the
 schema catalog and the Ansible engine, so the project needs no checkout of
-this repository. `cloudfall init` is the first command; run it straight from
-git or from a clone (`uv run cloudfall init ../my-project`), and it pins the
-project to the exact Cloudfall commit it ran from. Without a directory
-argument it initializes the current directory, which must be empty:
+this repository. `cloudfall init` is the first command, and it pins the
+project to the Cloudfall that ran it: the released version when that came
+from PyPI, the exact commit when it came from git or a clone. Without a
+directory argument it initializes the current directory, which must be
+empty:
 
 ```console
-uvx --from git+https://github.com/romamo/cloudfall.git cloudfall init my-project
+uvx cloudfall init my-project
 cd my-project
 uv sync
 ```
@@ -189,14 +198,16 @@ repository, and a `pyproject.toml`:
 name = "my-project"
 version = "0"
 requires-python = ">=3.14"
-dependencies = ["cloudfall"]
+dependencies = ["cloudfall==<version>"]
 
 [tool.uv]
 package = false
-
-[tool.uv.sources]
-cloudfall = { git = "https://github.com/romamo/cloudfall.git", rev = "<commit>" }
 ```
+
+Bump that pin and run `uv sync` to move the project to a newer Cloudfall. A
+project initialized from a git or source install pins a commit instead, with
+a `[tool.uv.sources]` table naming the repository and revision; `--rev` asks
+for that explicitly.
 
 Only the kind directories are read as resources, so playbooks, roles, docs,
 and tooling files may live anywhere else in the project. Commands find the

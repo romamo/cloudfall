@@ -6,6 +6,30 @@ Notable changes to Cloudfall. The format follows
 
 ## [Unreleased]
 
+## [0.2.1] — 2026-09-20
+
+### Fixed
+
+- `cloudfall init` works from a PyPI install. An install from the package
+  index records no origin to read a commit from, so `init` failed with
+  `project_revision_unresolved` on the first command a new user runs, and
+  `--rev` only worked around it by writing a project that installed
+  Cloudfall from git instead of from the index. A project now pins whatever
+  ran `init`: `cloudfall==<version>` with no `[tool.uv.sources]` table for a
+  released install, the commit and repository for a git or source install
+- The project README links the secrets guide and the reference examples at
+  the release tag when the pin is a released version, rather than at a
+  commit the install does not know
+
+### Changed
+
+- `InitOptions` and the `cloudfall init` envelope carry one `pin` instead of
+  a `revision` and a `source`: `{"kind": "index", "version": ...}` or
+  `{"kind": "git", "revision": ..., "source": ...}`. `resolve_installed_pin`
+  replaces `resolve_installed_revision`
+- `--rev` documents that it pins a commit from `--source`, which is now the
+  explicit alternative to the default rather than the only mechanism
+
 ## [0.2.0] — 2026-09-20
 
 ### Added
