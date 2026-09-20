@@ -13,6 +13,15 @@ Host metrics use Alloy's embedded `prometheus.exporter.unix`, so collectors
 open no additional listening port; metrics are pushed through the same mTLS
 gateway to Prometheus's remote-write receiver on the backend host.
 
+This stack is where the operator's signals come from. Cloudfall is the
+operator's record for a fleet run by an AI agent, and the record needs
+evidence to act on: a declared `AlertRule` firing here is what triggers a
+proposal, the same gateway's read-only alerts route is what the operator
+and the agent read, and an alert that stops firing is how an approved
+remediation is verified (see the [operator guide](operator-guide.md)).
+Without this stack the operator has nothing to watch and nothing to verify
+against.
+
 ## Safety boundary
 
 The v1 `LoggingStack` contract intentionally permits only:
@@ -116,8 +125,9 @@ file sources outside component placement, secret paths outside
 
 ## 5. Check and deploy
 
-The check run still requires the pre-provisioned secret files because that is a
-deployment precondition:
+The check run is the preview step: it shows what would change on each host
+and changes nothing, and it still requires the pre-provisioned secret files
+because that is a deployment precondition:
 
 ```console
 task logging:check CONFIG_DIR=../my-project
@@ -131,8 +141,10 @@ readiness checks.
 
 ## 6. Verify end to end
 
-From a collector, verify the mTLS gateway without exposing credentials in the
-command history through environment variables:
+A deploy that ran is not a stack that works; this section is the verify
+step, and the deployment is not done until it passes. From a collector,
+verify the mTLS gateway without exposing credentials in the command history
+through environment variables:
 
 ```console
 curl --fail --silent --show-error \
@@ -160,6 +172,26 @@ Confirm host metrics through the `Cloudfall Prometheus` data source: every
 declared collector must report `node_cpu_seconds_total`,
 `node_filesystem_avail_bytes`, and `node_memory_MemAvailable_bytes` series
 labeled with its `server` and `environment` within two collection intervals.
+
+## What the stack feeds
+
+Once verified, the stack becomes an input to everything else Cloudfall
+records:
+
+- **Alert rules**: declare `AlertRule` resources (see the
+  [`postgresql-down` example](../config/examples/alert-rules/postgresql-down.yaml));
+  they render into the backend and fire through the gateway's
+  `GET /api/v1/alerts` route, which requires the same client certificate
+  as ingestion
+- **The operator**: watches that route, writes a proposal receipt per
+  firing alert with the alert labels as its trigger evidence, and verifies
+  a remediation by seeing the alert stop
+- **The agent**: reads the same route through `cloudfall-mcp` and the
+  `operator_watch` tool; it never queries Loki or Prometheus directly, and
+  the gateway does not let it
+- **The audit**: the running units, pinned versions and listener bindings
+  declared here are checked by `cloudfall audit` like any other service,
+  so the stack that produces the evidence is itself evidence
 
 ## Roll back the pilot
 
