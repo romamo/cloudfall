@@ -6,6 +6,25 @@ Notable changes to Cloudfall. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-09-20
+
+### Removed
+
+- `cloudfall init --rev` and `--source`, and the machinery behind them:
+  `GitRevision`, `GitSourceUrl`, `GitPin`, `IndexPin`, `CheckoutState`, the
+  checkout inspection, and the `project_revision_unresolved`,
+  `project_revision_uncommitted` and `project_revision_unpublished` errors.
+  Cloudfall is on PyPI, so a project pins a release and resolves it like any
+  other dependency; `resolve_installed_version` replaces
+  `resolve_installed_pin`, and the `init` envelope reports `version` rather
+  than a `pin` object. To run an unreleased Cloudfall in a project, point the
+  dependency at a checkout with uv's own `[tool.uv.sources]`
+
+### Changed
+
+- The quickstart and the Render migration guide install Cloudfall from the
+  index rather than from git
+
 ## [0.2.1] — 2026-09-20
 
 ### Fixed

@@ -1,6 +1,6 @@
 [project]
 name = "cloudfall"
-version = "0.2.1"
+version = "0.3.0"
 description = "AI-native control plane for dedicated Debian application fleets"
 readme = "README.md"
 license = "AGPL-3.0-or-later"
