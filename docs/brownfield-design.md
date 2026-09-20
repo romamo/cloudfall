@@ -425,6 +425,17 @@ so that greenfield and brownfield share one code path.
   key; everything else is a variable
 - **Schema strictness of the var block.** Reuse the existing JSON schemas,
   but decide whether unknown keys under `cloudfall` fail or warn
+- **Group and host `cloudfall` keys do not merge.** Ansible replaces a
+  dictionary defined at both group and host level unless `hash_behaviour`
+  is set to `merge`, which is deprecated and fleet-wide. A `cloudfall`
+  block in `group_vars/production.yml` is therefore lost on any host that
+  also has one in `host_vars`. Found on the fleet-ansible reference repo
+  on 2026-09-17, where the server-type catalog had to become a separate
+  `cloudfall_server_types` variable. Options: one flat key per concern
+  (`cloudfall_environment`, `cloudfall_owns`, ...) so each merges by
+  precedence on its own; or a `cloudfall` block at host level only with
+  group-level defaults read by Cloudfall itself, not by Ansible. The
+  reader (part 4) and the `set` verb (part 6) both depend on the answer
 - **Dynamic inventories.** Where do `host_vars` go when hosts come from a
   cloud plugin? Likely `group_vars` keyed by tag, plus a Cloudfall-side
   overlay file only for hosts that need one
