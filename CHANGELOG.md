@@ -6,6 +6,8 @@ Notable changes to Cloudfall. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-09-20
+
 ### Added
 
 - `cloudfall-mcp` exposes `add_ssh_key`, `add_server_type`, and `add_server`
