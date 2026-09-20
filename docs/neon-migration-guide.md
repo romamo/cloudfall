@@ -6,6 +6,14 @@ there is no blueprint to import: Neon hosts only your database, so the
 config is written by hand and the migration is a guided dump-and-restore
 with the same tooling the Render path uses.
 
+What you get in exchange for Neon's console is the record. Cloudfall is
+the operator's record for a fleet run by an AI agent: the migration ends
+with a receipt whose per-table row counts are the proof it worked, every
+backup afterwards writes a receipt and a timer-driven drill proves it
+restorable, and the always-on operator watches the database with the
+evidence attached to every decision. Managed PostgreSQL is mostly
+insurance; this keeps the coverage and makes the proof yours.
+
 > **Status:** the guided data migration (`cloudfall data migrate`) is
 > proven live against an external managed PostgreSQL — dump, restore,
 > per-table row-count verification, refusal guards, and a
@@ -25,10 +33,11 @@ Neon and Cloudfall describe overlapping things with different words:
 | Compute endpoint | The PostgreSQL systemd unit: always on, no cold starts |
 | Connection pooler (built-in PgBouncer) | Not needed for a co-located app: peer-authenticated local socket, no passwords, no TLS in the middle |
 | Scheduled backups | Declared `backup` block: `pg_dump` on a systemd timer with retention, plus the restore drill (`cloudfall backup verify`) |
-| Point-in-time restore / history | Last-dump recovery today; continuous WAL archiving and PITR are roadmap M11 |
+| Point-in-time restore / history | Last-dump recovery today; continuous WAL archiving and PITR are roadmap M13 |
 | Snapshots | Your provider's volume snapshots, taken outside Cloudfall |
 | Autoscaling / scale-to-zero | Fixed server capacity: for an always-on workload this is what you were paying serverless prices for |
-| Neon console | Local operations dashboard (`task dashboard`) and `cloudfall audit` |
+| Neon console | Local read-only operations dashboard (`task dashboard`) rendered from receipts and observations, and `cloudfall audit` |
+| Operation history | Receipts: the data migration, every backup and restore drill, and every operator decision write a schema-validated record of what was seen, done and verified |
 | Metrics page | Per-service exporters flowing through the mTLS gateway (declared `metrics` block) |
 
 ## What you give up
@@ -39,10 +48,11 @@ simply absent:
 - **Copy-on-write branching** — no equivalent; scratch databases are
   created and seeded explicitly
 - **Restore to any second** — recovery granularity is the backup timer
-  until M11 lands WAL archiving; if last-dump recovery is not acceptable,
-  wait for M11 or archive WAL manually
-- **Multi-node failover** — single host until M11; failover is manual by
-  design today (see [ARCHITECTURE](../ARCHITECTURE.md))
+  until M13 lands WAL archiving; if last-dump recovery is not acceptable,
+  wait for M13 or archive WAL manually
+- **Multi-node failover** — single host until the demand-gated M14
+  formation; failover is manual by design today (see
+  [ARCHITECTURE](../ARCHITECTURE.md))
 
 ## What you need
 
@@ -86,12 +96,18 @@ spec:
 ```
 
 Declare one entry under `databases` per Neon database you are keeping.
-Validate and converge:
+Validate, preview, then converge:
 
 ```console
 uv run cloudfall config validate
-uv run cloudfall services
+task services:deploy:check
+task services:deploy
 ```
+
+The check run is the preview step: it shows what would change on the host
+and changes nothing. Both tasks are thin wrappers over
+`cloudfall-engine playbook run services`; copy the command from
+[`Taskfile.yml`](../Taskfile.yml) if you prefer not to install Task.
 
 ## Step 2: pre-flight checks on the Neon side
 
@@ -152,6 +168,13 @@ dump, and writes a `DataMigrationReceipt` with per-table counts. It
 refuses non-empty target databases, so a re-run requires deliberately
 dropping what was restored.
 
+The row-count check is the verify step and the receipt is the record's
+entry for the migration. The restore is not done because `pg_restore`
+exited zero; it is done because every table's count matches, and the
+receipt is what you show when asked whether anything was lost. An agent
+driving this through `cloudfall-mcp` gets the same receipt and the same
+refusal guards, and cannot skip either.
+
 One database at a time; repeat per declared database. If the application
 is also moving in the same operation, `cloudfall migrate --data
 app=tmp/neon-app-url` inserts this step into the orchestrated plan
@@ -176,7 +199,7 @@ frozen until the app is verified against the new database.
 - Verify the first scheduled backup ran and run the restore drill:
   `cloudfall backup run` / `cloudfall backup verify` — the point of
   leaving a managed provider is that restorability is now your receipt
-  to hold
+  to hold, and the drill runs on a timer afterwards so it stays held
 - Then delete the Neon application; billing stops with it
 
 ## After the migration
@@ -184,7 +207,15 @@ frozen until the app is verified against the new database.
 - `task audit` proves the server matches the config, with distinct exit
   codes for drift
 - The declared alert rules (a `postgresql-down` example ships in
-  `config/examples/alert-rules/`) put the database under the same
-  detect-diagnose-remediate loop as everything else
+  `config/examples/alert-rules/`) put the database under the always-on
+  operator: a firing alert becomes a proposal with the evidence attached,
+  runs after approval or under a declared policy, and is verified by the
+  alert stopping; see the [operator guide](operator-guide.md)
 - The backup timer, restore drill, and `BackupReceipt` replace Neon's
-  managed backups; PITR and a standby arrive with roadmap M11
+  managed backups; PITR arrives with roadmap M13 and a standby with the
+  demand-gated M14
+
+What you hold at the end is not just a database on your own server but
+its record: the migration receipt, every backup and drill receipt, and
+every operator decision about it. That is what answers "is it safe" and
+"why did the agent do that" without anyone remembering.
