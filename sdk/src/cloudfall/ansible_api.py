@@ -209,7 +209,7 @@ def inventory_from_config(directory: Path) -> InventorySource | None:
 
 
 def read_inventory(
-    source: InventorySource, *, in_process: bool = True
+    source: InventorySource, *, limit: str | None = None, in_process: bool = True
 ) -> AnsibleInventory:
     """Return every host of the inventory with Ansible's own precedence applied.
 
@@ -217,17 +217,20 @@ def read_inventory(
     the fallback, so a release that moves the internal API costs latency
     rather than the read. Pass ``in_process=False`` to take the command
     without trying the API, which is what an operator does when a release
-    has broken it.
+    has broken it. ``limit`` narrows the read with Ansible's own host
+    pattern, so a caller never has to interpret one itself.
     """
     if not in_process:
-        return _read_via_command(source)
+        return _read_via_command(source, limit)
     try:
-        return _read_in_process(source)
+        return _read_in_process(source, limit)
     except (ImportError, _InProcessReadError):
-        return _read_via_command(source)
+        return _read_via_command(source, limit)
 
 
-def _read_in_process(source: InventorySource) -> AnsibleInventory:
+def _read_in_process(
+    source: InventorySource, limit: str | None = None
+) -> AnsibleInventory:
     from ansible.errors import AnsibleError  # noqa: PLC0415 - lazy by design
     from ansible.inventory.manager import (  # noqa: PLC0415 - lazy by design
         InventoryManager,
@@ -240,6 +243,8 @@ def _read_in_process(source: InventorySource) -> AnsibleInventory:
     try:
         loader = DataLoader()
         manager = InventoryManager(loader=loader, sources=[str(source)])
+        if limit is not None:
+            manager.subset(limit)
         variables = VariableManager(loader=loader, inventory=manager)
         hosts = tuple(
             AnsibleHost(
@@ -254,7 +259,9 @@ def _read_in_process(source: InventorySource) -> AnsibleInventory:
     return AnsibleInventory(source=source, hosts=_sorted(hosts), in_process=True)
 
 
-def _read_via_command(source: InventorySource) -> AnsibleInventory:
+def _read_via_command(
+    source: InventorySource, limit: str | None = None
+) -> AnsibleInventory:
     executable = shutil.which("ansible-inventory")
     if executable is None:
         message = (
@@ -262,8 +269,11 @@ def _read_via_command(source: InventorySource) -> AnsibleInventory:
             "ansible-inventory is not on PATH"
         )
         raise AnsibleReadError(_ERROR_COMMAND_UNAVAILABLE, message)
+    argv = [executable, "--inventory", str(source), "--list"]
+    if limit is not None:
+        argv.extend(("--limit", limit))
     completed = subprocess.run(  # noqa: S603 - resolved binary, fixed arguments.
-        [executable, "--inventory", str(source), "--list"],
+        argv,
         check=False,
         capture_output=True,
         text=True,

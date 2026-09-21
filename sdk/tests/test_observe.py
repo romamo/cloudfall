@@ -181,6 +181,7 @@ def test_a_run_reports_which_servers_it_observed(tmp_path: Path) -> None:
     result = collect_observations(fleet, request, tmp_path / "overlay", run)
 
     assert len(recorded) == 1
+    assert result.requested == ("web-1", "web-2")
     assert result.observed == ("web-1",)
     assert result.missing == ("web-2",)
     assert result.complete is False
@@ -216,3 +217,50 @@ def test_a_failed_playbook_keeps_its_exit_code(tmp_path: Path) -> None:
 
     assert result.exit_code == 4
     assert result.complete is False
+
+
+def test_a_limited_run_is_judged_against_the_hosts_it_asked_for(
+    tmp_path: Path,
+) -> None:
+    """Narrowing a run on purpose must not report it as incomplete."""
+    fleet, source = _fleet(tmp_path)
+    request = _request(tmp_path, source, limit="web-2")
+
+    def run(_argv: Sequence[str], _environment: Mapping[str, str]) -> int:
+        request.output_directory.mkdir(parents=True, exist_ok=True)
+        (request.output_directory / "web-2.json").write_text("{}", encoding="utf-8")
+        return 0
+
+    result = collect_observations(fleet, request, tmp_path / "overlay", run)
+
+    assert result.requested == ("web-2",)
+    assert result.observed == ("web-2",)
+    assert result.missing == ()
+    assert result.complete is True
+
+
+def test_a_limit_matching_no_declared_server_is_refused(tmp_path: Path) -> None:
+    fleet, source = _fleet(tmp_path)
+    request = _request(tmp_path, source, limit="build-1")
+
+    with pytest.raises(ObserveError) as error:
+        collect_observations(
+            fleet, request, tmp_path / "overlay", lambda _argv, _env: 0
+        )
+
+    assert error.value.code == "observe_no_targets"
+    assert "build-1" in error.value.detail
+
+
+def test_the_wrapper_narrows_a_read_with_an_ansible_pattern(tmp_path: Path) -> None:
+    source = _inventory(tmp_path)
+
+    everything = read_inventory(source)
+    narrowed = read_inventory(source, limit="app_servers:!web-2")
+
+    assert [str(host.name) for host in everything.hosts] == [
+        "build-1",
+        "web-1",
+        "web-2",
+    ]
+    assert [str(host.name) for host in narrowed.hosts] == ["web-1"]

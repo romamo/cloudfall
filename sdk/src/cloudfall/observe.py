@@ -22,6 +22,8 @@ import subprocess
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from cloudfall.ansible_api import InventorySource, read_inventory
+
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
     from pathlib import Path
@@ -103,11 +105,14 @@ class ObservationResult:
     """What one inspection run produced."""
 
     output_directory: Path
+    requested: tuple[str, ...]
+    """Servers this run was asked to observe, after any ``--limit``."""
+
     observed: tuple[str, ...]
-    """Servers whose snapshot exists after the run."""
+    """Requested servers whose snapshot exists after the run."""
 
     missing: tuple[str, ...]
-    """Servers the fleet declares that the run produced no snapshot for."""
+    """Requested servers the run produced no snapshot for."""
 
     exit_code: int
 
@@ -120,6 +125,7 @@ class ObservationResult:
         """Serialize the run for system boundaries."""
         return {
             "status": "ok" if self.complete else "incomplete",
+            "requested": list(self.requested),
             "observed": list(self.observed),
             "missing": list(self.missing),
             "output": str(self.output_directory),
@@ -204,24 +210,50 @@ def collect_observations(
     run: Callable[[Sequence[str], Mapping[str, str]], int] | None = None,
 ) -> ObservationResult:
     """Inspect every declared server and report which snapshots exist."""
-    declared = tuple(server.resource_id.value for server in inventory.servers)
-    if not declared:
-        message = "the fleet declares no servers to observe"
+    requested = requested_servers(inventory, request)
+    if not requested:
+        message = (
+            "the fleet declares no servers to observe"
+            if request.limit is None
+            else f"no declared server matches the limit {request.limit!r}"
+        )
         raise ObserveError(_ERROR_NO_TARGETS, message)
     overlay = write_overlay(inventory, overlay_directory)
     argv, environment = observation_command(request, overlay)
     exit_code = (run or _run_playbook)(argv, environment)
     observed = tuple(
         server
-        for server in declared
+        for server in requested
         if (request.output_directory / f"{server}{_SNAPSHOT_SUFFIX}").is_file()
     )
     return ObservationResult(
         output_directory=request.output_directory,
+        requested=requested,
         observed=observed,
-        missing=tuple(server for server in declared if server not in set(observed)),
+        missing=tuple(server for server in requested if server not in set(observed)),
         exit_code=exit_code,
     )
+
+
+def requested_servers(
+    inventory: PlatformInventory, request: ObservationRequest
+) -> tuple[str, ...]:
+    """Return the declared servers this run is asked to observe.
+
+    A ``--limit`` is Ansible's own host pattern, so Ansible resolves it:
+    guessing at one here would report a run as incomplete whenever the
+    operator narrowed it on purpose.
+    """
+    declared = tuple(server.resource_id.value for server in inventory.servers)
+    if request.limit is None:
+        return declared
+    matched = {
+        str(host.name)
+        for host in read_inventory(
+            InventorySource(request.inventory_sources[0]), limit=request.limit
+        ).hosts
+    }
+    return tuple(server for server in declared if server in matched)
 
 
 def _run_playbook(argv: Sequence[str], environment: Mapping[str, str]) -> int:
