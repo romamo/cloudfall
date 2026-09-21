@@ -92,6 +92,18 @@ CLI_COMMANDS: tuple[CommandContract, ...] = (
     ),
     CommandContract(
         "cloudfall",
+        "operations list",
+        CommandEffect.READ,
+        "list the operations an agent may run, with their risk levels",
+    ),
+    CommandContract(
+        "cloudfall",
+        "operations show",
+        CommandEffect.READ,
+        "show one declared operation with its inputs and verify step",
+    ),
+    CommandContract(
+        "cloudfall",
         "observe",
         CommandEffect.READ,
         "collect one read-only snapshot per server into evidence",

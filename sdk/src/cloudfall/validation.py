@@ -91,6 +91,15 @@ class ValidatedConfig:
     documents: tuple[ResourceDocument, ...]
     _index: Mapping[ResourceKey, ResourceDocument]
 
+    @classmethod
+    def empty(cls) -> ValidatedConfig:
+        """Return a config holding no resources.
+
+        Some commands read the repository without reading the fleet: the
+        operations catalog is declared and validated on its own.
+        """
+        return cls(documents=(), _index={})
+
     @property
     def resource_count(self) -> int:
         """Return the number of validated resource documents."""

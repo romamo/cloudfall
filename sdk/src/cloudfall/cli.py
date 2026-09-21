@@ -16,7 +16,6 @@ if TYPE_CHECKING:
 
     from cloudfall.operations import FleetOperations
     from cloudfall.operator import AlertFeed, OperatorProposal
-    from cloudfall.validation import ValidatedConfig
 
 from cloudfall.agent_tools import AgentConfig
 from cloudfall.ansible_api import (
@@ -44,6 +43,7 @@ from cloudfall.authoring import (
     add_server_type,
     add_ssh_key,
 )
+from cloudfall.catalog import CATALOG_DIRECTORY, load_catalog
 from cloudfall.dashboard import RefreshInterval, build_dashboard
 from cloudfall.dashboard_server import (
     EvidenceSources,
@@ -144,6 +144,7 @@ from cloudfall.service_evidence import (
 from cloudfall.validation import (
     ConfigValidationError,
     SchemaCatalog,
+    ValidatedConfig,
     validate_config,
 )
 
@@ -219,6 +220,50 @@ def _add_init_parser(
             "and pyproject.toml"
         ),
     )
+
+
+def _add_operations_parsers(
+    commands: argparse._SubParsersAction[StrictArgumentParser],
+) -> None:
+    """Add the commands that read the declared operations catalog."""
+    operations_parser = commands.add_parser(
+        "operations", help="read the catalog of operations an agent may run"
+    )
+    operations_commands = operations_parser.add_subparsers(
+        dest="operations_command", required=True
+    )
+    for name, help_text in (
+        ("list", "list every declared operation with its risk level"),
+        ("show", "show one declared operation in full"),
+    ):
+        subparser = operations_commands.add_parser(name, help=help_text)
+        subparser.add_argument(
+            "--repository",
+            type=Path,
+            help=(
+                "repository holding the operations directory and the "
+                "playbooks it declares (default: the current directory)"
+            ),
+        )
+        if name == "show":
+            subparser.add_argument(
+                "operation", type=resource_id_argument, help="operation id"
+            )
+        subparser.add_argument(
+            "--operations",
+            type=project_path_argument,
+            default=Path(CATALOG_DIRECTORY),
+            help=(
+                "directory holding the operation documents "
+                f"(default: {CATALOG_DIRECTORY})"
+            ),
+        )
+        subparser.add_argument(
+            "--schemas",
+            type=Path,
+            default=default_schema_directory(),
+            help="versioned schema directory (default: bundled schemas)",
+        )
 
 
 def _add_observe_parser(
@@ -333,6 +378,7 @@ def _parser() -> StrictArgumentParser:
     _add_config_parsers(commands)
 
     _add_observe_parser(commands)
+    _add_operations_parsers(commands)
 
     audit_parser = commands.add_parser(
         "audit", help="compare the config with observed server snapshots"
@@ -1056,15 +1102,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     if arguments.command == "init":
         return _run_init(arguments)
     try:
+        if arguments.command == "operations":
+            return _run_operations(arguments)
         source = _inventory_source(arguments, os.environ)
         if source is not None:
             return _dispatch_from_inventory(arguments, source)
         with project_context(arguments.project, os.environ) as project_directory:
             arguments.project_directory = project_directory
-            if arguments.command == "add":
-                return _run_add(arguments, project_directory)
-            if arguments.command == "import":
-                return _run_import_render(arguments)
+            without_state = _run_without_validated_fleet(
+                arguments, project_directory
+            )
+            if without_state is not None:
+                return without_state
             schema_directory = Path(arguments.schemas)
             state = validate_config(project_directory, schema_directory)
             return _dispatch(arguments, state, schema_directory)
@@ -1076,6 +1125,20 @@ def main(argv: Sequence[str] | None = None) -> int:
 _ERROR_SOURCE_AMBIGUOUS = "project_source_ambiguous"
 _RENDERED_INVENTORY = Path("tmp/ansible-inventory.json")
 _OVERLAY_DIRECTORY = "tmp/cloudfall"
+
+
+def _run_without_validated_fleet(
+    arguments: Namespace, project_directory: Path
+) -> int | None:
+    """Run the commands that read no fleet, or return ``None`` for the rest.
+
+    `add` and `import` write the fleet rather than read it.
+    """
+    if arguments.command == "add":
+        return _run_add(arguments, project_directory)
+    if arguments.command == "import":
+        return _run_import_render(arguments)
+    return None
 
 
 def _inventory_source(
@@ -1294,6 +1357,31 @@ def _run_inventory_show(
     if isinstance(read, FleetRead):
         payload["ansible"] = read.as_dict()
     _write_json(payload)
+    return 0
+
+
+def _run_operations(arguments: Namespace) -> int:
+    """Read the catalog, which needs no fleet and no inventory.
+
+    An agent needs its tool list from a repository Cloudfall cannot read a
+    fleet from yet, so the catalog resolves against the repository it lives
+    in and nothing else.
+    """
+    repository = (
+        Path(arguments.repository)
+        if arguments.repository is not None
+        else Path.cwd()
+    )
+    catalog = load_catalog(
+        repository,
+        Path(arguments.schemas),
+        repository / Path(arguments.operations),
+    )
+    if arguments.operations_command == "show":
+        operation = catalog.get(arguments.operation)
+        _write_json({"status": "ok", "operation": operation.as_dict()})
+        return 0
+    _write_json(catalog.as_dict())
     return 0
 
 
