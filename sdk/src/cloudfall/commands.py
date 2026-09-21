@@ -92,6 +92,12 @@ CLI_COMMANDS: tuple[CommandContract, ...] = (
     ),
     CommandContract(
         "cloudfall",
+        "observe",
+        CommandEffect.READ,
+        "collect one read-only snapshot per server into evidence",
+    ),
+    CommandContract(
+        "cloudfall",
         "audit",
         CommandEffect.READ,
         "compare the declared config with observed server snapshots",

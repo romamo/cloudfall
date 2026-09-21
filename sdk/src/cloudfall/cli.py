@@ -82,6 +82,12 @@ from cloudfall.lifecycle import (
 )
 from cloudfall.migrate import MigrateError, MigrateOptions, execute_migration
 from cloudfall.observation import load_observations
+from cloudfall.observe import (
+    ObservationRequest,
+    ObserveError,
+    collect_observations,
+    team_configuration,
+)
 from cloudfall.operations import UtcTimestamp, build_operations_view
 from cloudfall.operator import (
     ApproveOptions,
@@ -215,6 +221,39 @@ def _add_init_parser(
     )
 
 
+def _add_observe_parser(
+    commands: argparse._SubParsersAction[StrictArgumentParser],
+) -> None:
+    """Add the command that collects snapshots from the fleet."""
+    observe_parser = commands.add_parser(
+        "observe", help="collect read-only server snapshots from the fleet"
+    )
+    _add_project_directory_argument(observe_parser)
+    _add_inventory_argument(observe_parser)
+    observe_parser.add_argument(
+        "--output",
+        type=project_path_argument,
+        default=Path("tmp/observed"),
+        help="snapshot directory to write (default: tmp/observed)",
+    )
+    observe_parser.add_argument(
+        "--limit",
+        help="Ansible host pattern to inspect a subset of the fleet",
+    )
+    observe_parser.add_argument(
+        "--engine",
+        type=Path,
+        default=default_engine_directory(),
+        help="engine directory holding the playbooks (default: bundled engine)",
+    )
+    observe_parser.add_argument(
+        "--schemas",
+        type=Path,
+        default=default_schema_directory(),
+        help="versioned schema directory (default: bundled schemas)",
+    )
+
+
 def _add_inventory_argument(parser: StrictArgumentParser) -> None:
     """Let a command read the fleet from the team's own Ansible inventory."""
     parser.add_argument(
@@ -292,6 +331,8 @@ def _parser() -> StrictArgumentParser:
     _add_init_parser(commands)
     _add_add_parsers(commands)
     _add_config_parsers(commands)
+
+    _add_observe_parser(commands)
 
     audit_parser = commands.add_parser(
         "audit", help="compare the config with observed server snapshots"
@@ -1033,6 +1074,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 _ERROR_SOURCE_AMBIGUOUS = "project_source_ambiguous"
+_RENDERED_INVENTORY = Path("tmp/ansible-inventory.json")
+_OVERLAY_DIRECTORY = "tmp/cloudfall"
 
 
 def _inventory_source(
@@ -1070,6 +1113,7 @@ def _dispatch_from_inventory(arguments: Namespace, source: InventorySource) -> i
     read = read_fleet(read_inventory(source), schema_directory)
     arguments.project_directory = Path.cwd()
     arguments.fleet_read = read
+    arguments.inventory_source = source
     return _dispatch(arguments, read.config, schema_directory)
 
 
@@ -1195,6 +1239,7 @@ def _dispatch(
         "deploy": _run_deploy,
         "health": _run_health,
         "inventory:show": _run_inventory_show,
+        "observe": _run_observe,
         "migrate": _run_migrate,
         "operator:approve": _run_operator_approve,
         "operator:list": _run_operator_list,
@@ -1216,7 +1261,15 @@ def _dispatch(
 
 
 def _command_key(arguments: Namespace) -> str:
-    top_level = {"audit", "deploy", "health", "migrate", "restart", "rollback"}
+    top_level = {
+        "audit",
+        "deploy",
+        "health",
+        "migrate",
+        "observe",
+        "restart",
+        "rollback",
+    }
     if arguments.command in top_level:
         return str(arguments.command)
     subcommand = getattr(arguments, f"{arguments.command}_command", None)
@@ -1242,6 +1295,38 @@ def _run_inventory_show(
         payload["ansible"] = read.as_dict()
     _write_json(payload)
     return 0
+
+
+def _run_observe(
+    arguments: Namespace, state: ValidatedConfig, _schema_directory: Path
+) -> int:
+    """Inspect every declared server and write one snapshot each."""
+    source = getattr(arguments, "inventory_source", None)
+    sources = (
+        (source.value,)
+        if source is not None
+        else (Path(arguments.project_directory) / _RENDERED_INVENTORY,)
+    )
+    try:
+        request = ObservationRequest(
+            inventory_sources=sources,
+            output_directory=Path(arguments.output).resolve(),
+            engine_directory=Path(arguments.engine),
+            limit=arguments.limit,
+            configuration=(
+                team_configuration(Path.cwd()) if source is not None else None
+            ),
+        )
+        result = collect_observations(
+            PlatformInventory.from_state(state),
+            request,
+            Path(_OVERLAY_DIRECTORY),
+        )
+    except ObserveError as error:
+        sys.stderr.write(f"{json.dumps(error.as_dict(), sort_keys=True)}\n")
+        return 2
+    _write_json(result.as_dict())
+    return 0 if result.complete else 1
 
 
 def _run_audit(
