@@ -6,6 +6,8 @@ Notable changes to Cloudfall. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-09-21
+
 ### Added
 
 - Brownfield fleet reader: `cloudfall audit` and `cloudfall inventory show`
@@ -22,7 +24,10 @@ Notable changes to Cloudfall. The format follows
 - `cloudfall observe` collects one read-only snapshot per server through
   the team's inventory plus an ephemeral overlay holding only the
   `cloudfall_servers` group and the two variables the inspect role cannot
-  derive, so the audit loop closes without a Cloudfall project
+  derive, so the audit loop closes without a Cloudfall project. Their own
+  `ansible.cfg` keeps deciding how Ansible connects; only the roles path
+  is forced. `--limit` takes an Ansible host pattern, which Ansible
+  resolves, and the run is judged against the hosts it asked for
 - `StateValidator.validate_documents` validates resource documents
   assembled in memory, with the schemas, reference checks and error codes
   documents on disk get
