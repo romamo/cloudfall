@@ -1,0 +1,238 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cloudfall.internal/schemas/v1/operation-decision.schema.json",
+  "title": "Cloudfall operation decision",
+  "description": "What an agent proposed, what check mode showed, who let it, and what came of it.",
+  "type": "object",
+  "properties": {
+    "apiVersion": {
+      "$ref": "common.schema.json#/$defs/apiVersion"
+    },
+    "kind": {
+      "const": "OperationDecision"
+    },
+    "metadata": {
+      "$ref": "common.schema.json#/$defs/metadata"
+    },
+    "spec": {
+      "type": "object",
+      "properties": {
+        "proposedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "operation": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "common.schema.json#/$defs/resourceId"
+            },
+            "playbook": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "risk": {
+              "enum": [
+                "read",
+                "mutating",
+                "destructive"
+              ]
+            },
+            "verifyPlaybook": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          },
+          "required": [
+            "id",
+            "playbook",
+            "risk"
+          ],
+          "additionalProperties": false
+        },
+        "targets": {
+          "type": "object",
+          "properties": {
+            "scope": {
+              "enum": [
+                "fleet",
+                "group",
+                "host"
+              ]
+            },
+            "pattern": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          "required": [
+            "scope"
+          ],
+          "additionalProperties": false
+        },
+        "inputs": {
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "string",
+              "integer",
+              "boolean"
+            ]
+          }
+        },
+        "gate": {
+          "type": "object",
+          "properties": {
+            "requirement": {
+              "enum": [
+                "runs-freely",
+                "check-then-approve",
+                "human-required"
+              ]
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300
+            }
+          },
+          "required": [
+            "requirement",
+            "reason"
+          ],
+          "additionalProperties": false
+        },
+        "basis": {
+          "type": "object",
+          "description": "The fleet evidence the proposal was made against.",
+          "properties": {
+            "observations": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "observedAt": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          "required": [
+            "observations",
+            "observedAt"
+          ],
+          "additionalProperties": false
+        },
+        "check": {
+          "type": "object",
+          "description": "What check mode reported before any change was made.",
+          "properties": {
+            "exitCode": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 255
+            },
+            "changed": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 253
+              }
+            },
+            "unchanged": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 253
+              }
+            },
+            "diff": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512
+                },
+                "sha256": {
+                  "$ref": "common.schema.json#/$defs/sha256"
+                },
+                "bytes": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "path",
+                "sha256",
+                "bytes"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "exitCode",
+            "changed",
+            "unchanged",
+            "diff"
+          ],
+          "additionalProperties": false
+        },
+        "status": {
+          "enum": [
+            "proposed",
+            "approved",
+            "rejected",
+            "executed",
+            "verified",
+            "failed"
+          ]
+        },
+        "approval": {
+          "type": "object",
+          "properties": {
+            "approver": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "approvedAt": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          "required": [
+            "approver",
+            "approvedAt"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "proposedAt",
+        "operation",
+        "targets",
+        "inputs",
+        "gate",
+        "basis",
+        "check",
+        "status"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "apiVersion",
+    "kind",
+    "metadata",
+    "spec"
+  ],
+  "additionalProperties": false
+}

@@ -43,12 +43,20 @@ from cloudfall.authoring import (
     add_server_type,
     add_ssh_key,
 )
-from cloudfall.catalog import CATALOG_DIRECTORY, load_catalog
+from cloudfall.catalog import CATALOG_DIRECTORY, OperationCatalog, load_catalog
 from cloudfall.dashboard import RefreshInterval, build_dashboard
 from cloudfall.dashboard_server import (
     EvidenceSources,
     ListenEndpoint,
     create_dashboard_server,
+)
+from cloudfall.decision import (
+    DECISION_DIRECTORY,
+    DecisionError,
+    DecisionStore,
+    ProposalRequest,
+    Targets,
+    propose,
 )
 from cloudfall.domain import (
     ConnectionAddress,
@@ -235,6 +243,8 @@ def _add_operations_parsers(
     for name, help_text in (
         ("list", "list every declared operation with its risk level"),
         ("show", "show one declared operation in full"),
+        ("propose", "run one operation in check mode and record what it would do"),
+        ("decisions", "list the decision records this repository holds"),
     ):
         subparser = operations_commands.add_parser(name, help=help_text)
         subparser.add_argument(
@@ -245,9 +255,52 @@ def _add_operations_parsers(
                 "playbooks it declares (default: the current directory)"
             ),
         )
-        if name == "show":
+        if name in {"show", "propose"}:
             subparser.add_argument(
                 "operation", type=resource_id_argument, help="operation id"
+            )
+        if name == "propose":
+            subparser.add_argument(
+                "--target",
+                help=(
+                    "host or group the operation runs against, as the "
+                    "operation's target scope requires"
+                ),
+            )
+            subparser.add_argument(
+                "--input",
+                action="append",
+                default=[],
+                metavar="NAME=VALUE",
+                help="value for one declared input (repeatable)",
+            )
+            subparser.add_argument(
+                "--observed",
+                type=project_path_argument,
+                default=Path("tmp/observed"),
+                help=(
+                    "snapshot directory the proposal cites as its basis "
+                    "(default: tmp/observed)"
+                ),
+            )
+            subparser.add_argument(
+                "--decisions",
+                type=project_path_argument,
+                default=Path(DECISION_DIRECTORY),
+                help=(
+                    "directory holding the decision records "
+                    f"(default: {DECISION_DIRECTORY})"
+                ),
+            )
+        if name == "decisions":
+            subparser.add_argument(
+                "--decisions",
+                type=project_path_argument,
+                default=Path(DECISION_DIRECTORY),
+                help=(
+                    "directory holding the decision records "
+                    f"(default: {DECISION_DIRECTORY})"
+                ),
             )
         subparser.add_argument(
             "--operations",
@@ -1117,7 +1170,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             schema_directory = Path(arguments.schemas)
             state = validate_config(project_directory, schema_directory)
             return _dispatch(arguments, state, schema_directory)
-    except (ProjectError, ConfigValidationError, AnsibleReadError) as error:
+    except (
+        ProjectError,
+        ConfigValidationError,
+        AnsibleReadError,
+        DecisionError,
+    ) as error:
         sys.stderr.write(f"{json.dumps(error.as_dict(), sort_keys=True)}\n")
         return 2
 
@@ -1372,6 +1430,20 @@ def _run_operations(arguments: Namespace) -> int:
         if arguments.repository is not None
         else Path.cwd()
     )
+    if arguments.operations_command == "decisions":
+        # The record outlives the catalog: what was proposed and approved
+        # stays readable however the declared operations change.
+        store = _decision_store(arguments, repository)
+        _write_json(
+            {
+                "status": "ok",
+                "directory": str(store.directory),
+                "decisions": [
+                    decision.as_document() for decision in store.list()
+                ],
+            }
+        )
+        return 0
     catalog = load_catalog(
         repository,
         Path(arguments.schemas),
@@ -1381,8 +1453,46 @@ def _run_operations(arguments: Namespace) -> int:
         operation = catalog.get(arguments.operation)
         _write_json({"status": "ok", "operation": operation.as_dict()})
         return 0
+    if arguments.operations_command == "propose":
+        return _propose_operation(arguments, repository, catalog)
     _write_json(catalog.as_dict())
     return 0
+
+
+def _propose_operation(
+    arguments: Namespace, repository: Path, catalog: OperationCatalog
+) -> int:
+    """Run one operation in check mode and record what it would do."""
+    operation = catalog.get(arguments.operation)
+    request = ProposalRequest(
+        operation=operation,
+        targets=Targets(scope=operation.targets, pattern=arguments.target),
+        inputs=_declared_inputs(arguments.input),
+        repository=repository,
+        observations=repository / Path(arguments.observed),
+    )
+    decision = propose(request, _decision_store(arguments, repository))
+    _write_json(decision.as_dict())
+    return 0 if decision.check.exit_code == 0 else 1
+
+
+def _decision_store(arguments: Namespace, repository: Path) -> DecisionStore:
+    return DecisionStore(
+        directory=repository / Path(arguments.decisions),
+        catalog=SchemaCatalog(Path(arguments.schemas)),
+    )
+
+
+def _declared_inputs(declared: Sequence[str]) -> dict[str, object]:
+    """Parse repeated ``NAME=VALUE`` arguments into input values."""
+    inputs: dict[str, object] = {}
+    for entry in declared:
+        name, separator, value = entry.partition("=")
+        if not separator or not name:
+            message = f"input must be given as NAME=VALUE, got {entry!r}"
+            raise ValueError(message)
+        inputs[name] = value
+    return inputs
 
 
 def _run_observe(

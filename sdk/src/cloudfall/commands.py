@@ -104,6 +104,18 @@ CLI_COMMANDS: tuple[CommandContract, ...] = (
     ),
     CommandContract(
         "cloudfall",
+        "operations propose",
+        CommandEffect.READ,
+        "run one operation in check mode and record what it would change",
+    ),
+    CommandContract(
+        "cloudfall",
+        "operations decisions",
+        CommandEffect.READ,
+        "list what was proposed, what check mode showed, and who approved",
+    ),
+    CommandContract(
+        "cloudfall",
         "observe",
         CommandEffect.READ,
         "collect one read-only snapshot per server into evidence",
