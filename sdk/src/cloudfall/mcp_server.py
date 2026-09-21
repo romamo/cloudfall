@@ -26,23 +26,55 @@ from mcp.server.mcpserver import MCPServer
 from mcp.types import ToolAnnotations
 
 from cloudfall.agent_tools import AgentConfig, AgentToolset
+from cloudfall.ansible_api import AnsibleReadError, inventory_from_config
 from cloudfall.arguments import (
     StrictArgumentParser,
     parse_arguments,
     project_path_argument,
 )
+from cloudfall.catalog import CATALOG_DIRECTORY, RiskLevel
+from cloudfall.decision import DECISION_DIRECTORY, DecisionError
+from cloudfall.fleet_tools import (
+    FleetConfig,
+    FleetToolError,
+    FleetToolset,
+    operation_tool_description,
+    operation_tool_name,
+)
+from cloudfall.observe import ObserveError
 from cloudfall.project import (
     PROJECT_DIRECTORY_VARIABLE,
     ProjectError,
+    is_project,
     project_context,
 )
 from cloudfall.resources import default_engine_directory, default_schema_directory
+from cloudfall.validation import ConfigValidationError
 
 if TYPE_CHECKING:
     import argparse
-    from collections.abc import Callable, Sequence
+    from collections.abc import Callable, Mapping, Sequence
 
     _Registration = tuple[Callable[..., str], str, str, ToolAnnotations | None]
+
+    from cloudfall.catalog import Operation
+
+_FLEET_INSTRUCTIONS = """\
+Cloudfall is the record for a fleet run through the team's own Ansible
+repository. The tool list is the catalog the team declared: a playbook
+they have not declared as an operation is not reachable here, and a raw
+shell call is what this server exists to make unnecessary.
+
+The loop is fixed: read the fleet, collect snapshots, pick an operation
+and say why, then call it to preview it in check mode. Calling an
+operation tool changes nothing: it runs the playbook in check mode and
+records the operation, the targets, the evidence it was based on and the
+diff it would produce. Approving that record is a command a person runs;
+no tool here can do it, whatever reason is given for asking.
+
+Each operation tool carries the risk level the team declared, so read,
+mutating and destructive are visible to this client's own gate.
+"""
 
 _INSTRUCTIONS = """\
 Cloudfall manages declarative infrastructure state for dedicated Debian
@@ -57,6 +89,148 @@ wrote when that validation fails. They never overwrite an existing
 resource. The project itself is laid out beforehand with `cloudfall init`
 on the CLI; this server always runs inside an existing project.
 """
+
+
+def create_fleet_server(config: FleetConfig) -> MCPServer:
+    """Create the server for a brownfield repository: the catalog is the list.
+
+    Every declared operation becomes one tool carrying its risk level as
+    annotations, so a client gates on risk without Cloudfall's help. No
+    tool here changes a host: an operation tool runs check mode and
+    records what it would do, and the approval is a command a person runs.
+    """
+    server = MCPServer(name="cloudfall", instructions=_FLEET_INSTRUCTIONS)
+    toolset = FleetToolset(config)
+    for handler, name, description, tool_annotations in (
+        *_fleet_registrations(toolset),
+        *_operation_registrations(toolset),
+    ):
+        server.add_tool(
+            handler,
+            name=name,
+            description=description,
+            annotations=tool_annotations,
+        )
+    return server
+
+
+def _fleet_result(call: Callable[[], dict[str, object]]) -> str:
+    """Return Cloudfall's own error envelope rather than an opaque crash.
+
+    A declaration an agent can fix is worth more than a tool error it
+    cannot read, so every failure this surface knows about comes back as
+    data with its code intact.
+    """
+    try:
+        return _dump(call())
+    except (
+        AnsibleReadError,
+        ConfigValidationError,
+        DecisionError,
+        FleetToolError,
+        ObserveError,
+    ) as error:
+        return _dump(error.as_dict())
+
+
+def _fleet_registrations(toolset: FleetToolset) -> tuple[_Registration, ...]:
+    read_only = ToolAnnotations(read_only_hint=True)
+
+    def list_operations() -> str:
+        return _fleet_result(toolset.operations)
+
+    def show_operation(operation: str) -> str:
+        return _fleet_result(lambda: toolset.operation(operation))
+
+    def show_fleet() -> str:
+        return _fleet_result(toolset.fleet)
+
+    def observe_fleet() -> str:
+        return _fleet_result(toolset.observe)
+
+    def audit_fleet() -> str:
+        return _fleet_result(toolset.audit)
+
+    def list_decisions() -> str:
+        return _fleet_result(toolset.decisions)
+
+    return (
+        (
+            list_operations,
+            "list_operations",
+            "List the operations the team declared, with risk and inputs",
+            read_only,
+        ),
+        (
+            show_operation,
+            "show_operation",
+            "Show one declared operation in full",
+            read_only,
+        ),
+        (
+            show_fleet,
+            "show_fleet",
+            "Read the fleet from the team's own Ansible inventory",
+            read_only,
+        ),
+        (
+            observe_fleet,
+            "observe_fleet",
+            "Collect one read-only snapshot per declared server",
+            read_only,
+        ),
+        (
+            audit_fleet,
+            "audit_fleet",
+            "Compare the declared fleet with the snapshots on disk",
+            read_only,
+        ),
+        (
+            list_decisions,
+            "list_decisions",
+            "List what was proposed, what check mode showed, and who approved",
+            read_only,
+        ),
+    )
+
+
+def _operation_registrations(toolset: FleetToolset) -> tuple[_Registration, ...]:
+    """Expose each declared operation as its own risk-annotated tool."""
+    return tuple(
+        (
+            _operation_handler(toolset, operation),
+            operation_tool_name(operation),
+            operation_tool_description(operation),
+            _operation_annotations(operation),
+        )
+        for operation in toolset.catalog().operations
+    )
+
+
+def _operation_handler(
+    toolset: FleetToolset, operation: Operation
+) -> Callable[..., str]:
+    operation_id = operation.operation_id.value
+
+    def propose_operation(
+        target: str = "", inputs: dict[str, str] | None = None
+    ) -> str:
+        return _fleet_result(
+            lambda: toolset.propose(operation_id, target or None, inputs)
+        )
+
+    return propose_operation
+
+
+def _operation_annotations(operation: Operation) -> ToolAnnotations:
+    """Carry the declared risk level into the client's own gate.
+
+    Every operation tool is read-only in effect, because calling one runs
+    check mode; the destructive hint says what approving it would mean.
+    """
+    if operation.risk is RiskLevel.DESTRUCTIVE:
+        return ToolAnnotations(read_only_hint=True, destructive_hint=True)
+    return ToolAnnotations(read_only_hint=True, destructive_hint=False)
 
 
 def create_server(config: AgentConfig) -> MCPServer:
@@ -552,6 +726,36 @@ def _parser() -> StrictArgumentParser:
         ),
     )
     parser.add_argument(
+        "--repository",
+        type=Path,
+        default=None,
+        help=(
+            "Ansible repository to serve instead of a project: the declared "
+            "operations become the tool list, and no tool changes a host"
+        ),
+    )
+    parser.add_argument(
+        "--inventory",
+        type=Path,
+        default=None,
+        help=(
+            "inventory inside the repository (default: the one its "
+            "ansible.cfg names)"
+        ),
+    )
+    parser.add_argument(
+        "--operations",
+        type=project_path_argument,
+        default=Path(CATALOG_DIRECTORY),
+        help="directory holding the operation documents (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--decisions",
+        type=project_path_argument,
+        default=Path(DECISION_DIRECTORY),
+        help="directory holding the decision records (default: %(default)s)",
+    )
+    parser.add_argument(
         "--schemas",
         type=Path,
         default=default_schema_directory(),
@@ -667,12 +871,48 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Run the MCP server over stdio."""
     arguments = parse_arguments(_parser(), argv)
     try:
+        repository = _repository(arguments, os.environ)
+        if repository is not None:
+            _serve_fleet(arguments, repository)
+            return 0
         with project_context(arguments.project, os.environ) as project_directory:
             _serve(arguments, project_directory)
-    except ProjectError as error:
+    except (ProjectError, FleetToolError, ConfigValidationError) as error:
         sys.stderr.write(f"{_dump(error.as_dict())}\n")
         return 2
     return 0
+
+
+def _repository(
+    arguments: argparse.Namespace, environment: Mapping[str, str]
+) -> Path | None:
+    """Return the Ansible repository to serve, if this is a brownfield run.
+
+    Precedence matches the CLI: an explicitly named repository, then the
+    current directory when it is an Ansible control repository rather than
+    a Cloudfall project.
+    """
+    if arguments.repository is not None:
+        return Path(arguments.repository)
+    if arguments.project is not None or environment.get(PROJECT_DIRECTORY_VARIABLE):
+        return None
+    current = Path.cwd()
+    if is_project(current):
+        return None
+    return current if inventory_from_config(current) is not None else None
+
+
+def _serve_fleet(arguments: argparse.Namespace, repository: Path) -> None:
+    config = FleetConfig(
+        repository=repository,
+        schema_directory=Path(arguments.schemas),
+        engine_directory=Path(arguments.engine),
+        inventory=arguments.inventory,
+        operations_directory=Path(arguments.operations),
+        decisions_directory=Path(arguments.decisions),
+        observed_directory=Path(arguments.observed),
+    )
+    create_fleet_server(config).run(transport="stdio")
 
 
 def _serve(arguments: argparse.Namespace, project_directory: Path) -> None:

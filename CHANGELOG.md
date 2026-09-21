@@ -31,6 +31,22 @@ Notable changes to Cloudfall. The format follows
 - `StateValidator.validate_documents` validates resource documents
   assembled in memory, with the schemas, reference checks and error codes
   documents on disk get
+- The operations catalog: every playbook the team runs is declared in
+  `operations/` with a risk level, a target scope, typed inputs,
+  preconditions and a verify step, and `cloudfall operations list|show`
+  reads it. A playbook nobody declared is not an operation
+- The gate and the record: `cloudfall operations propose` runs an
+  operation in check mode and records the operation, targets, inputs, the
+  evidence it was based on and the diff by sha256;
+  `cloudfall operations approve --yes` records the approver, runs it, runs
+  the verify playbook and closes the record as executed, verified or
+  failed; `cloudfall operations decisions` reads the trail without the
+  catalog
+- The agent surface: `cloudfall-mcp --repository` serves a brownfield
+  repository, where the tool list is the catalog. Each declared operation
+  is one tool carrying its risk as MCP annotations, calling it runs check
+  mode and records a proposal, and no tool approves anything: that stays a
+  command a person runs
 
 ## [0.3.0] — 2026-09-20
 
