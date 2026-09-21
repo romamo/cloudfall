@@ -6,6 +6,8 @@ Notable changes to Cloudfall. The format follows
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-09-21
+
 ## [0.4.0] — 2026-09-21
 
 ### Added
