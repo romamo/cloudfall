@@ -11,16 +11,19 @@ import pytest
 from cloudfall.catalog import RiskLevel, TargetScope, load_catalog
 from cloudfall.cli import main
 from cloudfall.decision import (
+    ApprovalRequest,
     DecisionError,
     DecisionStatus,
     DecisionStore,
+    PlaybookInvocation,
     ProposalRequest,
     Requirement,
     Targets,
-    check_command,
+    approve,
     gate,
     propose,
     read_basis,
+    run_command,
 )
 from cloudfall.domain import ResourceId
 from cloudfall.resources import default_schema_directory
@@ -176,8 +179,14 @@ def test_the_team_configuration_runs_their_playbook(tmp_path: Path) -> None:
     catalog = load_catalog(repository, SCHEMAS)
     operation = catalog.get(ResourceId.from_boundary("deploy"))
 
-    _, environment = check_command(
-        operation, "web-1", {}, repository, repository / "tree"
+    _, environment = run_command(
+        PlaybookInvocation(
+            playbook=operation.playbook,
+            repository=repository,
+            tree=repository / "tree",
+            pattern="web-1",
+        ),
+        check=True,
     )
 
     assert environment["ANSIBLE_CONFIG"] == str(repository / "ansible.cfg")
@@ -406,3 +415,218 @@ def test_the_record_is_readable_without_a_catalog(
     assert [entry["metadata"]["id"] for entry in payload["decisions"]] == [
         "deploy-20260921143012"
     ]
+
+
+def test_an_approval_runs_the_recorded_proposal_and_verifies_it(
+    tmp_path: Path,
+) -> None:
+    """The record decides what runs, so a human approves what they read."""
+    repository = _repository(tmp_path)
+    store = _store(repository)
+    proposed = propose(_proposal(repository), store, lambda: MOMENT, _Runner())
+    run = _Runner()
+
+    approved = approve(
+        ApprovalRequest(
+            decision=proposed, approver="roman", repository=repository
+        ),
+        store,
+        lambda: MOMENT,
+        run,
+    )
+
+    assert approved.status is DecisionStatus.VERIFIED
+    assert approved.approval is not None
+    assert approved.approval.approver == "roman"
+    assert approved.approval.approved_at == "2026-09-21T14:30:12Z"
+    assert approved.execution is not None
+    assert approved.execution.changed == ("web-1",)
+    assert approved.verification is not None
+    assert [argv[1] for argv in run.recorded] == ["--diff", "--diff"]
+    assert run.recorded[0][-1].endswith("playbooks/deploy.yml")
+    assert run.recorded[1][-1].endswith("playbooks/health.yml")
+
+
+def test_an_approved_run_is_not_check_mode(tmp_path: Path) -> None:
+    repository = _repository(tmp_path)
+    store = _store(repository)
+    proposed = propose(_proposal(repository), store, lambda: MOMENT, _Runner())
+    run = _Runner()
+
+    approve(
+        ApprovalRequest(
+            decision=proposed, approver="roman", repository=repository
+        ),
+        store,
+        lambda: MOMENT,
+        run,
+    )
+
+    assert all("--check" not in argv for argv in run.recorded)
+
+
+def test_a_failed_run_is_recorded_as_failed_and_skips_verify(
+    tmp_path: Path,
+) -> None:
+    repository = _repository(tmp_path)
+    store = _store(repository)
+    proposed = propose(_proposal(repository), store, lambda: MOMENT, _Runner())
+    run = _Runner(exit_code=2)
+
+    approved = approve(
+        ApprovalRequest(
+            decision=proposed, approver="roman", repository=repository
+        ),
+        store,
+        lambda: MOMENT,
+        run,
+    )
+
+    assert approved.status is DecisionStatus.FAILED
+    assert approved.verification is None
+    assert len(run.recorded) == 1
+
+
+def test_a_run_that_verify_rejects_is_not_verified(tmp_path: Path) -> None:
+    """A run nobody verified is not a run that worked."""
+    repository = _repository(tmp_path)
+    store = _store(repository)
+    proposed = propose(_proposal(repository), store, lambda: MOMENT, _Runner())
+    exit_codes = iter((0, 1))
+
+    class _Staged(_Runner):
+        def __call__(
+            self,
+            argv: Sequence[str],
+            environment: Mapping[str, str],
+            diff_path: Path,
+        ) -> int:
+            self.exit_code = next(exit_codes)
+            return super().__call__(argv, environment, diff_path)
+
+    approved = approve(
+        ApprovalRequest(
+            decision=proposed, approver="roman", repository=repository
+        ),
+        store,
+        lambda: MOMENT,
+        _Staged(),
+    )
+
+    assert approved.status is DecisionStatus.FAILED
+    assert approved.execution is not None
+    assert approved.execution.exit_code == 0
+    assert approved.verification is not None
+    assert approved.verification.exit_code == 1
+
+
+def test_a_read_operation_without_verify_is_executed_not_verified(
+    tmp_path: Path,
+) -> None:
+    repository = _repository(tmp_path, deploy=DEPLOY, facts=FACTS)
+    store = _store(repository)
+    proposed = propose(
+        _proposal(repository, "facts", target=None, inputs={}),
+        store,
+        lambda: MOMENT,
+        _Runner(),
+    )
+
+    approved = approve(
+        ApprovalRequest(
+            decision=proposed, approver="roman", repository=repository
+        ),
+        store,
+        lambda: MOMENT,
+        _Runner(),
+    )
+
+    assert approved.status is DecisionStatus.EXECUTED
+
+
+def test_one_proposal_is_approved_once(tmp_path: Path) -> None:
+    repository = _repository(tmp_path)
+    store = _store(repository)
+    proposed = propose(_proposal(repository), store, lambda: MOMENT, _Runner())
+    request = ApprovalRequest(
+        decision=proposed, approver="roman", repository=repository
+    )
+    approved = approve(request, store, lambda: MOMENT, _Runner())
+
+    with pytest.raises(DecisionError) as error:
+        approve(
+            ApprovalRequest(
+                decision=approved, approver="roman", repository=repository
+            ),
+            store,
+            lambda: MOMENT,
+            _Runner(),
+        )
+
+    assert error.value.code == "decision_not_proposed"
+
+
+def test_an_approval_records_who_gave_it(tmp_path: Path) -> None:
+    repository = _repository(tmp_path)
+    store = _store(repository)
+    proposed = propose(_proposal(repository), store, lambda: MOMENT, _Runner())
+
+    with pytest.raises(DecisionError) as error:
+        approve(
+            ApprovalRequest(decision=proposed, approver="  ", repository=repository),
+            store,
+            lambda: MOMENT,
+            _Runner(),
+        )
+
+    assert error.value.code == "decision_approver_unknown"
+
+
+def test_the_cli_shows_the_proposal_before_it_runs_anything(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Without --yes the approval command changes nothing."""
+    repository = _repository(tmp_path)
+    store = _store(repository)
+    proposed = propose(_proposal(repository), store, lambda: MOMENT, _Runner())
+
+    exit_code = main(
+        [
+            "operations",
+            "approve",
+            proposed.decision_id.value,
+            "--repository",
+            str(repository),
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["status"] == "pending"
+    assert payload["decision"]["spec"]["status"] == "proposed"
+    assert store.load(proposed.decision_id).status is DecisionStatus.PROPOSED
+
+
+def test_an_approved_decision_round_trips_through_the_store(
+    tmp_path: Path,
+) -> None:
+    """What came of a run is the part of the record that matters most."""
+    repository = _repository(tmp_path)
+    store = _store(repository)
+    proposed = propose(_proposal(repository), store, lambda: MOMENT, _Runner())
+    approved = approve(
+        ApprovalRequest(
+            decision=proposed, approver="roman", repository=repository
+        ),
+        store,
+        lambda: MOMENT,
+        _Runner(),
+    )
+
+    loaded = store.load(approved.decision_id)
+
+    assert loaded == approved
+    assert loaded.execution is not None
+    assert loaded.execution.exit_code == 0
+    assert loaded.verification is not None
+    assert loaded.status is DecisionStatus.VERIFIED

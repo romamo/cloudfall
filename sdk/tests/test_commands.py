@@ -62,7 +62,14 @@ def test_every_yes_gated_command_is_classified_as_changing_servers() -> None:
         command.name for command in commands_with_effect(CommandEffect.SERVERS)
     }
 
-    assert gated == {"deploy", "rollback", "restart", "data migrate", "migrate"}
+    assert gated == {
+        "deploy",
+        "rollback",
+        "restart",
+        "data migrate",
+        "migrate",
+        "operations approve",
+    }
     assert gated <= changing
     for command in commands_with_effect(CommandEffect.SERVERS):
         assert command.gate is not None, command.name

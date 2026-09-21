@@ -52,10 +52,13 @@ from cloudfall.dashboard_server import (
 )
 from cloudfall.decision import (
     DECISION_DIRECTORY,
+    ApprovalRequest,
     DecisionError,
+    DecisionStatus,
     DecisionStore,
     ProposalRequest,
     Targets,
+    approve,
     propose,
 )
 from cloudfall.domain import (
@@ -244,6 +247,7 @@ def _add_operations_parsers(
         ("list", "list every declared operation with its risk level"),
         ("show", "show one declared operation in full"),
         ("propose", "run one operation in check mode and record what it would do"),
+        ("approve", "approve one recorded proposal, run it, and verify it"),
         ("decisions", "list the decision records this repository holds"),
     ):
         subparser = operations_commands.add_parser(name, help=help_text)
@@ -258,6 +262,24 @@ def _add_operations_parsers(
         if name in {"show", "propose"}:
             subparser.add_argument(
                 "operation", type=resource_id_argument, help="operation id"
+            )
+        if name == "approve":
+            subparser.add_argument(
+                "decision",
+                type=resource_id_argument,
+                help="decision id from `operations propose`",
+            )
+            subparser.add_argument(
+                "--approver",
+                help="who is approving (default: the USER environment variable)",
+            )
+            subparser.add_argument(
+                "--yes",
+                action="store_true",
+                help=(
+                    "change the servers; without this flag the command shows "
+                    "the recorded proposal and runs nothing"
+                ),
             )
         if name == "propose":
             subparser.add_argument(
@@ -292,7 +314,7 @@ def _add_operations_parsers(
                     f"(default: {DECISION_DIRECTORY})"
                 ),
             )
-        if name == "decisions":
+        if name in {"approve", "decisions"}:
             subparser.add_argument(
                 "--decisions",
                 type=project_path_argument,
@@ -1430,6 +1452,8 @@ def _run_operations(arguments: Namespace) -> int:
         if arguments.repository is not None
         else Path.cwd()
     )
+    if arguments.operations_command == "approve":
+        return _approve_decision(arguments, repository)
     if arguments.operations_command == "decisions":
         # The record outlives the catalog: what was proposed and approved
         # stays readable however the declared operations change.
@@ -1474,6 +1498,42 @@ def _propose_operation(
     decision = propose(request, _decision_store(arguments, repository))
     _write_json(decision.as_dict())
     return 0 if decision.check.exit_code == 0 else 1
+
+
+def _approve_decision(arguments: Namespace, repository: Path) -> int:
+    """Approve one recorded proposal, run it, and verify it.
+
+    The approval needs no catalog: it acts on the record, so what a human
+    read is what runs.
+    """
+    store = _decision_store(arguments, repository)
+    decision = store.load(arguments.decision)
+    if not arguments.yes:
+        _write_json(
+            {
+                "status": "pending",
+                "decision": decision.as_document(),
+                "next": [
+                    "review the recorded diff at "
+                    f"{decision.check.diff.path}",
+                    "approve with --yes to run it",
+                ],
+            }
+        )
+        return 0
+    approver = (
+        arguments.approver
+        if arguments.approver is not None
+        else os.environ.get("USER", "")
+    )
+    approved = approve(
+        ApprovalRequest(
+            decision=decision, approver=approver, repository=repository
+        ),
+        store,
+    )
+    _write_json(approved.as_dict())
+    return 0 if approved.status is not DecisionStatus.FAILED else 1
 
 
 def _decision_store(arguments: Namespace, repository: Path) -> DecisionStore:

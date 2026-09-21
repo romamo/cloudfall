@@ -213,6 +213,130 @@
             "approvedAt"
           ],
           "additionalProperties": false
+        },
+        "execution": {
+          "type": "object",
+          "properties": {
+            "ranAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "exitCode": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 255
+            },
+            "changed": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 253
+              }
+            },
+            "unchanged": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 253
+              }
+            },
+            "log": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512
+                },
+                "sha256": {
+                  "$ref": "common.schema.json#/$defs/sha256"
+                },
+                "bytes": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "path",
+                "sha256",
+                "bytes"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "ranAt",
+            "exitCode",
+            "changed",
+            "unchanged",
+            "log"
+          ],
+          "additionalProperties": false,
+          "description": "What the approved run did."
+        },
+        "verify": {
+          "type": "object",
+          "properties": {
+            "ranAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "exitCode": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 255
+            },
+            "changed": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 253
+              }
+            },
+            "unchanged": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 253
+              }
+            },
+            "log": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512
+                },
+                "sha256": {
+                  "$ref": "common.schema.json#/$defs/sha256"
+                },
+                "bytes": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "path",
+                "sha256",
+                "bytes"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "ranAt",
+            "exitCode",
+            "changed",
+            "unchanged",
+            "log"
+          ],
+          "additionalProperties": false,
+          "description": "What the operation's verify playbook reported afterwards."
         }
       },
       "required": [

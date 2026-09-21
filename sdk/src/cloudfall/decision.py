@@ -21,7 +21,7 @@ import json
 import os
 import shutil
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
@@ -59,6 +59,8 @@ _ERROR_INPUT_MISSING = "decision_input_missing"
 _ERROR_INPUT_TYPE = "decision_input_type"
 _ERROR_DECISION_EXISTS = "decision_exists"
 _ERROR_DECISION_MISSING = "decision_missing"
+_ERROR_NOT_PROPOSED = "decision_not_proposed"
+_ERROR_APPROVER_UNKNOWN = "decision_approver_unknown"
 
 
 class DecisionError(RuntimeError):
@@ -179,6 +181,27 @@ class CheckPreview:
 
 
 @dataclass(frozen=True, slots=True)
+class RunRecord:
+    """What one real run did, kept beside what check mode predicted."""
+
+    ran_at: str
+    exit_code: int
+    changed: tuple[str, ...]
+    unchanged: tuple[str, ...]
+    log: DiffArtifact
+
+    def as_dict(self) -> dict[str, object]:
+        """Serialize the run for the record."""
+        return {
+            "ranAt": self.ran_at,
+            "exitCode": self.exit_code,
+            "changed": list(self.changed),
+            "unchanged": list(self.unchanged),
+            "log": self.log.as_dict(),
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class Basis:
     """The fleet evidence a proposal was made against."""
 
@@ -223,6 +246,8 @@ class Decision:
     check: CheckPreview
     status: DecisionStatus
     approval: Approval | None = None
+    execution: RunRecord | None = None
+    verification: RunRecord | None = None
 
     def as_document(self) -> dict[str, object]:
         """Serialize the decision as a schema-valid record document."""
@@ -245,6 +270,10 @@ class Decision:
         }
         if self.approval is not None:
             spec["approval"] = self.approval.as_dict()
+        if self.execution is not None:
+            spec["execution"] = self.execution.as_dict()
+        if self.verification is not None:
+            spec["verify"] = self.verification.as_dict()
         return {
             "apiVersion": API_VERSION,
             "kind": DECISION_KIND,
@@ -344,8 +373,15 @@ def propose(
     decision_id = _decision_identifier(operation.operation_id, moment)
     diff_path = store.directory / f"{decision_id.value}{_DIFF_SUFFIX}"
     tree = store.directory / _TREE_DIRECTORY / decision_id.value
-    argv, environment = check_command(
-        operation, pattern, declared, request.repository, tree
+    argv, environment = run_command(
+        PlaybookInvocation(
+            playbook=operation.playbook,
+            repository=request.repository,
+            tree=tree,
+            pattern=pattern,
+            inputs=declared,
+        ),
+        check=True,
     )
     diff_path.parent.mkdir(parents=True, exist_ok=True)
     exit_code = (run or _run_check)(argv, environment, diff_path)
@@ -371,14 +407,126 @@ def propose(
     return decision
 
 
-def check_command(
-    operation: Operation,
-    pattern: str | None,
-    inputs: Mapping[str, object],
-    repository: Path,
-    tree: Path,
+@dataclass(frozen=True, slots=True)
+class PlaybookInvocation:
+    """One playbook run against one set of targets."""
+
+    playbook: Path
+    repository: Path
+    tree: Path
+    pattern: str | None = None
+    inputs: Mapping[str, object] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class ApprovalRequest:
+    """One approval of a recorded proposal."""
+
+    decision: Decision
+    approver: str
+    repository: Path
+
+
+@dataclass(frozen=True, slots=True)
+class _Stage:
+    """What every stage of one approved decision shares."""
+
+    request: ApprovalRequest
+    store: DecisionStore
+    runner: CheckRunner
+
+
+def approve(
+    request: ApprovalRequest,
+    store: DecisionStore,
+    now: Callable[[], datetime] | None = None,
+    run: CheckRunner | None = None,
+) -> Decision:
+    """Record who let one proposal through, run it, and verify it.
+
+    Everything the run needs comes from the record rather than from the
+    caller or the catalog: the approval is of what was proposed, so the
+    playbook, the targets and the inputs cannot change between the diff a
+    human read and the run that follows it.
+    """
+    decision = request.decision
+    if decision.status is not DecisionStatus.PROPOSED:
+        message = (
+            f"decision {decision.decision_id} is {decision.status.value}, so "
+            "there is nothing left to approve"
+        )
+        raise DecisionError(_ERROR_NOT_PROPOSED, message)
+    if not request.approver.strip():
+        message = "an approval records who gave it; pass --approver or set USER"
+        raise DecisionError(_ERROR_APPROVER_UNKNOWN, message)
+    clock = now or _utc_now
+    stage = _Stage(request=request, store=store, runner=run or _run_check)
+    moment = clock()
+    execution = _run_stage(stage, decision.playbook, "execution", moment)
+    verification = (
+        _run_stage(stage, decision.verify_playbook, "verify", clock())
+        if decision.verify_playbook is not None and execution.exit_code == 0
+        else None
+    )
+    approved = replace(
+        decision,
+        approval=Approval(
+            approver=request.approver.strip(), approved_at=_timestamp(moment)
+        ),
+        execution=execution,
+        verification=verification,
+        status=_outcome(execution, verification, decision.verify_playbook),
+    )
+    store.update(approved)
+    return approved
+
+
+def _outcome(
+    execution: RunRecord,
+    verification: RunRecord | None,
+    verify_playbook: Path | None,
+) -> DecisionStatus:
+    """Return the status one run earned: unverified is not the same as done."""
+    if execution.exit_code != 0:
+        return DecisionStatus.FAILED
+    if verify_playbook is None:
+        return DecisionStatus.EXECUTED
+    if verification is None or verification.exit_code != 0:
+        return DecisionStatus.FAILED
+    return DecisionStatus.VERIFIED
+
+
+def _run_stage(
+    stage: _Stage, playbook: Path, name: str, moment: datetime
+) -> RunRecord:
+    """Run one stage of an approved decision and record what it did."""
+    decision = stage.request.decision
+    identifier = decision.decision_id.value
+    log_path = stage.store.directory / f"{identifier}-{name}.log"
+    invocation = PlaybookInvocation(
+        playbook=playbook,
+        repository=stage.request.repository,
+        tree=stage.store.directory / _TREE_DIRECTORY / f"{identifier}-{name}",
+        pattern=decision.targets.pattern,
+        inputs=decision.inputs,
+    )
+    argv, environment = run_command(invocation)
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    exit_code = stage.runner(argv, environment, log_path)
+    preview = _preview(exit_code, invocation.tree, log_path)
+    return RunRecord(
+        ran_at=_timestamp(moment),
+        exit_code=exit_code,
+        changed=preview.changed,
+        unchanged=preview.unchanged,
+        log=preview.diff,
+    )
+
+
+def run_command(
+    invocation: PlaybookInvocation, *, check: bool = False
 ) -> tuple[tuple[str, ...], dict[str, str]]:
-    """Return the check-mode invocation and its environment.
+    """Return one ``ansible-playbook`` invocation and its environment.
 
     The team's own configuration decides how Ansible connects and where
     their roles live, because this is their playbook: nothing about the
@@ -388,17 +536,19 @@ def check_command(
     if binary is None:
         message = "ansible-playbook is not installed on this controller"
         raise DecisionError(_ERROR_ANSIBLE_MISSING, message)
-    argv = [binary, "--check", "--diff"]
-    if pattern is not None:
-        argv.extend(("--limit", pattern))
-    if inputs:
-        argv.extend(("--extra-vars", json.dumps(dict(inputs), sort_keys=True)))
-    argv.append(str(repository / operation.playbook))
+    argv = [binary, "--check", "--diff"] if check else [binary, "--diff"]
+    if invocation.pattern is not None:
+        argv.extend(("--limit", invocation.pattern))
+    if invocation.inputs:
+        argv.extend(
+            ("--extra-vars", json.dumps(dict(invocation.inputs), sort_keys=True))
+        )
+    argv.append(str(invocation.repository / invocation.playbook))
     environment = {
         "ANSIBLE_CALLBACKS_ENABLED": _TREE_DIRECTORY,
-        "ANSIBLE_CALLBACK_TREE_DIR": str(tree.resolve()),
+        "ANSIBLE_CALLBACK_TREE_DIR": str(invocation.tree.resolve()),
     }
-    configuration = repository / _ANSIBLE_CONFIG_FILE
+    configuration = invocation.repository / _ANSIBLE_CONFIG_FILE
     if configuration.is_file():
         environment["ANSIBLE_CONFIG"] = str(configuration.resolve())
     return tuple(argv), environment
@@ -559,6 +709,24 @@ def _run_check(
     return completed.returncode
 
 
+def _run_from_document(recorded: object) -> RunRecord | None:
+    """Read back what a run did, or nothing when it has not run yet."""
+    if not isinstance(recorded, dict):
+        return None
+    log = cast("Mapping[str, object]", recorded["log"])
+    return RunRecord(
+        ran_at=str(recorded["ranAt"]),
+        exit_code=int(cast("int", recorded["exitCode"])),
+        changed=tuple(cast("Sequence[str]", recorded["changed"])),
+        unchanged=tuple(cast("Sequence[str]", recorded["unchanged"])),
+        log=DiffArtifact(
+            path=Path(str(log["path"])),
+            sha256=str(log["sha256"]),
+            size=int(cast("int", log["bytes"])),
+        ),
+    )
+
+
 def _decision_from_document(document: Mapping[str, object]) -> Decision:
     metadata = cast("Mapping[str, object]", document["metadata"])
     spec = cast("Mapping[str, object]", document["spec"])
@@ -600,6 +768,8 @@ def _decision_from_document(document: Mapping[str, object]) -> Decision:
             ),
         ),
         status=DecisionStatus(str(spec["status"])),
+        execution=_run_from_document(spec.get("execution")),
+        verification=_run_from_document(spec.get("verify")),
         approval=(
             Approval(
                 approver=str(cast("Mapping[str, object]", approval)["approver"]),

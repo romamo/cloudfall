@@ -110,6 +110,13 @@ CLI_COMMANDS: tuple[CommandContract, ...] = (
     ),
     CommandContract(
         "cloudfall",
+        "operations approve",
+        CommandEffect.SERVERS,
+        "approve one recorded proposal, run it for real, and verify it",
+        gate=_YES,
+    ),
+    CommandContract(
+        "cloudfall",
         "operations decisions",
         CommandEffect.READ,
         "list what was proposed, what check mode showed, and who approved",
