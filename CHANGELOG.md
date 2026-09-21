@@ -6,6 +6,27 @@ Notable changes to Cloudfall. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Brownfield fleet reader: `cloudfall audit` and `cloudfall inventory show`
+  read the fleet from the team's own Ansible inventory, with `--inventory`
+  or from the inventory an `ansible.cfg` in the current directory names.
+  Hosts, groups and connection settings come from Ansible; a `cloudfall`
+  block per host, `cloudfall_defaults` per group and the
+  `cloudfall_server_types` catalog carry what Ansible does not model. The
+  documents are validated against the same schemas a project directory
+  gets, so `PlatformInventory` and everything built on it is unchanged
+- `cloudfall.ansible_api` is the only module that imports ansible-core. It
+  reads in process and falls back to the `ansible-inventory` command,
+  reporting which served the read
+- `cloudfall observe` collects one read-only snapshot per server through
+  the team's inventory plus an ephemeral overlay holding only the
+  `cloudfall_servers` group and the two variables the inspect role cannot
+  derive, so the audit loop closes without a Cloudfall project
+- `StateValidator.validate_documents` validates resource documents
+  assembled in memory, with the schemas, reference checks and error codes
+  documents on disk get
+
 ## [0.3.0] — 2026-09-20
 
 ### Removed
