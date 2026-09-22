@@ -84,13 +84,21 @@ def _proposal(
 
 
 class _Runner:
-    """A check runner that writes what Ansible would write."""
+    """A runner that writes what Ansible would write, stage by stage.
+
+    An idempotent fleet changes on the run and changes nothing on the
+    verify that follows, so the two stages are modelled separately.
+    """
 
     def __init__(
-        self, exit_code: int = 0, changed: tuple[str, ...] = ("web-1",)
+        self,
+        exit_code: int = 0,
+        changed: tuple[str, ...] = ("web-1",),
+        verify_changed: tuple[str, ...] = (),
     ) -> None:
         self.exit_code = exit_code
         self.changed = changed
+        self.verify_changed = verify_changed
         self.recorded: list[tuple[str, ...]] = []
 
     def __call__(
@@ -99,14 +107,19 @@ class _Runner:
         environment: Mapping[str, str],
         diff_path: Path,
     ) -> int:
-        self.recorded.append(tuple(argv))
         tree = Path(environment["ANSIBLE_CALLBACK_TREE_DIR"])
+        changed = self.verify_changed if self._verifying(tree) else self.changed
+        self.recorded.append(tuple(argv))
         tree.mkdir(parents=True, exist_ok=True)
-        for host in self.changed:
+        for host in changed:
             (tree / host).write_text('{"changed": true}', encoding="utf-8")
         (tree / "web-2").write_text('{"changed": false}', encoding="utf-8")
         diff_path.write_text("--- before\n+++ after\n", encoding="utf-8")
         return self.exit_code
+
+    @staticmethod
+    def _verifying(tree: Path) -> bool:
+        return tree.name.endswith("-verify")
 
 
 def test_the_gate_follows_the_risk_level() -> None:
@@ -442,6 +455,10 @@ def test_an_approval_runs_the_recorded_proposal_and_verifies_it(
     assert approved.execution is not None
     assert approved.execution.changed == ("web-1",)
     assert approved.verification is not None
+    assert approved.verification.changed == ()
+    assert approved.verdict == (
+        "the run succeeded and the verify step changed nothing"
+    )
     assert [argv[1] for argv in run.recorded] == ["--diff", "--diff"]
     assert run.recorded[0][-1].endswith("playbooks/deploy.yml")
     assert run.recorded[1][-1].endswith("playbooks/health.yml")
@@ -630,3 +647,66 @@ def test_an_approved_decision_round_trips_through_the_store(
     assert loaded.execution.exit_code == 0
     assert loaded.verification is not None
     assert loaded.status is DecisionStatus.VERIFIED
+
+
+def test_a_verify_step_that_changes_the_fleet_did_not_verify_it(
+    tmp_path: Path,
+) -> None:
+    """Exiting zero is not enough: verification is a claim about state."""
+    repository = _repository(tmp_path)
+    store = _store(repository)
+    proposed = propose(_proposal(repository), store, lambda: MOMENT, _Runner())
+
+    approved = approve(
+        ApprovalRequest(
+            decision=proposed, approver="roman", repository=repository
+        ),
+        store,
+        lambda: MOMENT,
+        _Runner(verify_changed=("web-1",)),
+    )
+
+    assert approved.status is DecisionStatus.FAILED
+    assert approved.verification is not None
+    assert approved.verification.exit_code == 0
+    assert approved.verification.changed == ("web-1",)
+    assert approved.verdict is not None
+    assert "the verify step changed web-1" in approved.verdict
+
+
+def test_every_outcome_says_why_in_the_record(tmp_path: Path) -> None:
+    repository = _repository(tmp_path, deploy=DEPLOY, facts=FACTS)
+    store = _store(repository)
+
+    failed = approve(
+        ApprovalRequest(
+            decision=propose(
+                _proposal(repository), store, lambda: MOMENT, _Runner()
+            ),
+            approver="roman",
+            repository=repository,
+        ),
+        store,
+        lambda: MOMENT,
+        _Runner(exit_code=2),
+    )
+    executed = approve(
+        ApprovalRequest(
+            decision=propose(
+                _proposal(repository, "facts", target=None, inputs={}),
+                store,
+                lambda: MOMENT,
+                _Runner(),
+            ),
+            approver="roman",
+            repository=repository,
+        ),
+        store,
+        lambda: MOMENT,
+        _Runner(),
+    )
+
+    assert failed.verdict == "the run exited 2"
+    assert executed.verdict == (
+        "the run succeeded; the operation declares no verify step"
+    )

@@ -337,6 +337,12 @@
           ],
           "additionalProperties": false,
           "description": "What the operation's verify playbook reported afterwards."
+        },
+        "verdict": {
+          "type": "string",
+          "description": "Why the decision ended in its status.",
+          "minLength": 1,
+          "maxLength": 300
         }
       },
       "required": [

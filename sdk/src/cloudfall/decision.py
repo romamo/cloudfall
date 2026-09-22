@@ -248,6 +248,7 @@ class Decision:
     approval: Approval | None = None
     execution: RunRecord | None = None
     verification: RunRecord | None = None
+    verdict: str | None = None
 
     def as_document(self) -> dict[str, object]:
         """Serialize the decision as a schema-valid record document."""
@@ -274,6 +275,8 @@ class Decision:
             spec["execution"] = self.execution.as_dict()
         if self.verification is not None:
             spec["verify"] = self.verification.as_dict()
+        if self.verdict is not None:
+            spec["verdict"] = self.verdict
         return {
             "apiVersion": API_VERSION,
             "kind": DECISION_KIND,
@@ -468,6 +471,7 @@ def approve(
         if decision.verify_playbook is not None and execution.exit_code == 0
         else None
     )
+    status, verdict = _outcome(execution, verification, decision.verify_playbook)
     approved = replace(
         decision,
         approval=Approval(
@@ -475,7 +479,8 @@ def approve(
         ),
         execution=execution,
         verification=verification,
-        status=_outcome(execution, verification, decision.verify_playbook),
+        status=status,
+        verdict=verdict,
     )
     store.update(approved)
     return approved
@@ -485,15 +490,42 @@ def _outcome(
     execution: RunRecord,
     verification: RunRecord | None,
     verify_playbook: Path | None,
-) -> DecisionStatus:
-    """Return the status one run earned: unverified is not the same as done."""
+) -> tuple[DecisionStatus, str]:
+    """Return the status one run earned, and why, for the record.
+
+    Verification is a claim about the fleet's state, so a verify run that
+    changed something did not verify anything: it found the fleet not as
+    the operation left it and converged it further. Exiting zero is not
+    enough.
+    """
     if execution.exit_code != 0:
-        return DecisionStatus.FAILED
+        return (
+            DecisionStatus.FAILED,
+            f"the run exited {execution.exit_code}",
+        )
     if verify_playbook is None:
-        return DecisionStatus.EXECUTED
-    if verification is None or verification.exit_code != 0:
-        return DecisionStatus.FAILED
-    return DecisionStatus.VERIFIED
+        return (
+            DecisionStatus.EXECUTED,
+            "the run succeeded; the operation declares no verify step",
+        )
+    if verification is None:  # pragma: no cover - callers verify after a clean run
+        return (DecisionStatus.FAILED, "the verify step did not run")
+    if verification.exit_code != 0:
+        return (
+            DecisionStatus.FAILED,
+            f"the verify step exited {verification.exit_code}",
+        )
+    if verification.changed:
+        changed = ", ".join(verification.changed)
+        return (
+            DecisionStatus.FAILED,
+            "the verify step changed "
+            f"{changed}, so the fleet was not in the state the run claimed",
+        )
+    return (
+        DecisionStatus.VERIFIED,
+        "the run succeeded and the verify step changed nothing",
+    )
 
 
 def _run_stage(
@@ -768,6 +800,7 @@ def _decision_from_document(document: Mapping[str, object]) -> Decision:
             ),
         ),
         status=DecisionStatus(str(spec["status"])),
+        verdict=str(spec["verdict"]) if "verdict" in spec else None,
         execution=_run_from_document(spec.get("execution")),
         verification=_run_from_document(spec.get("verify")),
         approval=(

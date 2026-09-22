@@ -6,6 +6,14 @@ Notable changes to Cloudfall. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- A decision is `verified` only when its verify run changed nothing. A
+  verify step that exits zero while changing a host found the fleet not as
+  the run left it and converged it further, which verifies nothing, so it
+  is recorded `failed`. Every approved decision now carries a `verdict`
+  saying why it ended where it did
+
 ## [0.5.0] — 2026-09-21
 
 ## [0.4.0] — 2026-09-21
