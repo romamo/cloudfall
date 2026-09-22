@@ -266,7 +266,10 @@ def _audit_raid(
     mdstat = _string(software_raid, "mdstat")
     raid_level = requirement.level.value
     health_matches = tuple(_RAID_HEALTH_PATTERN.finditer(mdstat))
-    active_devices = max(
+    # The worst array decides: a host with one healthy mirror and one
+    # degraded mirror is a host running unprotected, whatever the healthy
+    # one reports.
+    active_devices = min(
         (match.group(3).count("U") for match in health_matches),
         default=0,
     )

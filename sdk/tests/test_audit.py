@@ -33,6 +33,41 @@ def test_compliant_observations_match_desired_state() -> None:
     assert report.unmatched_observations == ()
 
 
+def test_one_healthy_array_does_not_hide_a_degraded_one(tmp_path: Path) -> None:
+    """A host with a degraded mirror is running unprotected.
+
+    Found on the live fleet on 2026-09-22: h3 carried two arrays at
+    ``[2/1] [U_]`` and the audit called the host compliant on RAID,
+    because it read the healthiest array instead of the worst one.
+    """
+    observations = tmp_path / "observed"
+    shutil.copytree(COMPLIANT, observations)
+    h1 = observations / "h1.json"
+    document = json.loads(h1.read_text(encoding="utf-8"))
+    document["spec"]["storage"]["softwareRaid"]["mdstat"] = (
+        "md0 : active raid1 sda1[0] sdb1[1]\n"
+        "      976630336 blocks [2/2] [UU]\n"
+        "\n"
+        "md1 : active raid1 sda2[0] sdb2[1]\n"
+        "      976630336 blocks [2/1] [U_]\n"
+    )
+    h1.write_text(json.dumps(document), encoding="utf-8")
+
+    report = _audit(observations)
+
+    degraded = next(
+        server for server in report.servers if server.server_id == "h1"
+    )
+    active = next(
+        check
+        for check in degraded.checks
+        if check.check == "storage.softwareRaid.activeDevices"
+    )
+    assert active.status is AuditStatus.DRIFT
+    assert active.observed == 1
+    assert report.status is AuditStatus.DRIFT
+
+
 def test_observed_systemd_escaped_unit_names_are_accepted(tmp_path: Path) -> None:
     r"""Observed units may carry systemd path escapes such as ``\x2d``.
 
