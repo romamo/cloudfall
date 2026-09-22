@@ -42,8 +42,15 @@ type CheckRunner = Callable[[Sequence[str], Mapping[str, str], Path], int]
 API_VERSION = "cloudfall/v1"
 DECISION_KIND = "OperationDecision"
 DECISION_SCHEMA = "operation-decision.schema.json"
-DECISION_DIRECTORY = "tmp/decisions"
-"""Where decision records and their diffs land inside the repository."""
+DECISION_DIRECTORY = "decisions"
+"""Where decision records and their artifacts land inside the repository.
+
+Beside the operations rather than under ``tmp/``: the record is what the
+team keeps, and the runtime directory is what they throw away. Commit the
+records; the diffs and logs beside them are raw Ansible output, so they
+belong in git only in a repository whose tasks set ``no_log`` where it
+matters.
+"""
 
 _TREE_DIRECTORY = "tree"
 _DIFF_SUFFIX = ".diff"
@@ -402,8 +409,8 @@ def propose(
         inputs=declared,
         requirement=requirement,
         reason=reason,
-        basis=read_basis(request.observations),
-        check=_preview(exit_code, tree, diff_path),
+        basis=read_basis(request.observations, request.repository),
+        check=_preview(exit_code, tree, diff_path, request.repository),
         status=DecisionStatus.PROPOSED,
     )
     store.save(decision)
@@ -545,7 +552,9 @@ def _run_stage(
     argv, environment = run_command(invocation)
     log_path.parent.mkdir(parents=True, exist_ok=True)
     exit_code = stage.runner(argv, environment, log_path)
-    preview = _preview(exit_code, invocation.tree, log_path)
+    preview = _preview(
+        exit_code, invocation.tree, log_path, stage.request.repository
+    )
     return RunRecord(
         ran_at=_timestamp(moment),
         exit_code=exit_code,
@@ -586,7 +595,19 @@ def run_command(
     return tuple(argv), environment
 
 
-def read_basis(observations: Path) -> Basis:
+def repository_relative(path: Path, repository: Path) -> Path:
+    """Return the path as the repository sees it, when it lies inside it.
+
+    Records are committed, so a path that names one machine's home
+    directory is worse than useless to everyone else reading the trail.
+    """
+    try:
+        return path.resolve().relative_to(repository.resolve())
+    except ValueError:
+        return path
+
+
+def read_basis(observations: Path, repository: Path | None = None) -> Basis:
     """Return the observation evidence a proposal cites.
 
     A proposal made against no evidence says so, rather than implying it
@@ -603,10 +624,19 @@ def read_basis(observations: Path) -> Basis:
             spec = document.get("spec")
             if isinstance(spec, dict) and isinstance(spec.get("observedAt"), str):
                 observed_at[path.stem] = str(spec["observedAt"])
-    return Basis(observations=observations, observed_at=observed_at)
+    return Basis(
+        observations=(
+            repository_relative(observations, repository)
+            if repository is not None
+            else observations
+        ),
+        observed_at=observed_at,
+    )
 
 
-def _preview(exit_code: int, tree: Path, diff_path: Path) -> CheckPreview:
+def _preview(
+    exit_code: int, tree: Path, diff_path: Path, repository: Path | None = None
+) -> CheckPreview:
     changed: list[str] = []
     unchanged: list[str] = []
     if tree.is_dir():
@@ -628,7 +658,11 @@ def _preview(exit_code: int, tree: Path, diff_path: Path) -> CheckPreview:
         changed=tuple(changed),
         unchanged=tuple(unchanged),
         diff=DiffArtifact(
-            path=diff_path,
+            path=(
+                repository_relative(diff_path, repository)
+                if repository is not None
+                else diff_path
+            ),
             sha256=hashlib.sha256(content).hexdigest(),
             size=len(content),
         ),

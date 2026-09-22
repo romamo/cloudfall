@@ -6,6 +6,14 @@ Notable changes to Cloudfall. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Decision records default to `decisions/` beside the operations rather
+  than to `tmp/decisions`: the record is what a team keeps, and `tmp/` is
+  what they throw away. The diffs and logs beside each record are raw
+  Ansible output, so a repository that commits them wants `no_log` on the
+  tasks that handle secrets
+
 ### Fixed
 
 - A decision is `verified` only when its verify run changed nothing. A

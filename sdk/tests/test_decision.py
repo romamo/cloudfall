@@ -11,6 +11,7 @@ import pytest
 from cloudfall.catalog import RiskLevel, TargetScope, load_catalog
 from cloudfall.cli import main
 from cloudfall.decision import (
+    DECISION_DIRECTORY,
     ApprovalRequest,
     DecisionError,
     DecisionStatus,
@@ -49,7 +50,7 @@ verify:
 
 def _store(repository: Path) -> DecisionStore:
     return DecisionStore(
-        directory=repository / "tmp" / "decisions",
+        directory=repository / DECISION_DIRECTORY,
         catalog=SchemaCatalog(SCHEMAS),
     )
 
@@ -144,7 +145,11 @@ def test_a_proposal_records_what_check_mode_would_change(tmp_path: Path) -> None
     assert decision.check.changed == ("web-1",)
     assert decision.check.unchanged == ("web-2",)
     assert decision.check.diff.size == len(b"--- before\n+++ after\n")
-    assert decision.check.diff.path.read_text(encoding="utf-8").startswith("---")
+    # A committed record names paths as the repository sees them.
+    assert not decision.check.diff.path.is_absolute()
+    artifact = repository / decision.check.diff.path
+    assert artifact.read_text(encoding="utf-8").startswith("---")
+    assert not decision.basis.observations.is_absolute()
 
 
 def test_a_proposal_cites_the_evidence_it_was_made_against(
