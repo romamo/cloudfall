@@ -6,6 +6,8 @@ Notable changes to Cloudfall. The format follows
 
 ## [Unreleased]
 
+## [0.5.1] — 2026-09-22
+
 ### Changed
 
 - Decision records default to `decisions/` beside the operations rather
@@ -21,6 +23,9 @@ Notable changes to Cloudfall. The format follows
   the run left it and converged it further, which verifies nothing, so it
   is recorded `failed`. Every approved decision now carries a `verdict`
   saying why it ended where it did
+- A record cites its artifacts and its observation basis as the repository
+  sees them rather than by absolute path, because a record is committed
+  and one machine's home directory means nothing in anyone else's checkout
 
 ## [0.5.0] — 2026-09-21
 
