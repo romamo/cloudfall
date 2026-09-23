@@ -137,9 +137,7 @@ def _repository(tmp_path: Path, **operations: str) -> Path:
     declared = operations or {"write-marker": MARKER}
     (repository / "operations").mkdir()
     for name, body in declared.items():
-        (repository / "operations" / f"{name}.yml").write_text(
-            body, encoding="utf-8"
-        )
+        (repository / "operations" / f"{name}.yml").write_text(body, encoding="utf-8")
     return repository
 
 
@@ -163,9 +161,7 @@ def _server(repository: Path) -> MCPServer:
     )
 
 
-def _call(
-    server: MCPServer, name: str, arguments: dict[str, object]
-) -> Any:  # noqa: ANN401 - a tool's envelope is read like parsed JSON
+def _call(server: MCPServer, name: str, arguments: dict[str, object]) -> Any:  # noqa: ANN401 - a tool's envelope is read like parsed JSON
     """Call one tool and read the JSON envelope it returned."""
     result = asyncio.run(server.call_tool(name, arguments))
     content = cast("CallToolResult", result).content[0]
@@ -189,6 +185,7 @@ def test_the_tool_list_is_the_catalog(tmp_path: Path) -> None:
         "observe_fleet",
         "audit_fleet",
         "list_decisions",
+        "why",
     } <= set(names)
 
 
@@ -258,6 +255,31 @@ def test_a_proposal_through_the_surface_lands_in_the_record(
     assert [entry["spec"]["operation"]["id"] for entry in listed["decisions"]] == [
         "write-marker"
     ]
+
+
+def test_the_surface_answers_why_from_the_record(tmp_path: Path) -> None:
+    """The record answers for a host; a host it never names gets nothing."""
+    repository = _repository(tmp_path)
+    server = _server(repository)
+    _call(
+        server,
+        "operation_write_marker",
+        {"target": "web-1", "inputs": {"version": "2.0.0"}},
+    )
+
+    asked = _call(server, "why", {"host": "web-1"})
+    nobody = _call(server, "why", {"host": "web-9"})
+    refused = _call(server, "why", {"since": "last tuesday"})
+
+    assert asked["count"] == 1
+    assert asked["answers"][0]["decision"]["spec"]["operation"]["id"] == (
+        "write-marker"
+    )
+    assert asked["answers"][0]["story"][-1] == (
+        "It is still proposed: nobody has approved or rejected it."
+    )
+    assert nobody["count"] == 0
+    assert refused["error"]["code"] == "why_instant_invalid"
 
 
 def test_the_surface_reads_the_fleet_from_the_team_inventory(

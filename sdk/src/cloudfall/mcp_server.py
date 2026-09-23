@@ -50,6 +50,7 @@ from cloudfall.project import (
 )
 from cloudfall.resources import default_engine_directory, default_schema_directory
 from cloudfall.validation import ConfigValidationError
+from cloudfall.why import WhyError
 
 if TYPE_CHECKING:
     import argparse
@@ -70,7 +71,9 @@ and say why, then call it to preview it in check mode. Calling an
 operation tool changes nothing: it runs the playbook in check mode and
 records the operation, the targets, the evidence it was based on and the
 diff it would produce. Approving that record is a command a person runs;
-no tool here can do it, whatever reason is given for asking.
+no tool here can do it, whatever reason is given for asking. When asked
+why something was done, answer from the record with the why tool rather
+than from memory.
 
 Each operation tool carries the risk level the team declared, so read,
 mutating and destructive are visible to this client's own gate.
@@ -129,6 +132,7 @@ def _fleet_result(call: Callable[[], dict[str, object]]) -> str:
         DecisionError,
         FleetToolError,
         ObserveError,
+        WhyError,
     ) as error:
         return _dump(error.as_dict())
 
@@ -153,6 +157,15 @@ def _fleet_registrations(toolset: FleetToolset) -> tuple[_Registration, ...]:
 
     def list_decisions() -> str:
         return _fleet_result(toolset.decisions)
+
+    def why(
+        host: str = "", operation: str = "", since: str = "", until: str = ""
+    ) -> str:
+        return _fleet_result(
+            lambda: toolset.why(
+                host or None, operation or None, since or None, until or None
+            )
+        )
 
     return (
         (
@@ -189,6 +202,14 @@ def _fleet_registrations(toolset: FleetToolset) -> tuple[_Registration, ...]:
             list_decisions,
             "list_decisions",
             "List what was proposed, what check mode showed, and who approved",
+            read_only,
+        ),
+        (
+            why,
+            "why",
+            "Answer why the agent did that: the decisions the record holds "
+            "for a host, an operation or a time window (ISO 8601), each told "
+            "as what it saw, proposed, showed, who approved and how it ended",
             read_only,
         ),
     )
@@ -341,9 +362,7 @@ def _authoring_registrations(
         environment: str = "production",
         description: str | None = None,
     ) -> str:
-        return _dump(
-            toolset.add_ssh_key(key_file, owner, id, environment, description)
-        )
+        return _dump(toolset.add_ssh_key(key_file, owner, id, environment, description))
 
     def add_server_type(
         id: str,  # noqa: A002 - mirrors the `cloudfall add server-type` id.
@@ -739,8 +758,7 @@ def _parser() -> StrictArgumentParser:
         type=Path,
         default=None,
         help=(
-            "inventory inside the repository (default: the one its "
-            "ansible.cfg names)"
+            "inventory inside the repository (default: the one its ansible.cfg names)"
         ),
     )
     parser.add_argument(
@@ -760,8 +778,7 @@ def _parser() -> StrictArgumentParser:
         type=Path,
         default=default_schema_directory(),
         help=(
-            "JSON Schema directory used to validate the project "
-            "(default: %(default)s)"
+            "JSON Schema directory used to validate the project (default: %(default)s)"
         ),
     )
     parser.add_argument(

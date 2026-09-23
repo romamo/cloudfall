@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import sys
 import time
@@ -32,6 +31,8 @@ from cloudfall.arguments import (
     project_path_argument,
     release_id_argument,
     resource_id_argument,
+    root_parser,
+    schema_version_argument,
 )
 from cloudfall.audit import AuditStatus, audit_inventory
 from cloudfall.authoring import (
@@ -120,6 +121,12 @@ from cloudfall.operator import (
 from cloudfall.operator import (
     run_once as operator_run_once,
 )
+from cloudfall.output import (
+    schema_changes_since,
+    schema_versions,
+    write_error,
+    write_result,
+)
 from cloudfall.project import (
     PROJECT_DIRECTORY_VARIABLE,
     InitOptions,
@@ -158,6 +165,7 @@ from cloudfall.validation import (
     ValidatedConfig,
     validate_config,
 )
+from cloudfall.why import WhyError, WhyQuery, answer, render_why_html
 
 
 def _add_config_parsers(
@@ -204,6 +212,29 @@ def _add_project_directory_argument(parser: argparse.ArgumentParser) -> None:
             f"project directory to run in (default: ${PROJECT_DIRECTORY_VARIABLE}, "
             "else the current directory when it is a project)"
         ),
+    )
+
+
+def _add_projectless_parsers(
+    commands: argparse._SubParsersAction[StrictArgumentParser],
+) -> None:
+    """Add the commands that run before, or without, a project."""
+    _add_init_parser(commands)
+    _add_changelog_parser(commands)
+
+
+def _add_changelog_parser(
+    commands: argparse._SubParsersAction[StrictArgumentParser],
+) -> None:
+    changelog_parser = commands.add_parser(
+        "changelog",
+        help="list changes to the JSON output contract, newest first",
+    )
+    changelog_parser.add_argument(
+        "--since",
+        type=schema_version_argument,
+        metavar="MAJOR.MINOR",
+        help="only changes after this output schema version",
     )
 
 
@@ -443,12 +474,65 @@ def _add_add_parsers(
             default=default_schema_directory(),
             help="versioned schema directory (default: bundled schemas)",
         )
+    _add_why_parser(commands)
+
+
+def _add_why_parser(
+    commands: argparse._SubParsersAction[StrictArgumentParser],
+) -> None:
+    """Add the command that answers "why did the agent do that"."""
+    why_parser = commands.add_parser(
+        "why",
+        help=(
+            "answer why the agent did that, from the record, for a host, an "
+            "operation or a time window"
+        ),
+    )
+    why_parser.add_argument(
+        "--repository",
+        type=Path,
+        help="repository holding the decision records (default: the current directory)",
+    )
+    why_parser.add_argument(
+        "--host", help="only decisions whose record names this host"
+    )
+    why_parser.add_argument(
+        "--operation",
+        type=resource_id_argument,
+        help="only decisions of this declared operation",
+    )
+    why_parser.add_argument(
+        "--since",
+        help="only decisions with a moment at or after this ISO 8601 time or date",
+    )
+    why_parser.add_argument(
+        "--until",
+        help="only decisions with a moment at or before this ISO 8601 time or date",
+    )
+    why_parser.add_argument(
+        "--format",
+        choices=("json", "html"),
+        default="json",
+        help="answer as JSON or as one HTML page (default: json)",
+    )
+    why_parser.add_argument(
+        "--decisions",
+        type=project_path_argument,
+        default=Path(DECISION_DIRECTORY),
+        help=f"directory holding the decision records (default: {DECISION_DIRECTORY})",
+    )
+    why_parser.add_argument(
+        "--schemas",
+        type=Path,
+        default=default_schema_directory(),
+        help="versioned schema directory (default: bundled schemas)",
+    )
 
 
 def _parser() -> StrictArgumentParser:
-    parser = StrictArgumentParser(prog="cloudfall")
+    parser = root_parser("cloudfall")
     commands = parser.add_subparsers(dest="command", required=True)
-    _add_init_parser(commands)
+    _add_projectless_parsers(commands)
     _add_add_parsers(commands)
     _add_config_parsers(commands)
 
@@ -1174,11 +1258,13 @@ def _add_lifecycle_arguments(parser: argparse.ArgumentParser) -> None:
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the CLI and return a process exit code."""
     arguments = parse_arguments(_parser(), argv)
-    if arguments.command == "init":
-        return _run_init(arguments)
+    projectless_command = _PROJECTLESS_COMMANDS.get(arguments.command)
+    if projectless_command is not None:
+        return projectless_command(arguments)
     try:
-        if arguments.command == "operations":
-            return _run_operations(arguments)
+        record_command = _RECORD_COMMANDS.get(arguments.command)
+        if record_command is not None:
+            return record_command(arguments)
         source = _inventory_source(arguments, os.environ)
         if source is not None:
             return _dispatch_from_inventory(arguments, source)
@@ -1197,8 +1283,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         ConfigValidationError,
         AnsibleReadError,
         DecisionError,
+        WhyError,
     ) as error:
-        sys.stderr.write(f"{json.dumps(error.as_dict(), sort_keys=True)}\n")
+        write_error(error.as_dict())
         return 2
 
 
@@ -1284,12 +1371,12 @@ def _run_init(arguments: Namespace) -> int:
             "status": "error",
             "error": {"code": "invalid_argument", "message": str(error)},
         }
-        sys.stderr.write(f"{json.dumps(payload, sort_keys=True)}\n")
+        write_error(payload)
         return 2
     except ProjectError as error:
-        sys.stderr.write(f"{json.dumps(error.as_dict(), sort_keys=True)}\n")
+        write_error(error.as_dict())
         return 2
-    _write_json(scaffold.as_dict())
+    write_result(scaffold.as_dict())
     return 0
 
 
@@ -1336,12 +1423,12 @@ def _run_add(arguments: Namespace, project_directory: Path) -> int:
             "status": "error",
             "error": {"code": "invalid_argument", "message": str(error)},
         }
-        sys.stderr.write(f"{json.dumps(payload, sort_keys=True)}\n")
+        write_error(payload)
         return 2
     except AuthoringError as error:
-        sys.stderr.write(f"{json.dumps(error.as_dict(), sort_keys=True)}\n")
+        write_error(error.as_dict())
         return 2
-    _write_json(result.as_dict())
+    write_result(result.as_dict())
     return 0
 
 
@@ -1362,9 +1449,9 @@ def _run_import_render(arguments: Namespace) -> int:
                 Path(arguments.blueprint), targets, Path(arguments.schemas)
             )
     except (RenderImportError, ConfigValidationError) as error:
-        sys.stderr.write(f"{json.dumps(error.as_dict(), sort_keys=True)}\n")
+        write_error(error.as_dict())
         return 2
-    _write_json(result.as_dict())
+    write_result(result.as_dict())
     return 0
 
 
@@ -1422,7 +1509,7 @@ def _command_key(arguments: Namespace) -> str:
 def _run_config_validate(
     _arguments: Namespace, state: ValidatedConfig, _schema_directory: Path
 ) -> int:
-    _write_json(state.as_dict())
+    write_result(state.as_dict())
     return 0
 
 
@@ -1436,7 +1523,7 @@ def _run_inventory_show(
     read = getattr(arguments, "fleet_read", None)
     if isinstance(read, FleetRead):
         payload["ansible"] = read.as_dict()
-    _write_json(payload)
+    write_result(payload)
     return 0
 
 
@@ -1458,7 +1545,7 @@ def _run_operations(arguments: Namespace) -> int:
         # The record outlives the catalog: what was proposed and approved
         # stays readable however the declared operations change.
         store = _decision_store(arguments, repository)
-        _write_json(
+        write_result(
             {
                 "status": "ok",
                 "directory": str(store.directory),
@@ -1475,12 +1562,63 @@ def _run_operations(arguments: Namespace) -> int:
     )
     if arguments.operations_command == "show":
         operation = catalog.get(arguments.operation)
-        _write_json({"status": "ok", "operation": operation.as_dict()})
+        write_result({"status": "ok", "operation": operation.as_dict()})
         return 0
     if arguments.operations_command == "propose":
         return _propose_operation(arguments, repository, catalog)
-    _write_json(catalog.as_dict())
+    write_result(catalog.as_dict())
     return 0
+
+
+def _run_why(arguments: Namespace) -> int:
+    """Answer the question from the record alone: no catalog, no fleet.
+
+    The record outlives both, so the question must be answerable from a
+    checkout that holds nothing but the decisions directory.
+    """
+    repository = (
+        Path(arguments.repository) if arguments.repository is not None else Path.cwd()
+    )
+    query = WhyQuery.from_boundary(
+        host=arguments.host,
+        operation=(
+            arguments.operation.value if arguments.operation is not None else None
+        ),
+        since=arguments.since,
+        until=arguments.until,
+    )
+    result = answer(_decision_store(arguments, repository), query)
+    if arguments.format == "html":
+        sys.stdout.write(render_why_html(result))
+        sys.stdout.flush()
+        return 0
+    write_result(result.as_dict())
+    return 0
+
+
+def _run_changelog(arguments: Namespace) -> int:
+    write_result(
+        {
+            "status": "ok",
+            "entries": schema_changes_since(arguments.since),
+            "schemaVersions": schema_versions(),
+        }
+    )
+    return 0
+
+
+_PROJECTLESS_COMMANDS: Mapping[str, Callable[[Namespace], int]] = {
+    "init": _run_init,
+    "changelog": _run_changelog,
+}
+"""The commands that must run before a project exists, so none is resolved."""
+
+
+_RECORD_COMMANDS: Mapping[str, Callable[[Namespace], int]] = {
+    "operations": _run_operations,
+    "why": _run_why,
+}
+"""The commands that read the repository and nothing else: no fleet, no project."""
 
 
 def _propose_operation(
@@ -1496,7 +1634,7 @@ def _propose_operation(
         observations=repository / Path(arguments.observed),
     )
     decision = propose(request, _decision_store(arguments, repository))
-    _write_json(decision.as_dict())
+    write_result(decision.as_dict())
     return 0 if decision.check.exit_code == 0 else 1
 
 
@@ -1509,7 +1647,7 @@ def _approve_decision(arguments: Namespace, repository: Path) -> int:
     store = _decision_store(arguments, repository)
     decision = store.load(arguments.decision)
     if not arguments.yes:
-        _write_json(
+        write_result(
             {
                 "status": "pending",
                 "decision": decision.as_document(),
@@ -1532,7 +1670,7 @@ def _approve_decision(arguments: Namespace, repository: Path) -> int:
         ),
         store,
     )
-    _write_json(approved.as_dict())
+    write_result(approved.as_dict())
     return 0 if approved.status is not DecisionStatus.FAILED else 1
 
 
@@ -1581,9 +1719,9 @@ def _run_observe(
             Path(_OVERLAY_DIRECTORY),
         )
     except ObserveError as error:
-        sys.stderr.write(f"{json.dumps(error.as_dict(), sort_keys=True)}\n")
+        write_error(error.as_dict())
         return 2
-    _write_json(result.as_dict())
+    write_result(result.as_dict())
     return 0 if result.complete else 1
 
 
@@ -1596,7 +1734,7 @@ def _run_audit(
         observations,
         load_environment_receipts(Path(arguments.env_receipts), schema_directory),
     )
-    _write_json(report.as_dict())
+    write_result(report.as_dict())
     if report.status is AuditStatus.COMPLIANT:
         return 0
     if report.status is AuditStatus.DRIFT:
@@ -1621,9 +1759,9 @@ def _run_secrets_render(
             receipt_directory=Path(arguments.receipts),
         )
     except SecretsError as error:
-        sys.stderr.write(f"{json.dumps(error.as_dict(), sort_keys=True)}\n")
+        write_error(error.as_dict())
         return 2
-    _write_json(result)
+    write_result(result)
     return 0
 
 
@@ -1652,7 +1790,7 @@ def _run_backup_operation(
         )
     except LifecycleError as error:
         return _lifecycle_exit(error)
-    _write_json(result)
+    write_result(result)
     return 0
 
 
@@ -1688,7 +1826,7 @@ def _require_gateway_material(arguments: Namespace) -> None:
 
 
 def _operator_exit(error: OperatorError) -> int:
-    sys.stderr.write(f"{json.dumps(error.as_dict(), sort_keys=True)}\n")
+    write_error(error.as_dict())
     return 2
 
 
@@ -1720,10 +1858,10 @@ def _run_operator_run(
         drift_due = 0.0
         while True:
             report = operator_run_once(feed, inventory, store)
-            _write_json({"status": "ok", "pass": "alerts", **report.as_dict()})
+            write_result({"status": "ok", "pass": "alerts", **report.as_dict()})
             if auditor is not None and time.monotonic() >= drift_due:
                 drift_report = drift_pass(auditor, store)
-                _write_json(
+                write_result(
                     {
                         "status": "ok",
                         "pass": "drift",
@@ -1738,7 +1876,7 @@ def _run_operator_run(
                     engine_executor(context),
                     _verifier_for,
                 )
-                _write_json(
+                write_result(
                     {
                         "status": "ok",
                         "pass": "autonomy",
@@ -1760,7 +1898,7 @@ def _run_operator_list(
         proposals = [proposal.as_document() for proposal in store.list()]
     except OperatorError as error:
         return _operator_exit(error)
-    _write_json({"status": "ok", "proposals": proposals})
+    write_result({"status": "ok", "proposals": proposals})
     return 0
 
 
@@ -1772,7 +1910,7 @@ def _run_operator_show(
         proposal = store.load(arguments.proposal)
     except OperatorError as error:
         return _operator_exit(error)
-    _write_json(proposal.as_document())
+    write_result(proposal.as_document())
     return 0
 
 
@@ -1803,7 +1941,7 @@ def _run_operator_approve(
         return _operator_exit(error)
     except LifecycleError as error:
         return _lifecycle_exit(error)
-    _write_json(proposal.as_document())
+    write_result(proposal.as_document())
     return 0 if proposal.status is ProposalStatus.VERIFIED else 1
 
 
@@ -1816,7 +1954,7 @@ def _run_services_inspect(
         SocketDomainNetworkClient(),
         observed_at=EvidenceTimestamp.now(),
     )
-    _write_json(
+    write_result(
         {
             "status": "ok",
             "observations": [str(path) for path in paths],
@@ -1829,7 +1967,7 @@ def _run_services_status(
     arguments: Namespace, state: ValidatedConfig, schema_directory: Path
 ) -> int:
     operations = _service_operations(arguments, state, schema_directory)
-    _write_json(
+    write_result(
         {
             "status": "ok",
             "services": [domain.as_dict() for domain in operations.domains],
@@ -1843,7 +1981,7 @@ def _run_dashboard_build(
 ) -> int:
     operations = _service_operations(arguments, state, schema_directory)
     artifacts = build_dashboard(operations, Path(arguments.output))
-    _write_json(
+    write_result(
         {
             "status": "ok",
             "health": operations.health.value,
@@ -1869,7 +2007,7 @@ def _run_dashboard_serve(
     refresh = RefreshInterval.from_boundary(int(arguments.refresh))
     server = create_dashboard_server(sources, endpoint, refresh)
     bound_port = int(server.server_address[1])
-    _write_json(
+    write_result(
         {
             "status": "ok",
             "dashboard": {
@@ -1917,7 +2055,7 @@ def _engine_context(arguments: Namespace, schema_directory: Path) -> EngineConte
 
 
 def _lifecycle_exit(error: LifecycleError) -> int:
-    sys.stderr.write(f"{json.dumps(error.as_dict(), sort_keys=True)}\n")
+    write_error(error.as_dict())
     return 1 if error.code == "lifecycle_execution_failed" else 2
 
 
@@ -1944,7 +2082,7 @@ def _run_data_migrate(
         )
     except LifecycleError as error:
         return _lifecycle_exit(error)
-    _write_json(result)
+    write_result(result)
     return 0
 
 
@@ -1976,7 +2114,7 @@ def _run_deploy(
         )
     except LifecycleError as error:
         return _lifecycle_exit(error)
-    _write_json(result.as_dict())
+    write_result(result.as_dict())
     return 0
 
 
@@ -1996,7 +2134,7 @@ def _run_rollback(
         )
     except LifecycleError as error:
         return _lifecycle_exit(error)
-    _write_json(result.as_dict())
+    write_result(result.as_dict())
     return 0
 
 
@@ -2010,7 +2148,7 @@ def _run_restart(
         result = restart(context, arguments.component)
     except LifecycleError as error:
         return _lifecycle_exit(error)
-    _write_json(result.as_dict())
+    write_result(result.as_dict())
     return 0
 
 
@@ -2024,7 +2162,7 @@ def _run_health(
         )
     except LifecycleError as error:
         return _lifecycle_exit(error)
-    _write_json(result.as_dict())
+    write_result(result.as_dict())
     return 0 if result.healthy else 1
 
 
@@ -2049,7 +2187,7 @@ def _run_migrate(
             "status": "error",
             "error": {"code": "invalid_argument", "message": str(error)},
         }
-        sys.stderr.write(f"{json.dumps(payload, sort_keys=True)}\n")
+        write_error(payload)
         return 2
     config = AgentConfig(
         project_directory=Path(arguments.project_directory),
@@ -2074,9 +2212,9 @@ def _run_migrate(
     try:
         result = execute_migration(config, options)
     except MigrateError as error:
-        sys.stderr.write(f"{json.dumps(error.as_dict(), sort_keys=True)}\n")
+        write_error(error.as_dict())
         return 2
-    _write_json(result)
+    write_result(result)
     status = str(result["status"])
     if status in {"ok", "plan"}:
         return 0
@@ -2097,20 +2235,13 @@ def _key_value_pairs(entries: list[str], option: str) -> dict[str, str]:
 
 
 def _write_plan(preview: LifecyclePreview) -> int:
-    _write_json(
+    write_result(
         {
             **preview.as_dict(),
             "instruction": "review the plan and re-run with --yes to execute it",
         }
     )
     return 0
-
-
-def _write_json(payload: object) -> None:
-    sys.stdout.write(f"{json.dumps(payload, sort_keys=True)}\n")
-    # A pipe makes stdout block-buffered; flush so long-running commands such
-    # as `operator run --interval` deliver each document when it is written.
-    sys.stdout.flush()
 
 
 def run() -> None:

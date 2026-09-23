@@ -1,0 +1,226 @@
+"""The question the record exists to answer."""
+
+from __future__ import annotations
+
+import json
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
+
+import pytest
+from cloudfall.cli import main
+from cloudfall.decision import ApprovalRequest, DecisionStatus, approve, propose
+from cloudfall.why import Instant, WhyError, WhyQuery, answer, render_why_html
+from test_catalog import _repository
+from test_decision import MOMENT, _proposal, _Runner, _store
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from cloudfall.decision import Decision
+
+LATER = datetime(2026, 9, 22, 8, 0, 0, tzinfo=UTC)
+
+
+def _record(repository: Path) -> tuple[Decision, Decision]:
+    """One verified deploy on web-1, then a proposed facts read of the fleet."""
+    store = _store(repository)
+    deploy = propose(_proposal(repository), store, lambda: MOMENT, _Runner())
+    deploy = approve(
+        ApprovalRequest(decision=deploy, approver="roman", repository=repository),
+        store,
+        lambda: MOMENT,
+        _Runner(),
+    )
+    facts = propose(
+        _proposal(repository, "facts", target=None, inputs={}),
+        store,
+        lambda: LATER,
+        _Runner(changed=("db-1",)),
+    )
+    return deploy, facts
+
+
+def test_an_instant_reads_the_record_and_a_bare_date() -> None:
+    assert Instant.from_boundary("2026-09-21T14:30:12Z").as_string() == (
+        "2026-09-21T14:30:12Z"
+    )
+    assert Instant.from_boundary("2026-09-21").as_string() == ("2026-09-21T00:00:00Z")
+    assert Instant.from_boundary("2026-09-21T16:30:12+02:00").as_string() == (
+        "2026-09-21T14:30:12Z"
+    )
+
+
+def test_a_moment_that_is_not_a_moment_is_refused() -> None:
+    with pytest.raises(WhyError) as error:
+        Instant.from_boundary("last tuesday")
+    assert error.value.code == "why_instant_invalid"
+
+
+def test_a_window_that_ends_before_it_starts_is_refused() -> None:
+    with pytest.raises(WhyError) as error:
+        WhyQuery.from_boundary(since="2026-09-22", until="2026-09-21")
+    assert error.value.code == "why_window_inverted"
+
+
+def test_no_question_returns_the_whole_record_newest_first(tmp_path: Path) -> None:
+    repository = _repository(tmp_path)
+    _record(repository)
+
+    result = answer(_store(repository), WhyQuery())
+
+    assert [entry.decision.operation_id.value for entry in result.explanations] == [
+        "facts",
+        "deploy",
+    ]
+
+
+def test_a_host_question_is_answered_from_what_the_record_names(
+    tmp_path: Path,
+) -> None:
+    """A host is in the answer when it is the target or in the evidence."""
+    repository = _repository(tmp_path)
+    _record(repository)
+    store = _store(repository)
+
+    targeted = answer(store, WhyQuery.from_boundary(host="web-1"))
+    evidenced = answer(store, WhyQuery.from_boundary(host="db-1"))
+    untouched = answer(store, WhyQuery.from_boundary(host="web-2"))
+    unknown = answer(store, WhyQuery.from_boundary(host="web-9"))
+
+    assert [e.decision.operation_id.value for e in targeted.explanations] == ["deploy"]
+    assert [e.decision.operation_id.value for e in evidenced.explanations] == ["facts"]
+    assert len(untouched.explanations) == 2
+    assert untouched.explanations[0].hosts == ("db-1", "web-2")
+    assert unknown.explanations == ()
+
+
+def test_an_operation_question_is_answered(tmp_path: Path) -> None:
+    repository = _repository(tmp_path)
+    _record(repository)
+
+    result = answer(_store(repository), WhyQuery.from_boundary(operation="deploy"))
+
+    assert [e.decision.decision_id.value for e in result.explanations] == [
+        "deploy-20260921143012"
+    ]
+
+
+def test_a_time_window_matches_any_moment_the_record_dates(
+    tmp_path: Path,
+) -> None:
+    repository = _repository(tmp_path)
+    _record(repository)
+    store = _store(repository)
+
+    first_day = answer(
+        store, WhyQuery.from_boundary(since="2026-09-21", until="2026-09-21T23:59:59Z")
+    )
+    second_day = answer(store, WhyQuery.from_boundary(since="2026-09-22"))
+    before = answer(store, WhyQuery.from_boundary(until="2026-09-20"))
+
+    assert [e.decision.operation_id.value for e in first_day.explanations] == ["deploy"]
+    assert [e.decision.operation_id.value for e in second_day.explanations] == ["facts"]
+    assert before.explanations == ()
+
+
+def test_every_sentence_of_the_story_cites_the_record(tmp_path: Path) -> None:
+    repository = _repository(tmp_path)
+    deploy, facts = _record(repository)
+
+    told = answer(_store(repository), WhyQuery.from_boundary(operation="deploy"))
+    read = answer(_store(repository), WhyQuery.from_boundary(operation="facts"))
+
+    story = told.explanations[0].story
+    assert deploy.status is DecisionStatus.VERIFIED
+    assert story[0].startswith("It was based on 1 host snapshot in tmp/observed")
+    assert "observed at 2026-09-21T09:55:24Z" in story[0]
+    assert story[1] == (
+        "At 2026-09-21T14:30:12Z the mutating operation deploy "
+        "(playbooks/deploy.yml) was proposed against host web-1 with "
+        "version=1.4.0."
+    )
+    assert story[2].startswith("Check mode would have changed web-1 and left 1 host")
+    assert deploy.check.diff.sha256[:12] in story[2]
+    assert story[3].startswith("It waited for an approval:")
+    assert story[4] == "roman approved it at 2026-09-21T14:30:12Z."
+    assert story[5].startswith(
+        "The run at 2026-09-21T14:30:12Z exited 0 and changed web-1"
+    )
+    assert story[6].startswith(
+        "The verify step at 2026-09-21T14:30:12Z exited 0 and changed no host"
+    )
+    assert story[7] == (
+        "It ended verified: the run succeeded and the verify step changed nothing."
+    )
+
+    proposed = read.explanations[0].story
+    assert facts.status is DecisionStatus.PROPOSED
+    assert "was proposed against the whole fleet with no inputs." in proposed[1]
+    assert proposed[3].startswith("Nothing gated it:")
+    assert proposed[-1] == ("It is still proposed: nobody has approved or rejected it.")
+
+
+def test_the_cli_answers_in_json_without_a_catalog(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repository = _repository(tmp_path)
+    _record(repository)
+    for path in (repository / "operations").iterdir():
+        path.unlink()
+    (repository / "operations").rmdir()
+
+    exit_code = main(["why", "--repository", str(repository), "--host", "web-1"])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["status"] == "ok"
+    assert payload["query"] == {"host": "web-1"}
+    assert payload["count"] == 1
+    entry = payload["answers"][0]
+    assert entry["id"] == "deploy-20260921143012"
+    assert entry["hosts"] == ["web-1", "web-2"]
+    assert entry["decision"]["spec"]["approval"]["approver"] == "roman"
+    assert entry["decision"]["spec"]["verify"]["changed"] == []
+    assert entry["decision"]["spec"]["check"]["diff"]["sha256"]
+    assert entry["decision"]["spec"]["basis"]["observedAt"] == {
+        "web-1": "2026-09-21T09:55:24Z"
+    }
+
+
+def test_the_cli_answers_as_a_page(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repository = _repository(tmp_path)
+    _record(repository)
+
+    exit_code = main(["why", "--repository", str(repository), "--format", "html"])
+
+    page = capsys.readouterr().out
+    assert exit_code == 0
+    assert page.startswith("<!doctype html>")
+    assert "<title>Cloudfall Why</title>" in page
+    assert "2 decisions" in page
+    assert 'class="badge healthy">verified' in page
+    assert 'class="badge warning">proposed' in page
+    assert "roman approved it at 2026-09-21T14:30:12Z." in page
+
+
+def test_the_cli_reports_a_bad_window_as_json(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repository = _repository(tmp_path)
+
+    exit_code = main(["why", "--repository", str(repository), "--since", "yesterday"])
+
+    payload = json.loads(capsys.readouterr().err)
+    assert exit_code == 2
+    assert payload["error"]["code"] == "why_instant_invalid"
+
+
+def test_an_empty_record_renders_an_empty_page(tmp_path: Path) -> None:
+    repository = _repository(tmp_path)
+
+    page = render_why_html(answer(_store(repository), WhyQuery()))
+
+    assert "The record holds no decision this question is about." in page
+    assert "0 decisions" in page

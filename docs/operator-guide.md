@@ -71,9 +71,10 @@ operator do that" without anyone writing a note:
 `operator list` and `operator show` read the record; the dashboard renders
 it. Autonomy in the next section is computed from it. The
 [brownfield design](brownfield-design.md) generalises this entry to every
-declared operation, adds the fleet snapshot and the check-mode diff to it,
-and gives it a query (`cloudfall why`); none of that is built yet, and the
-receipts here are what it will be built from.
+declared operation as a decision record with the fleet snapshot and the
+check-mode diff, and `cloudfall why` queries those records by host,
+operation or time window. The operator's receipts here are the older
+form of the same entry and are not yet read by `cloudfall why`.
 
 To run persistently, wrap the command in a systemd service on the
 management host:

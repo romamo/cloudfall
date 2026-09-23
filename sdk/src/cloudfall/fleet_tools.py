@@ -33,6 +33,7 @@ from cloudfall.inventory import PlatformInventory
 from cloudfall.observation import load_observations
 from cloudfall.observe import ObservationRequest, collect_observations
 from cloudfall.validation import SchemaCatalog
+from cloudfall.why import WhyQuery, answer
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -184,12 +185,8 @@ class FleetToolset:
         payload = decision.as_dict()
         payload["approval"] = {
             "required": True,
-            "command": (
-                f"{APPROVAL_COMMAND} {decision.decision_id.value} --yes"
-            ),
-            "note": (
-                "a person approves this; no tool on this server runs it"
-            ),
+            "command": (f"{APPROVAL_COMMAND} {decision.decision_id.value} --yes"),
+            "note": ("a person approves this; no tool on this server runs it"),
         }
         return payload
 
@@ -201,6 +198,19 @@ class FleetToolset:
             "directory": str(store.directory),
             "decisions": [decision.as_document() for decision in store.list()],
         }
+
+    def why(
+        self,
+        host: str | None = None,
+        operation: str | None = None,
+        since: str | None = None,
+        until: str | None = None,
+    ) -> dict[str, object]:
+        """Answer why the agent did that, from the record alone."""
+        query = WhyQuery.from_boundary(
+            host=host, operation=operation, since=since, until=until
+        )
+        return answer(self.store(), query).as_dict()
 
     def store(self) -> DecisionStore:
         """Return the decision record store for this repository."""

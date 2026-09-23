@@ -6,6 +6,38 @@ Notable changes to Cloudfall. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `cloudfall why` answers "why did the agent do that" from the decision
+  records alone, for a host (`--host`), an operation (`--operation`) or a
+  time window (`--since`, `--until`, ISO 8601 or a bare date), as JSON or
+  as one HTML page (`--format html`). Each decision is told as what it was
+  based on, what was proposed, what check mode showed, what gated it, who
+  approved, what the run and the verify step did and how it ended, every
+  sentence drawn from a field of the record. A decision is about a host
+  when the record names it, as the target or in the per-host evidence of
+  a stage; a group pattern is not expanded, because that would need an
+  inventory the record does not depend on. The same question is the
+  read-only `why` tool on `cloudfall-mcp --repository`
+- Every JSON document `cloudfall` prints, results and errors alike, carries
+  `meta.schema_version` (`MAJOR.MINOR` of the output contract, now `1.0`)
+  and `meta.tool_version` (the installed package version), so an agent can
+  tell when the output shape may have changed without a separate call.
+  MINOR moves when a command gains a key, MAJOR when one is removed,
+  renamed or changes meaning. `cloudfall --version` prints the same
+  version as JSON and exits 0
+- Every JSON document also carries a `warnings` list. A key is removed only
+  after a release in which documents holding it warn `FIELD_DEPRECATED`
+  with the replacement key and the schema version that drops it
+- `cloudfall changelog [--since MAJOR.MINOR]` lists changes to the output
+  contract, newest first: version, date, `breaking`, and the added,
+  removed and changed keys
+- `cloudfall --schema-version MAJOR <command>` pins the output contract: it
+  fails with `invalid_argument` before the command runs when this build no
+  longer writes that MAJOR, so a pinned caller stops at a breaking release
+  instead of misreading it. `--version` and `changelog` report the current
+  and minimum supported versions
+
 ## [0.5.1] — 2026-09-22
 
 ### Changed

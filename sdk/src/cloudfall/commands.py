@@ -62,6 +62,12 @@ CLI_COMMANDS: tuple[CommandContract, ...] = (
     ),
     CommandContract(
         "cloudfall",
+        "changelog",
+        CommandEffect.READ,
+        "list changes to the JSON output contract, newest first",
+    ),
+    CommandContract(
+        "cloudfall",
         "add ssh-key",
         CommandEffect.PROJECT,
         "declare an `SshPublicKey` from a public key file",
@@ -120,6 +126,12 @@ CLI_COMMANDS: tuple[CommandContract, ...] = (
         "operations decisions",
         CommandEffect.READ,
         "list what was proposed, what check mode showed, and who approved",
+    ),
+    CommandContract(
+        "cloudfall",
+        "why",
+        CommandEffect.READ,
+        "answer why the agent did that from the record, by host, operation or time",
     ),
     CommandContract(
         "cloudfall",
