@@ -45,6 +45,8 @@ _ERROR_PROPOSAL_NOT_OPEN = "operator_proposal_not_open"
 _ERROR_OPERATION_UNSUPPORTED = "operator_operation_unsupported"
 _ERROR_GATEWAY_UNDECLARED = "operator_gateway_undeclared"
 _SERVICE_CHECK_PREFIXES = ("services.bind[", "alerting.rules[")
+_OUTCOME_DETAIL_MAX = 1000
+"""``spec.outcome.detail`` ``maxLength`` in the proposal schema."""
 
 
 class OperatorError(RuntimeError):
@@ -57,8 +59,11 @@ class OperatorError(RuntimeError):
         self.message = message
 
     def as_dict(self) -> dict[str, object]:
-        """Serialize the failure for structured output."""
-        return {"code": self.code, "message": self.message}
+        """Serialize the error envelope for system boundaries."""
+        return {
+            "status": "error",
+            "error": {"code": self.code, "message": self.message},
+        }
 
 
 class ProposalStatus(StrEnum):
@@ -822,6 +827,20 @@ def approve(
     )
 
 
+def _execution_failure_detail(error: OperatorError | LifecycleError) -> str:
+    """Name the failure's code and keep the end of its message within the receipt cap.
+
+    An engine failure carries the tail of the Ansible output, and the last
+    lines, the failing task and the play recap, are the ones that say why.
+    """
+    head = f"execution failed: {error.code}: "
+    message = str(error).removeprefix(f"{error.code}: ")
+    if len(head) + len(message) <= _OUTCOME_DETAIL_MAX:
+        return head + message
+    marker = "..."
+    return head + marker + message[-(_OUTCOME_DETAIL_MAX - len(head) - len(marker)) :]
+
+
 def _execute_and_verify(  # noqa: PLR0913 - internal execution contract.
     store: ProposalStore,
     proposal: OperatorProposal,
@@ -843,7 +862,7 @@ def _execute_and_verify(  # noqa: PLR0913 - internal execution contract.
                 executed_at=executed_at,
                 verified_at=None,
                 result="failed",
-                detail=f"execution failed: {error}",
+                detail=_execution_failure_detail(error),
             ),
         )
         store.update(failed)

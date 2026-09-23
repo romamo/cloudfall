@@ -9,8 +9,10 @@ from pathlib import Path
 import pytest
 from cloudfall.audit import AuditCheck, AuditReport, AuditStatus, ServerAudit
 from cloudfall.cli import main
+from cloudfall.commands import CLI_COMMANDS
 from cloudfall.domain import ResourceId
 from cloudfall.inventory import PlatformInventory
+from cloudfall.lifecycle import LifecycleError
 from cloudfall.operator import (
     ApproveOptions,
     GatewayAlertFeed,
@@ -31,6 +33,7 @@ from cloudfall.operator import (
 )
 from cloudfall.output import RESPONSE_META
 from cloudfall.validation import SchemaCatalog, validate_config
+from jsonschema import Draft202012Validator
 
 _FAST_APPROVE = ApproveOptions(
     verify_timeout_seconds=2.0,
@@ -257,6 +260,36 @@ def test_approve_records_execution_failure(tmp_path: Path) -> None:
     assert "execution failed" in failed.outcome.detail
 
 
+def test_approve_records_a_long_engine_failure_by_its_tail(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    feed = FakeFeed(payloads=[_alerts_payload()])
+    report = run_once(feed, _inventory(), store)
+    proposal_id = ResourceId.from_boundary(report.proposed[0])
+    log = "TASK [Gathering Facts] " * 200 + "PLAY RECAP h1 unreachable=1"
+
+    def _boom(_proposal: object) -> None:
+        code = "lifecycle_execution_failed"
+        message = f"run baseline.yml failed: {log}"
+        raise LifecycleError(code, message)
+
+    with pytest.raises(LifecycleError):
+        approve(
+            store,
+            proposal_id,
+            _boom,
+            alert_resolution_verifier(feed),
+            _FAST_APPROVE,
+        )
+
+    failed = store.load(proposal_id)
+    assert failed.status is ProposalStatus.FAILED
+    assert failed.outcome is not None
+    detail = failed.outcome.detail
+    assert len(detail) == 1000
+    assert detail.startswith("execution failed: lifecycle_execution_failed: ...")
+    assert detail.endswith("PLAY RECAP h1 unreachable=1")
+
+
 def test_approve_refuses_non_open_proposals(tmp_path: Path) -> None:
     store = _store(tmp_path)
     resolved = json.dumps({"status": "success", "data": {"alerts": []}})
@@ -424,6 +457,57 @@ def test_cli_operator_list_emits_structured_output(
         "meta": RESPONSE_META.as_dict(),
         "warnings": [],
     }
+
+
+def _operator_show(tmp_path: Path, proposal: str) -> list[str]:
+    return [
+        "operator",
+        "show",
+        proposal,
+        "--project",
+        str(EXAMPLES),
+        "--schemas",
+        str(SCHEMAS),
+        "--proposals",
+        str(tmp_path / "proposals"),
+    ]
+
+
+def test_cli_operator_show_wraps_the_proposal_in_the_result_envelope(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    store = _store(tmp_path)
+    report = run_once(FakeFeed(payloads=[_alerts_payload()]), _inventory(), store)
+    proposal_id = report.proposed[0]
+
+    exit_code = main(_operator_show(tmp_path, proposal_id))
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    document = json.loads(captured.out)
+    assert document == {
+        "status": "ok",
+        "proposal": store.load(ResourceId.from_boundary(proposal_id)).as_document(),
+        "meta": RESPONSE_META.as_dict(),
+        "warnings": [],
+    }
+    contract = next(c for c in CLI_COMMANDS if c.name == "operator show")
+    validator = Draft202012Validator(contract.output_schema())
+    assert [error.message for error in validator.iter_errors(document)] == []
+
+
+def test_cli_operator_errors_use_the_shared_error_envelope(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    exit_code = main(_operator_show(tmp_path, "ghost"))
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.out == ""
+    document = json.loads(captured.err)
+    assert document["status"] == "error"
+    assert document["error"]["code"] == "operator_proposal_missing"
+    assert "code" not in document
 
 
 def _policied_inventory() -> PlatformInventory:

@@ -1910,7 +1910,7 @@ def _run_operator_show(
         proposal = store.load(arguments.proposal)
     except OperatorError as error:
         return _operator_exit(error)
-    write_result(proposal.as_document())
+    write_result({"status": "ok", "proposal": proposal.as_document()})
     return 0
 
 
@@ -1941,8 +1941,14 @@ def _run_operator_approve(
         return _operator_exit(error)
     except LifecycleError as error:
         return _lifecycle_exit(error)
-    write_result(proposal.as_document())
-    return 0 if proposal.status is ProposalStatus.VERIFIED else 1
+    verified = proposal.status is ProposalStatus.VERIFIED
+    write_result(
+        {
+            "status": "ok" if verified else "failed",
+            "proposal": proposal.as_document(),
+        }
+    )
+    return 0 if verified else 1
 
 
 def _run_services_inspect(

@@ -143,11 +143,7 @@ _IMPORTED = (
         "gaps",
     ),
 )
-_PROPOSAL = (
-    _shape(
-        "apiVersion", "kind", "metadata", "spec", when="the proposal, without `status`"
-    ),
-)
+_PROPOSAL = (_shape("status", "proposal"),)
 _BACKUP = (_shape("status", "receipt", "path"),)
 _EXECUTED = ("status", "action", "component", "servers", "healthy")
 

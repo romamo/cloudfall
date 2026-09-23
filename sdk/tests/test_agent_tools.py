@@ -288,6 +288,7 @@ def test_operator_tools_list_gate_and_report_missing_material(
     assert watch["status"] == "error"
     error = watch["error"]
     assert isinstance(error, dict)
+    assert set(error) == {"code", "message"}
     assert error["code"] == "operator_gateway_material_missing"
 
 
@@ -317,6 +318,42 @@ def test_operator_approve_gates_before_executing(tmp_path: Path) -> None:
 
     assert gate["status"] == "confirmation-required"
     assert "baseline.yml" in str(gate["wouldRun"])
+
+
+def test_operator_approve_reports_engine_failures_in_one_envelope(
+    tmp_path: Path,
+) -> None:
+    from dataclasses import replace  # noqa: PLC0415 - test-local.
+
+    from cloudfall.domain import ResourceId  # noqa: PLC0415 - test-local.
+    from cloudfall.operator import (  # noqa: PLC0415 - test-local.
+        OperationKind,
+        ProposalStore,
+        propose_for_drift,
+    )
+    from cloudfall.validation import SchemaCatalog  # noqa: PLC0415
+
+    config = replace(_config(tmp_path), engine_directory=tmp_path / "no-engine")
+    store = ProposalStore(
+        directory=config.proposals_directory, catalog=SchemaCatalog(SCHEMAS)
+    )
+    proposal = propose_for_drift(
+        ResourceId.from_boundary("h1"),
+        ("packages.required[curl]",),
+        OperationKind.CONVERGE_BASELINE,
+        "2026-09-10T15:00:00+00:00",
+    )
+    store.save(proposal)
+
+    failure = AgentToolset(config).operator_approve(
+        proposal.resource_id.value, confirm=True
+    )
+
+    assert failure["status"] == "error"
+    error = failure["error"]
+    assert isinstance(error, dict)
+    assert set(error) == {"code", "message"}
+    assert error["code"] == "lifecycle_engine_missing"
 
 
 def test_backup_tools_gate_and_reject_unknown_services(

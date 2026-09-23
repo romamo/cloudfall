@@ -711,7 +711,7 @@ class AgentToolset:
                 for proposal in self._proposal_store().list()
             ]
         except OperatorError as error:
-            return {"status": "error", "error": error.as_dict()}
+            return error.as_dict()
         return {"status": "ok", "proposals": proposals}
 
     def operator_watch(self, *, drift: bool = False) -> dict[str, object]:
@@ -734,7 +734,7 @@ class AgentToolset:
                 )
                 passes["drift"] = drift_pass(auditor, store).as_dict()
         except (OperatorError, LifecycleError) as error:
-            return {"status": "error", "error": error.as_dict()}
+            return error.as_dict()
         return {"status": "ok", **passes}
 
     def operator_approve(
@@ -781,7 +781,7 @@ class AgentToolset:
                 ApproveOptions(),
             )
         except (OperatorError, LifecycleError) as error:
-            return {"status": "error", "error": error.as_dict()}
+            return error.as_dict()
         return {
             "status": (
                 "ok"

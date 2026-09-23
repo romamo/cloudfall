@@ -47,6 +47,28 @@ Notable changes to Cloudfall. The format follows
   not declared yet. The tests validate real output against these schemas,
   and an `etag` changes only when a command, flag or declared output does
 
+### Changed
+
+- `operator` errors use the same envelope as every other command,
+  `{"status": "error", "error": {"code", "message"}}`, instead of a bare
+  `{"code", "message"}`, so one parser reads every failure
+- `operator show` and `operator approve` print `{"status", "proposal"}`
+  with the receipt under `proposal`, instead of the bare receipt with no
+  top-level `status`. `approve` reports `status: failed` when the verify
+  step did not confirm the fix, as the `cloudfall-mcp` tool already did
+
+### Fixed
+
+- `cloudfall-mcp` `operator_watch` and `operator_approve` wrapped engine
+  failures in the error envelope twice (`error.error.code`); they now
+  return one envelope like every other tool
+- A failed `operator approve` is recorded even when the engine's log is
+  long. The receipt keeps the error code and the end of the log, where the
+  failing task and the play recap are, within the 1000-character cap.
+  Before, a run against unreachable hosts crashed while writing the
+  `failed` receipt, left the proposal `proposed` with no trace that it ran,
+  and showed the caller a traceback
+
 ## [0.5.1] — 2026-09-22
 
 ### Changed

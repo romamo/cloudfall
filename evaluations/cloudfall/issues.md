@@ -104,3 +104,15 @@ Discovered during §22 third refresh on 2026-09-23.
 ### §2 refresh — two error shapes remain, and `operator show` has no envelope
 Since the first §2 run, argparse errors and the old traceback paths are JSON in the shared envelope, so the four error shapes are now two: `{"status": "error", "error": {code, message}}` everywhere, except `operator_*` errors, which are still a bare `{code, message, meta, warnings}` (`_operator_exit`, `cli.py:1829`). `operator show` returns the proposal receipt document with no top-level `status`. `migrate --yes` step failures still go to stdout as `status: error`. Wrapping `OperatorError` in the shared envelope and nesting the proposal under a `proposal` key with `status: ok` would make every document match one envelope, the §2 level-2 bar except for the `--output json` flag and the `ok`/`data` names.
 Discovered during §2 refresh on 2026-09-23.
+
+### §2 resolved — operator errors and `operator show`/`approve` use the shared envelope
+`operator_*` errors now print `{"status": "error", "error": {"code", "message"}}` like every other command, and `operator show`/`operator approve` print `{"status", "proposal"}` (`approve`: `status: failed` when the verify step did not confirm). `--schema` declares the new shape. Remaining §2 gaps: no `--output json` flag, `status`/payload keys instead of `ok`/`data`, `migrate --yes` step failures on stdout, no `request_id`/`duration_ms`.
+Fixed on 2026-09-23 after the §2 refresh.
+
+### §13/§25 candidate — a failed approval with a long engine log is never recorded
+`operator approve` (CLI and `cloudfall-mcp`) on a proposal whose engine run fails with the full Ansible output (unreachable hosts `h1.example.internal`, `h2.example.internal`) raises `jsonschema.ValidationError`: the receipt's `spec.outcome.detail` is `execution failed: <LifecycleError>`, about 2,000 characters, and the proposal schema caps it at 1000. `_execute_and_verify` (`operator.py:838`) crashes while writing the `failed` receipt, so the proposal stays `proposed` with no record that it ran, and the caller gets a traceback instead of `lifecycle_execution_failed`. Short engine errors such as `lifecycle_engine_missing` are recorded correctly.
+Discovered while fixing the MCP double envelope on 2026-09-23.
+
+### §13/§25 resolved — long engine failures are recorded by their tail
+`_execution_failure_detail` (`operator.py`) writes `execution failed: <code>: ...<tail>` capped at the schema's 1000 characters, keeping the failing task and play recap. Re-run against unreachable `h1`/`h2`: proposal `failed`, detail 1000 chars ending in the recap, MCP returns `lifecycle_execution_failed` in one envelope.
+Fixed on 2026-09-23.
