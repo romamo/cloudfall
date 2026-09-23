@@ -37,6 +37,15 @@ Notable changes to Cloudfall. The format follows
   longer writes that MAJOR, so a pinned caller stops at a breaking release
   instead of misreading it. `--version` and `changelog` report the current
   and minimum supported versions
+- `cloudfall --schema` (alias `--print-schema`) prints every command in one
+  JSON document: its flags, read from the parser; its effect and gate, from
+  the command catalog; and an `output_schema` per command, a JSON Schema of
+  each stdout shape with the condition that selects it. Every top-level key
+  carries `x-stability`: `stable` keys change only in a MAJOR release after
+  a deprecation warning, `experimental` keys (unreleased commands such as
+  `why` and `changelog`) may change in any release. What each key holds is
+  not declared yet. The tests validate real output against these schemas,
+  and an `etag` changes only when a command, flag or declared output does
 
 ## [0.5.1] — 2026-09-22
 

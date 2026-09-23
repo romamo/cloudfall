@@ -1194,83 +1194,76 @@ ValueError: invalid resource id: 'Bad ID!'
 ```
 
 ## §2 — Output Format & Parseability
-**Date:** 2026-09-14
-**CLI version:** 0.1.0
-**Check command:** `cloudfall config validate --project tmp/eval/proj < /dev/null`; `cloudfall operator list --project tmp/eval/proj < /dev/null`; `cloudfall config validate --project tmp/eval/proj --output json < /dev/null`; `cloudfall services status --project tmp/eval/proj --observed tmp/eval/emptyobs < /dev/null`; `cloudfall operator show ghost --project tmp/eval/proj < /dev/null`; `cloudfall operator run --project tmp/eval/proj --gateway-url https://127.0.0.1:18443/api/v1/alerts --gateway-ca tmp/eval/tls/ca.crt --gateway-cert tmp/eval/tls/client.crt --gateway-key tmp/eval/tls/client.key < /dev/null`
-**Exit code:** s2-validate=0, s2-list-0=0, s2-output-json-flag=2, s2-services-status-0=0, s1-proposal-missing=2, s45-mtls-valid=0
+**Date:** 2026-09-23 (refresh)
+**CLI version:** 0.5.1 (output schema 1.0)
+**Check command:** `CLOUDFALL_PROJECT=$PWD/tmp/eval-s2/p uv run cloudfall inventory show --output json 2>/dev/null </dev/null`, then the same without `--output json` across 20 commands (fresh `init` project: 1 ssh key, 1 server type, 3 servers)
+**Exit code:** 2 (`--output json`), 0 without it
 **Score:** 1/3
 
-### s2-validate (exit 0, 0.27s, 212 stdout bytes)
-
 **stdout** (first 20 lines):
 ```
-{"byKind": {"AlertRule": 1, "Application": 1, "Component": 1, "Domain": 1, "LoggingStack": 1, "OperatorPolicy": 1, "Server": 2, "ServerType": 1, "Service": 2, "SshPublicKey": 1}, "resources": 12, "status": "ok"}
+$ cloudfall inventory show --output json          [exit 2, stdout empty]
+$ cloudfall inventory show                        [exit 0]
+{"inventory": {"alertRules": [], ..., "servers": [...3...], "sshPublicKeys": [{...}]}, "meta": {"schema_version": "1.0", "tool_version": "0.5.1"}, "status": "ok", "warnings": []}
+$ cloudfall operator list                         [exit 0]
+{"meta": {"schema_version": "1.0", "tool_version": "0.5.1"}, "proposals": [], "status": "ok", "warnings": []}
+$ cloudfall config validate                       [exit 0]
+{"byKind": {"Server": 3, "ServerType": 1, "SshPublicKey": 1}, "meta": {...}, "resources": 5, "status": "ok", "warnings": []}
+$ cloudfall migrate                               [exit 0]
+{"completed": 0, "meta": {...}, "next": "baseline", "status": "plan", "steps": [...], "warnings": []}
+$ cloudfall --version                             [exit 0]
+{"meta": {...}, "schemaVersions": {"current": "1.0", "minimum": "1.0"}, "status": "ok", "version": "0.5.1", "warnings": []}
+$ cloudfall why --format html                     [exit 0]
+<!doctype html>   (explicit opt-in)
+$ cloudfall inventory show | cat ; CI=true cloudfall inventory show
+identical JSON to the TTY run (JSON is unconditional)
 ```
 
 **stderr** (first 20 lines):
 ```
-
+--output json:            {"error": {"code": "invalid_argument", "message": "cloudfall: unrecognized options --output; 1 unexpected value(s), not shown"}, "meta": {...}, "status": "error", "warnings": []}
+(no args):                {"error": {"code": "invalid_argument", "message": "cloudfall: the following arguments are required: command"}, "meta": {...}, "status": "error", "warnings": []}
+health nope:              {"error": {"code": "lifecycle_component_missing", ...}, "status": "error", ...}
+audit --observed /nonexistent: {"error": {"code": "observation_directory_missing", ...}, "status": "error", ...}
+add server 'Bad ID!':     {"error": {"code": "invalid_argument", "message": "invalid resource id: 'Bad ID!'"}, "status": "error", ...}
+import render --application acme%2Fx: {"error": {"code": "invalid_argument", ...}, "status": "error", ...}
+operator show nope:       {"code": "operator_proposal_missing", "message": "proposal does not exist: tmp/operator/proposals/nope.json", "meta": {...}, "warnings": []}
+operator run (bad TLS):   {"code": "operator_gateway_material_invalid", "message": "gateway TLS material could not be loaded ...", "meta": {...}, "warnings": []}
 ```
 
-### s2-list-0 (exit 0, 0.31s, 34 stdout bytes)
+**Source review:** `cli.py:1913` `operator show` writes `proposal.as_document()` (top-level `apiVersion`/`kind`/`metadata`/`spec`, status only at `spec.status`); `cli.py:1829` `_operator_exit` writes `OperatorError.as_dict()` without the `status`/`error` wrapper; `cli.py:2217` `migrate` writes step failures (`status: error`) to stdout via `write_result`.
+
+## §22 — Schema Versioning & Output Stability
+**Date:** 2026-09-23 (third refresh)
+**CLI version:** 0.5.1 (`cloudfall --version`)
+**Check command:** with `CLOUDFALL_PROJECT=<repo>/tmp/ev22` (fresh `init`), each via `timeout 30 uv run cloudfall <args> </dev/null`: level 2 over `--version`, `add server h1 --address 192.0.2.1`, `config validate`, `inventory show`, `operator list`, `why`, `changelog`, `operator show ghost`, `deploy`, `--schema-version 9 config validate`; level 3: `--schema-version 1|2 config validate`, `changelog`, `changelog --since 1.0`, `--schema` (twice) and `--print-schema` compared with `cmp`, tier count over every `output_schema`, and `jsonschema` validation of real `config validate`/`inventory show`/`operator list`/`changelog` output against the declared schemas
+**Exit code:** 0 for results, `--schema`, `--schema-version 1`; 2 for `operator show ghost`, `deploy`, `--schema-version 2|9`
+**Score:** 3/3
 
 **stdout** (first 20 lines):
 ```
-{"proposals": [], "status": "ok"}
+== level 2: meta + warnings on every document
+  --version            exit=0 meta={'schema_version': '1.0', 'tool_version': '0.5.1'} warnings=[]
+  config validate      exit=0 meta={'schema_version': '1.0', 'tool_version': '0.5.1'} warnings=[]
+  operator show ghost  exit=2 meta={'schema_version': '1.0', 'tool_version': '0.5.1'} warnings=[]
+  (all 10 documents: same meta, warnings=[])
+== level 3a: --schema-version pin
+{"byKind": {"Server": 1, "ServerType": 1}, "meta": {"schema_version": "1.0", ...}, "resources": 2, ...
+== level 3b: changelog JSON
+{"entries": [{"added": ["meta.schema_version", "meta.tool_version", "warnings"], "breaking": false, "changed": [], "date": "2026-09-23", "removed": [], "version": "1.0"}], ..., "schemaVersions": {"current": "1.0", "minimum": "1.0"}, "status": "ok", "warnings": []}
+{"entries": [], ...}   ← --since 1.0
+== level 3c: stability tiers in schema
+  --print-schema identical
+  stable across calls
+  commands: 34 | key tiers: {'stable': 255, 'experimental': 8} | keys without tier: 0 | etag: sha256:be0fee49bcdae718
+  experimental keys in: ['changelog', 'why']
+  config validate: {"additionalProperties": false, "properties": {"byKind": {"x-stability": "stable"}, "meta": {"x-stability": "stable"}, "resources": {"x-stability": "stable"}, "status": {"x-stability": "stable"}, "warnings": {"x-stability": "stable"}}, "required": [...], "type": "object"}
+  top-level keys: ['commands', 'etag', 'global_flags', 'meta', 'status', 'warnings'] | global flags: ['schema', 'schema-version', 'version']
+== cross-check: real output vs declared schema
+  config validate  errors=[]   inventory show  errors=[]   operator list  errors=[]   changelog  errors=[]
 ```
 
 **stderr** (first 20 lines):
 ```
-
-```
-
-### s2-output-json-flag (exit 2, 0.14s, 0 stdout bytes)
-
-**stdout** (first 20 lines):
-```
-
-```
-
-**stderr** (first 20 lines):
-```
-usage: cloudfall [-h]
-                 {init,add,config,inventory,audit,operator,backup,secrets,services,dashboard,data,deploy,rollback,restart,health,import,migrate} ...
-cloudfall: error: unrecognized arguments: --output json
-```
-
-### s2-services-status-0 (exit 0, 0.28s, 666 stdout bytes)
-
-**stdout** (first 20 lines):
-```
-{"services": [{"checks": {"dns": {"detail": "domain has no route observation", "status": "unknown"}, "origin": {"detail": "domain has no origin observation", "status": "unknown"}, "public": {"detail": "domain has no public observation", "status": "unknown"}, "tls": {"detail": "domain has no TLS observation", "status": "unknown"}}, "health": "warning", "id": "crm-site", "lifecycle": {"configurationDetail": "proxy server has no observation", "configured": "unknown", "deployed": "no", "deployedAt": null, "planned": "yes", "readyToDeploy": "yes"}, "observedAt": null, "originServer": "h1", "primaryName": "crm.example.test", "proxyServer": "h2"}], "status": "ok"}
-```
-
-**stderr** (first 20 lines):
-```
-
-```
-
-### s1-proposal-missing (exit 2, 0.3s, 0 stdout bytes)
-
-**stdout** (first 20 lines):
-```
-
-```
-
-**stderr** (first 20 lines):
-```
-{"code": "operator_proposal_missing", "message": "proposal does not exist: tmp/operator/proposals/ghost.json"}
-```
-
-### s45-mtls-valid (exit 0, 0.3s, 155 stdout bytes)
-
-**stdout** (first 20 lines):
-```
-{"openProposals": 0, "pass": "alerts", "proposed": [], "skipped": [], "status": "ok"}
-{"executed": [], "pass": "autonomy", "status": "ok", "withheld": []}
-```
-
-**stderr** (first 20 lines):
-```
-
+{"error": {"code": "invalid_argument", "message": "cloudfall: argument --schema-version: schema version 2 is not supported; this build writes 1 to 1"}, "meta": {"schema_version": "1.0", "tool_version": "0.5.1"}, "status": "error", "warnings": []}
 ```

@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 from cloudfall.cli import main
+from cloudfall.output import RESPONSE_META
 
 ROOT = Path(__file__).parents[2]
 SCHEMAS = ROOT / "config" / "schemas" / "v1"
@@ -139,8 +140,8 @@ def test_import_render_rejects_an_invalid_application_id(
 def test_json_documents_are_flushed_when_stdout_is_a_pipe(tmp_path: Path) -> None:
     script = (
         "import sys, time\n"
-        "from cloudfall.cli import _write_json\n"
-        "_write_json({'status': 'ok'})\n"
+        "from cloudfall.output import write_result\n"
+        "write_result({'status': 'ok'})\n"
         "sys.stderr.write('written\\n')\n"
         "sys.stderr.flush()\n"
         "time.sleep(30)\n"
@@ -162,7 +163,11 @@ def test_json_documents_are_flushed_when_stdout_is_a_pipe(tmp_path: Path) -> Non
         assert process.stderr.readline() == b"written\n"
         readable, _, _ = select.select([process.stdout], [], [], 5)
         assert readable, "the JSON document stayed in the stdout buffer"
-        assert json.loads(process.stdout.readline()) == {"status": "ok"}
+        assert json.loads(process.stdout.readline()) == {
+            "status": "ok",
+            "meta": RESPONSE_META.as_dict(),
+            "warnings": [],
+        }
     finally:
         process.kill()
         process.wait()

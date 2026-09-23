@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 from cloudfall.cli import main
 from cloudfall.domain import ResourceId, ResourceKind
+from cloudfall.output import RESPONSE_META
 from cloudfall.validation import ConfigValidationError, validate_config
 
 ROOT = Path(__file__).parents[2]
@@ -283,6 +284,8 @@ def test_cli_emits_structured_success(
             "Service": 2,
             "SshPublicKey": 1,
         },
+        "meta": RESPONSE_META.as_dict(),
+        "warnings": [],
     }
     assert captured.err == ""
 

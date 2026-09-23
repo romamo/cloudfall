@@ -76,3 +76,31 @@ Discovered during §74 evaluation on 2026-09-14.
 ### §2 candidate — three different error shapes
 `{"status": "error", "error": {"code", "message"}}` (validation, lifecycle, secrets, render import, authoring) vs `{"code", "message"}` with no envelope (`OperatorError.as_dict()`, e.g. `operator show ghost`) vs a failure object on stdout (`migrate --yes` step failure), plus prose for argparse errors and uncaught exceptions. An agent needs four parsers to read one failure. `_operator_exit` should wrap errors in the shared envelope.
 Discovered during §2 evaluation on 2026-09-14.
+
+### §22/§71 candidate — no way to ask the CLI its own version
+`cloudfall --version` → `{"error": {"code": "invalid_argument", "message": "cloudfall: the following arguments are required: command"}}` exit 2, and `cloudfall version` is an invalid choice. The installed version (0.5.1) is reachable only through `uv run python -c "import importlib.metadata as m; print(m.version('cloudfall'))"` or the `project.version` field of `init`. An agent cannot confirm which output shape it is reading, and the §71 install check has no verify command. `parser.add_argument("--version", action="version", ...)` plus a `version` key in every JSON result would cover both.
+Discovered during §22 evaluation on 2026-09-23.
+
+### §2 observation — argparse usage errors are now JSON; `--project` is no longer a top-level option
+Since the 2026-09-14 run, usage errors come back as `{"error": {"code": "invalid_argument", ...}, "status": "error"}` on stdout-merged output instead of prose. `cloudfall --project DIR config validate` now fails with `invalid choice: 'DIR'`; the project is set by `CLOUDFALL_PROJECT` or a subcommand-level flag. The §2 score (1/3) and environment profile predate this and may need `--refresh`.
+Discovered during §22 evaluation on 2026-09-23.
+
+### Unassigned — relative input paths resolve against the project, not the working directory
+With `CLOUDFALL_PROJECT=<repo>/tmp/ev22` and cwd `<repo>`, `cloudfall add ssh-key tmp/ev22-key.pub --owner eval` returned `ssh_key_file_missing: SSH public key file does not exist: tmp/ev22-key.pub` although the file existed relative to cwd. The message echoes the relative path without the directory it was resolved against, so the agent cannot see why a file it just created is "missing".
+Discovered during §22 evaluation on 2026-09-23.
+
+### §22/§71 resolved — `cloudfall --version` and `meta` on every document
+`cloudfall --version` now prints `{"meta": {...}, "status": "ok", "version": "0.5.1"}` and exits 0; every result and error carries `meta.schema_version` and `meta.tool_version`. Remaining §22 gaps: no `warnings`/`FIELD_DEPRECATED` channel, and `cloudfall-mcp` tool results carry no `meta`. §71's missing verify command is also closed (re-score with `--refresh`).
+Discovered during §22 refresh on 2026-09-23.
+
+### §35/§2 candidate — an unknown option is hidden behind the missing-command error
+`cloudfall --schema` (a guessed flag) returns `the following arguments are required: command`, exit 2, and never says `--schema` is unrecognized. `parse_arguments` collects unknown tokens with `parse_known_args`, but argparse reports the missing required subcommand first, so the agent fixes the wrong thing. Reporting unrecognized options before, or together with, missing required arguments would name the real mistake.
+Discovered during §22 second refresh on 2026-09-23.
+
+### §22 resolved — `--schema` declares output stability; earlier `--schema` misreport is gone
+`cloudfall --schema` (alias `--print-schema`) now exists, so the §35/§2 candidate above (a guessed `--schema` reported as "command required") no longer reproduces for that flag; other guessed root flags still hit it. Remaining §22 limits: stability tiers cover top-level keys only, and `cloudfall-mcp` tool results carry no `meta`/`warnings`.
+Discovered during §22 third refresh on 2026-09-23.
+
+### §2 refresh — two error shapes remain, and `operator show` has no envelope
+Since the first §2 run, argparse errors and the old traceback paths are JSON in the shared envelope, so the four error shapes are now two: `{"status": "error", "error": {code, message}}` everywhere, except `operator_*` errors, which are still a bare `{code, message, meta, warnings}` (`_operator_exit`, `cli.py:1829`). `operator show` returns the proposal receipt document with no top-level `status`. `migrate --yes` step failures still go to stdout as `status: error`. Wrapping `OperatorError` in the shared envelope and nesting the proposal under a `proposal` key with `status: ok` would make every document match one envelope, the §2 level-2 bar except for the `--output json` flag and the `ok`/`data` names.
+Discovered during §2 refresh on 2026-09-23.

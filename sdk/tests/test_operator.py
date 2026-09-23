@@ -29,6 +29,7 @@ from cloudfall.operator import (
     parse_prometheus_alerts,
     run_once,
 )
+from cloudfall.output import RESPONSE_META
 from cloudfall.validation import SchemaCatalog, validate_config
 
 _FAST_APPROVE = ApproveOptions(
@@ -417,7 +418,12 @@ def test_cli_operator_list_emits_structured_output(
 
     captured = capsys.readouterr()
     assert exit_code == 0
-    assert json.loads(captured.out) == {"status": "ok", "proposals": []}
+    assert json.loads(captured.out) == {
+        "status": "ok",
+        "proposals": [],
+        "meta": RESPONSE_META.as_dict(),
+        "warnings": [],
+    }
 
 
 def _policied_inventory() -> PlatformInventory:

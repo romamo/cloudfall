@@ -59,3 +59,6 @@
 - `README.md` (Quickstart, project model, JSON output claim), `pyproject.toml` (`[project.scripts]`), `cloudfall -h` and every subcommand's `-h`, grep of `sdk/src` and `engine/src` for env vars and stdout/stderr writes
 - `AGENTS.md`, `CODING_AGENTS.md`, `CLAUDE.md`: not present in the repository
 - Discrepancy: README says "structured JSON" results, but no `--format`/`--json` flag exists; JSON is the only mode (to verify in evaluation)
+
+## Updates
+- 2026-09-23: package version is 0.5.1; `cloudfall --version` prints JSON and exits 0; every document carries `meta.schema_version` + `meta.tool_version` + `warnings`; global `--schema-version MAJOR` pin; `changelog [--since MAJOR.MINOR]` command; `--schema`/`--print-schema` manifest (flags, effect, output schema with `x-stability` per top-level key); `--project` is no longer accepted before the subcommand (use `CLOUDFALL_PROJECT`); argparse usage errors are JSON; new commands `why`, `observe`, `operations`
