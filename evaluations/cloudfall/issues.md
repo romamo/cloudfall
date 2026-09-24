@@ -132,3 +132,7 @@ Discovered during §2 third refresh on 2026-09-24.
 ### §2 path to 3/3 — write `data` and `error` on every document
 `meta.request_id` and `meta.duration_ms` shipped in 5a752bb, closing the gap named in the third refresh. The rubric's full envelope has `data` and `error` always present: `"error": null` on a result, `"data": null` on a failure without extra payload. The writer (`envelope` in `output.py`) omits the absent one instead. Writing both on every document is a one-place change and makes the top level a fixed set of six keys; `--schema` would declare `error` as `null` or `{code, message}` and `data` as `null` or the payload.
 Discovered during §2 fourth refresh on 2026-09-24.
+
+### §2 resolved at 3/3 — what the spec's example envelope has beyond the rubric
+c14d6d4 meets the level-3 condition. The failure mode's "Solutions" envelope also shows fields the rubric does not score: `meta.truncated`, `meta.has_more`, `meta.next_cursor` (belong to §5 pagination and §43 output size, where `inventory show` returned 181 KB unbounded), `error.retryable`, `error.retry_after_ms`, `error.field`, and error codes drawn from the §1 exit-code taxonomy (cloudfall uses its own snake_case codes such as `operator_proposal_missing`). The failed `migrate --yes` step on stdout remains a §3 item.
+Discovered during §2 fifth refresh on 2026-09-24.

@@ -1194,25 +1194,32 @@ ValueError: invalid resource id: 'Bad ID!'
 ```
 
 ## §2 — Output Format & Parseability
-**Date:** 2026-09-24 (fourth refresh, after 5a752bb)
-**CLI version:** 0.5.1 at 5a752bb (output schema 1.0)
-**Check command:** `CLOUDFALL_PROJECT=$PWD/tmp/eval-s2/p uv run cloudfall <cmd> --output json 2>/dev/null </dev/null` for `operator list`, `why` (0 answers), `inventory show` (0/1/3 items), and `operator show ghost` (stderr kept); the 30-command sweep; `changelog` data compared across TTY, pipe and `CI=true`. Rubric level 3 read against the failure mode's envelope example: `data` and `error` "always present"
+**Date:** 2026-09-24 (fifth refresh, after c14d6d4)
+**CLI version:** 0.5.1 at c14d6d4 (output schema 1.0)
+**Check command:** `CLOUDFALL_PROJECT=$PWD/tmp/eval-s2/p uv run cloudfall <cmd> --output json 2>/dev/null </dev/null` for `why` (0 answers), `operator list` (1 proposal), `inventory show` (3 servers), and `operator show ghost --output json` (stderr kept); `changelog` without the flag through a pipe, with `CI=true`, and under a pty (`pty.fork`); the 30-command sweep; `--schema` flag coverage
 **Exit code:** 0 (results), 2 (`operator show ghost`)
-**Score:** 2/3
+**Score:** 3/3
 
 **stdout** (first 20 lines):
 ```
-0-items   keys= ['data', 'meta', 'ok', 'status', 'warnings'] meta= ['duration_ms', 'request_id', 'schema_version', 'tool_version'] error-null=False data=True
-why answers: 0 ['data', 'meta', 'ok', 'status', 'warnings']
-N-items   keys= ['data', 'meta', 'ok', 'status', 'warnings'] meta= ['duration_ms', 'request_id', 'schema_version', 'tool_version'] error-null=False data=True
+0 items (why)            | keys: ['data', 'error', 'meta', 'ok', 'status', 'warnings'] | ok: True | error: None | data type: dict | meta: ['duration_ms', 'request_id', 'schema_version', 'tool_version'] | types: str int
+   why answers: 0
+1 item (operator list)   | keys: [same six] | ok: True | error: None | data type: dict | meta: [same four] | types: str int
+   proposals: 1
+N items (inventory show) | keys: [same six] | ok: True | error: None | data type: dict | meta: [same four] | types: str int
+   servers: 3
+pipe:    ['data', 'error', 'meta', 'ok', 'status', 'warnings']
+CI=true: ['data', 'error', 'meta', 'ok', 'status', 'warnings']
+pty (isatty): {"data": {"entries": [{"added": ["ok", "status", "data", "error", ...  keys: [same six]
+  (a first attempt with `script -q /dev/null` failed to parse: `script` echoed `^D\b\b` from the /dev/null stdin into the capture; harness artifact, rerun with pty.fork)
 sweep: 29 OK
 migrate --yes --restart   exit=1 ['out:error'] ['error on stdout']
-TTY/pipe/CI identical data
+34 commands; without --output: []
 ```
 
 **stderr** (first 20 lines):
 ```
-operator show ghost: keys= ['error', 'meta', 'ok', 'status', 'warnings'] meta= ['duration_ms', 'request_id', 'schema_version', 'tool_version'] data=False
+error (stderr) | keys: ['data', 'error', 'meta', 'ok', 'status', 'warnings'] | ok: False | error: {'code': 'operator_proposal_missing', 'message': 'proposal does not exist: tmp/operator/proposals/ghost.json'} | data type: NoneType | meta: ['duration_ms', 'request_id', 'schema_version', 'tool_version'] | types: str int
 ```
 
 ## §22 — Schema Versioning & Output Stability
