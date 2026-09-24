@@ -116,3 +116,11 @@ Discovered while fixing the MCP double envelope on 2026-09-23.
 ### §13/§25 resolved — long engine failures are recorded by their tail
 `_execution_failure_detail` (`operator.py`) writes `execution failed: <code>: ...<tail>` capped at the schema's 1000 characters, keeping the failing task and play recap. Re-run against unreachable `h1`/`h2`: proposal `failed`, detail 1000 chars ending in the recap, MCP returns `lifecycle_execution_failed` in one envelope.
 Fixed on 2026-09-23.
+
+### §2/§3 candidate — `migrate --yes` step failures are the one error on stdout
+After 2a97b25 every failure in a 23-command sweep is `{status: error, error: {code, message}}` on stderr, except a failed `migrate --yes` step: the same envelope plus the step manifest (`completed`, `step`, `steps`) goes to stdout, exit 1. Its shape now matches, so a parser handles it, but an agent reading only stderr for failures misses it. Either move it to stderr like the rest, or declare it in `--schema` as the one failure that is a stdout result.
+Discovered during §2 second refresh on 2026-09-23.
+
+### §2 path to 2/3 — accept `--output json`, add `ok` and `data`
+The remaining §2 gaps are names, not consistency. (1) Accept `--output json` as a no-op global flag (JSON is already unconditional), so an agent that follows the convention does not get exit 2. (2) Add a boolean `ok` and nest each command's payload under `data`. Under the output contract this is a MINOR (1.1) if `ok`/`data` are added beside the current top-level keys and those are listed in `DEPRECATED_FIELDS` for removal in 2.0.
+Discovered during §2 second refresh on 2026-09-23.

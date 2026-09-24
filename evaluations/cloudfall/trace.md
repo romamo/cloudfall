@@ -1194,44 +1194,39 @@ ValueError: invalid resource id: 'Bad ID!'
 ```
 
 ## §2 — Output Format & Parseability
-**Date:** 2026-09-23 (refresh)
+**Date:** 2026-09-23 (second refresh, after 2a97b25)
 **CLI version:** 0.5.1 (output schema 1.0)
-**Check command:** `CLOUDFALL_PROJECT=$PWD/tmp/eval-s2/p uv run cloudfall inventory show --output json 2>/dev/null </dev/null`, then the same without `--output json` across 20 commands (fresh `init` project: 1 ssh key, 1 server type, 3 servers)
-**Exit code:** 2 (`--output json`), 0 without it
+**Check command:** `CLOUDFALL_PROJECT=$PWD/tmp/eval-s2/p uv run cloudfall inventory show --output json 2>/dev/null </dev/null`, then a scripted sweep of 23 commands without the flag (stdin=/dev/null, each stdout/stderr line parsed as JSON and checked for `status`, `meta`, `warnings`, and `error` object on failures), then `migrate --yes --restart` against unreachable hosts
+**Exit code:** 2 (`--output json`); sweep 0 or 2 per command; `migrate --yes` 1
 **Score:** 1/3
 
 **stdout** (first 20 lines):
 ```
-$ cloudfall inventory show --output json          [exit 2, stdout empty]
-$ cloudfall inventory show                        [exit 0]
-{"inventory": {"alertRules": [], ..., "servers": [...3...], "sshPublicKeys": [{...}]}, "meta": {"schema_version": "1.0", "tool_version": "0.5.1"}, "status": "ok", "warnings": []}
-$ cloudfall operator list                         [exit 0]
-{"meta": {"schema_version": "1.0", "tool_version": "0.5.1"}, "proposals": [], "status": "ok", "warnings": []}
-$ cloudfall config validate                       [exit 0]
-{"byKind": {"Server": 3, "ServerType": 1, "SshPublicKey": 1}, "meta": {...}, "resources": 5, "status": "ok", "warnings": []}
-$ cloudfall migrate                               [exit 0]
-{"completed": 0, "meta": {...}, "next": "baseline", "status": "plan", "steps": [...], "warnings": []}
-$ cloudfall --version                             [exit 0]
-{"meta": {...}, "schemaVersions": {"current": "1.0", "minimum": "1.0"}, "status": "ok", "version": "0.5.1", "warnings": []}
-$ cloudfall why --format html                     [exit 0]
-<!doctype html>   (explicit opt-in)
-$ cloudfall inventory show | cat ; CI=true cloudfall inventory show
-identical JSON to the TTY run (JSON is unconditional)
+$ cloudfall inventory show --output json        [exit 2, stdout empty]
+$ cloudfall --output json inventory show        [exit 2, stdout empty]
+sweep (command, exit, stream:status, verdict):
+inventory show                     exit=0 ['out:ok']     OK
+config validate                    exit=0 ['out:ok']     OK
+operator list                      exit=0 ['out:ok']     OK
+operator show op-20260923100000-b0faf16439cfad9c  exit=0 ['out:ok'] OK
+operator show ghost                exit=2 ['err:error']  OK
+why / changelog / --version        exit=0 ['out:ok']     OK
+migrate                            exit=0 ['out:plan']   OK
+health nope / audit --observed /nonexistent / deploy nope --release r1   exit=2 ['err:error'] OK
+inventory show --bogus / (no args) / add server 'Bad ID!'                 exit=2 ['err:error'] OK
+operator run (bad TLS) / operator approve ghost / import render --application acme%2Fx  exit=2 ['err:error'] OK
+restart nope / secrets render nope / backup run nope / services status   exit=2 ['err:error'] OK
+$ cloudfall migrate --yes --restart             [exit 1, 2s]
+{"completed": 0, "error": {"code": "lifecycle_execution_failed", "message": "run baseline.yml failed: ..."}, ..., "status": "error", "step": "baseline", "steps": [4 x pending]}
 ```
 
 **stderr** (first 20 lines):
 ```
---output json:            {"error": {"code": "invalid_argument", "message": "cloudfall: unrecognized options --output; 1 unexpected value(s), not shown"}, "meta": {...}, "status": "error", "warnings": []}
-(no args):                {"error": {"code": "invalid_argument", "message": "cloudfall: the following arguments are required: command"}, "meta": {...}, "status": "error", "warnings": []}
-health nope:              {"error": {"code": "lifecycle_component_missing", ...}, "status": "error", ...}
-audit --observed /nonexistent: {"error": {"code": "observation_directory_missing", ...}, "status": "error", ...}
-add server 'Bad ID!':     {"error": {"code": "invalid_argument", "message": "invalid resource id: 'Bad ID!'"}, "status": "error", ...}
-import render --application acme%2Fx: {"error": {"code": "invalid_argument", ...}, "status": "error", ...}
-operator show nope:       {"code": "operator_proposal_missing", "message": "proposal does not exist: tmp/operator/proposals/nope.json", "meta": {...}, "warnings": []}
-operator run (bad TLS):   {"code": "operator_gateway_material_invalid", "message": "gateway TLS material could not be loaded ...", "meta": {...}, "warnings": []}
+--output json (after subcommand):  {"error": {"code": "invalid_argument", "message": "cloudfall: unrecognized options --output; 1 unexpected value(s), not shown"}, "meta": {"schema_version": "1.0", "tool_version": "0.5.1"}, "status": "error", "warnings": []}
+--output json (before subcommand): {"error": {"code": "invalid_argument", "message": "cloudfall: argument command: invalid choice: 'json' (choose from 'init', 'changelog', ...)"}, ...}
+operator show ghost:               {"error": {"code": "operator_proposal_missing", "message": "proposal does not exist: tmp/operator/proposals/ghost.json"}, "meta": {...}, "status": "error", "warnings": []}
+migrate --yes:                     (empty; the failure is on stdout)
 ```
-
-**Source review:** `cli.py:1913` `operator show` writes `proposal.as_document()` (top-level `apiVersion`/`kind`/`metadata`/`spec`, status only at `spec.status`); `cli.py:1829` `_operator_exit` writes `OperatorError.as_dict()` without the `status`/`error` wrapper; `cli.py:2217` `migrate` writes step failures (`status: error`) to stdout via `write_result`.
 
 ## §22 — Schema Versioning & Output Stability
 **Date:** 2026-09-23 (third refresh)
