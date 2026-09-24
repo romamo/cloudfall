@@ -1256,3 +1256,44 @@ error (stderr) | keys: ['data', 'error', 'meta', 'ok', 'status', 'warnings'] | o
 ```
 {"error": {"code": "invalid_argument", "message": "cloudfall: argument --schema-version: schema version 2 is not supported; this build writes 1 to 1"}, "meta": {"schema_version": "1.0", "tool_version": "0.5.1"}, "status": "error", "warnings": []}
 ```
+
+## §3 — Stderr vs Stdout Discipline
+**Date:** 2026-09-24
+**CLI version:** 0.5.1 at 55647c6 (output schema 1.0)
+**Check command:** `uv run cloudfall <cmd> --project $PWD/config/examples </dev/null >out 2>err`, then every stdout line parsed as JSON; 13 commands including the engine-running `restart crm-backend --yes` and `observe --output-dir tmp/eval-s3/obs` (hosts `h1.example.internal`, `h2.example.internal` do not resolve)
+**Exit code:** `observe` 1; `restart --yes` 1; others 0 or 2
+**Score:** 1/3
+
+**stdout** (first 20 lines):
+```
+$ cloudfall observe --project config/examples --output-dir tmp/eval-s3/obs   [exit 1, 32 stdout lines, 0 stderr bytes]
+PLAY [Inspect Cloudfall servers without changing remote state] *****************
+
+TASK [Gathering Facts] *********************************************************
+[ERROR]: Task failed: Failed to connect to the host via ssh: ssh: Could not resolve hostname h1.example.internal: nodename nor servname provided, or not known
+
+Task failed.
+
+<<< caused by >>>
+
+Failed to connect to the host via ssh: ssh: Could not resolve hostname h1.example.internal: nodename nor servname provided, or not known
+
+fatal: [h1]: UNREACHABLE! => {"changed": false, "msg": "Task failed: ...", "unreachable": true}
+...
+PLAY RECAP *********************************************************************
+h1                         : ok=0    changed=0    unreachable=1    failed=0    skipped=0    rescued=0    ignored=0
+h2                         : ok=0    changed=0    unreachable=1    failed=0    skipped=0    rescued=0    ignored=0
+
+{"data": {"exitCode": 4, "missing": ["h1", "h2"], "observed": [], "output": ".../config/examples/tmp/eval-s3/obs", "requested": ["h1", "h2"]}, "error": null, "meta": {...}, "ok": false, "status": "incomplete", "warnings": []}
+[truncated — 32 lines total]
+```
+
+**stderr** (first 20 lines):
+```
+observe:                          (empty)
+restart crm-backend --yes:        one JSON line, lifecycle_execution_failed (engine output captured into error.message)
+inventory shoe / no args:         one JSON line, invalid_argument; stdout empty
+--help, inventory show --help:    usage prose on stdout (42 and 15 lines), stderr empty, exit 0
+--quiet / --warnings-as-errors:   one JSON line, invalid_argument: unrecognized options
+```
+

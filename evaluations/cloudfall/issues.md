@@ -136,3 +136,11 @@ Discovered during §2 fourth refresh on 2026-09-24.
 ### §2 resolved at 3/3 — what the spec's example envelope has beyond the rubric
 c14d6d4 meets the level-3 condition. The failure mode's "Solutions" envelope also shows fields the rubric does not score: `meta.truncated`, `meta.has_more`, `meta.next_cursor` (belong to §5 pagination and §43 output size, where `inventory show` returned 181 KB unbounded), `error.retryable`, `error.retry_after_ms`, `error.field`, and error codes drawn from the §1 exit-code taxonomy (cloudfall uses its own snake_case codes such as `operator_proposal_missing`). The failed `migrate --yes` step on stdout remains a §3 item.
 Discovered during §2 fifth refresh on 2026-09-24.
+
+### §3 candidate — `observe` prints the Ansible play log on stdout
+`_run_playbook` in `sdk/src/cloudfall/observe.py:260` calls `subprocess.run` with neither `capture_output` nor a `stdout` redirect, so `ansible-playbook` inherits the CLI's stdout. Against `config/examples` (unresolvable hosts) stdout carried 31 lines of PLAY/TASK/fatal/RECAP output and then the JSON document; stderr was empty. Any agent doing `json.loads(stdout)` fails, and the Ansible text (remote-host messages) lands in the channel reserved for data (§25). Every other subprocess call captures its output (`lifecycle.py:415`, `secrets.py:234`, `ansible_api.py:275`, `project.py:364`) or writes it to a log file (`decision.py:766`). Fix: capture the output and either send it to stderr or keep its tail in the result like `lifecycle` does.
+Discovered during §3 evaluation on 2026-09-24.
+
+### §23 note — `backup run` takes no `--yes`
+`cloudfall backup run postgresql-main --yes` → `invalid_argument: unrecognized options --yes`. `backup run` executes immediately, as §23 recorded; an agent that adds `--yes` by habit (as `migrate`, `deploy` and `restart` accept) gets a usage error instead of a run.
+Discovered during §3 evaluation on 2026-09-24.
