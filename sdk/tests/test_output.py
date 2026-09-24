@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
+import uuid
 from datetime import date
 from importlib.metadata import version
 from pathlib import Path
+from unittest.mock import ANY
 
 import pytest
 from cloudfall.cli import main
@@ -16,6 +20,7 @@ from cloudfall.output import (
     FieldPath,
     SchemaChange,
     SchemaVersion,
+    begin_invocation,
     envelope,
     write_error,
     write_result,
@@ -23,7 +28,8 @@ from cloudfall.output import (
 
 ROOT = Path(__file__).parents[2]
 EXAMPLES = ROOT / "config" / "examples"
-META = {"schema_version": "1.0", "tool_version": version("cloudfall")}
+VERSIONS = {"schema_version": "1.0", "tool_version": version("cloudfall")}
+META = {**VERSIONS, "request_id": ANY, "duration_ms": ANY}
 
 
 def _run(argv: list[str], capsys: pytest.CaptureFixture[str]) -> tuple[int, str, str]:
@@ -64,7 +70,10 @@ def test_results_and_errors_carry_the_same_meta_and_warnings(
 
     assert (ok, failed, usage_code) == (0, 2, 2)
     for document in (json.loads(result), json.loads(error), json.loads(usage)):
-        assert document["meta"] == RESPONSE_META.as_dict() == META
+        assert document["meta"] == META
+        assert {
+            key: document["meta"][key] for key in VERSIONS
+        } == RESPONSE_META.as_dict()
         assert document["warnings"] == []
 
 
@@ -80,6 +89,7 @@ def test_a_deprecated_field_warns_while_it_is_still_written() -> None:
         replacement=FieldPath("data.inventory.hosts"),
         removed_in=SchemaVersion(2, 0),
     )
+    begin_invocation()
 
     with_field = envelope(
         {"status": "ok", "inventory": {"servers": []}},
@@ -128,6 +138,8 @@ def test_changelog_lists_contract_changes_newest_first(
             "error",
             "meta.schema_version",
             "meta.tool_version",
+            "meta.request_id",
+            "meta.duration_ms",
             "warnings",
         ],
         "removed": [],
@@ -198,6 +210,7 @@ def test_schema_versions_order_numerically() -> None:
 
 
 def test_the_payload_moves_under_data_and_status_and_error_stay_on_top() -> None:
+    begin_invocation()
     result = envelope({"status": "plan", "steps": []}, ok=True)
     failure = envelope(
         {"status": "error", "error": {"code": "x", "message": "y"}}, ok=False
@@ -262,3 +275,45 @@ def test_output_accepts_only_json(capsys: pytest.CaptureFixture[str]) -> None:
 
     assert (code, out) == (2, "")
     assert json.loads(err)["error"]["code"] == "invalid_argument"
+
+
+def test_one_invocation_has_one_request_id_and_a_growing_duration() -> None:
+    invocation = begin_invocation()
+    first = envelope({"status": "ok"}, ok=True)["meta"]
+    second = envelope({"status": "ok"}, ok=True)["meta"]
+
+    assert isinstance(first, dict)
+    assert isinstance(second, dict)
+    assert first["request_id"] == second["request_id"] == str(invocation.request_id)
+    assert uuid.UUID(str(first["request_id"])).version == 4
+    assert isinstance(first["duration_ms"], int)
+    assert 0 <= first["duration_ms"] <= second["duration_ms"]
+
+
+def test_every_invocation_gets_its_own_request_id(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _, first, _ = _run(["changelog"], capsys)
+    _, second, _ = _run(["changelog"], capsys)
+
+    assert json.loads(first)["meta"]["request_id"] != json.loads(second)["meta"][
+        "request_id"
+    ]
+
+
+def test_writing_outside_an_invocation_is_a_bug() -> None:
+    script = (
+        "from cloudfall.output import write_result\n"
+        "write_result({'status': 'ok'})\n"
+    )
+    completed = subprocess.run(  # noqa: S603 - fixed interpreter and script.
+        [sys.executable, "-c", script],
+        capture_output=True,
+        text=True,
+        stdin=subprocess.DEVNULL,
+        check=False,
+    )
+
+    assert completed.returncode != 0
+    assert completed.stdout == ""
+    assert "no invocation has begun" in completed.stderr

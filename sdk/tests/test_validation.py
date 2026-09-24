@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 from pathlib import Path
+from unittest.mock import ANY
 
 import pytest
 from cloudfall.cli import main
@@ -287,7 +288,7 @@ def test_cli_emits_structured_success(
             "SshPublicKey": 1,
             },
         },
-        "meta": RESPONSE_META.as_dict(),
+        "meta": {**RESPONSE_META.as_dict(), "request_id": ANY, "duration_ms": ANY},
         "warnings": [],
     }
     assert captured.err == ""

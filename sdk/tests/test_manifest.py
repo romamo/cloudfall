@@ -31,7 +31,9 @@ def test_schema_is_json_stable_and_aliased(
     alias = _schema(capsys, "--print-schema")
 
     manifest = json.loads(first)
-    assert first == again == alias
+    # Only meta, the invocation's own id and duration, may differ.
+    documents = [json.loads(output) for output in (first, again, alias)]
+    assert documents[0]["data"] == documents[1]["data"] == documents[2]["data"]
     assert manifest["status"] == "ok"
     data = manifest["data"]
     assert data["etag"].startswith("sha256:")

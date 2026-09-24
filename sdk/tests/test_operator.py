@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
+from unittest.mock import ANY
 
 import pytest
 from cloudfall.audit import AuditCheck, AuditReport, AuditStatus, ServerAudit
@@ -455,7 +456,7 @@ def test_cli_operator_list_emits_structured_output(
         "ok": True,
         "status": "ok",
         "data": {"proposals": []},
-        "meta": RESPONSE_META.as_dict(),
+        "meta": {**RESPONSE_META.as_dict(), "request_id": ANY, "duration_ms": ANY},
         "warnings": [],
     }
 
@@ -492,7 +493,7 @@ def test_cli_operator_show_wraps_the_proposal_in_the_result_envelope(
         "data": {
             "proposal": store.load(ResourceId.from_boundary(proposal_id)).as_document()
         },
-        "meta": RESPONSE_META.as_dict(),
+        "meta": {**RESPONSE_META.as_dict(), "request_id": ANY, "duration_ms": ANY},
         "warnings": [],
     }
     contract = next(c for c in CLI_COMMANDS if c.name == "operator show")

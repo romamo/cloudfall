@@ -8,6 +8,7 @@ import select
 import subprocess
 import sys
 from pathlib import Path
+from unittest.mock import ANY
 
 import pytest
 from cloudfall.cli import main
@@ -140,7 +141,8 @@ def test_import_render_rejects_an_invalid_application_id(
 def test_json_documents_are_flushed_when_stdout_is_a_pipe(tmp_path: Path) -> None:
     script = (
         "import sys, time\n"
-        "from cloudfall.output import write_result\n"
+        "from cloudfall.output import begin_invocation, write_result\n"
+        "begin_invocation()\n"
         "write_result({'status': 'ok'})\n"
         "sys.stderr.write('written\\n')\n"
         "sys.stderr.flush()\n"
@@ -167,7 +169,7 @@ def test_json_documents_are_flushed_when_stdout_is_a_pipe(tmp_path: Path) -> Non
             "ok": True,
             "status": "ok",
             "data": {},
-            "meta": RESPONSE_META.as_dict(),
+            "meta": {**RESPONSE_META.as_dict(), "request_id": ANY, "duration_ms": ANY},
             "warnings": [],
         }
     finally:

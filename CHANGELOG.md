@@ -23,6 +23,10 @@ Notable changes to Cloudfall. The format follows
   `meta.schema_version` (`MAJOR.MINOR` of the output contract, now `1.0`)
   and `meta.tool_version` (the installed package version), so an agent can
   tell when the output shape may have changed without a separate call.
+  `meta.request_id` names the invocation with a UUID, the same on every
+  document it writes, for quoting in a retry or a bug report, and
+  `meta.duration_ms` counts the milliseconds from the start of the command
+  to that document, not counting Python's own startup.
   MINOR moves when a command gains a key, MAJOR when one is removed,
   renamed or changes meaning. `cloudfall --version` prints the same
   version as JSON and exits 0

@@ -29,6 +29,13 @@ may differ without a separate ``--version`` call:
     The installed ``cloudfall`` package version, the same string
     ``cloudfall --version`` prints.
 
+``request_id``
+    A UUID naming this invocation, the same on every document it writes,
+    so a caller can quote it in a retry or a bug report.
+
+``duration_ms``
+    Milliseconds from the start of the invocation to this document.
+
 Each document also carries a ``warnings`` list, empty unless something in it
 needs the caller's attention. A key is removed only after a MINOR release in
 which it appears in ``DEPRECATED_FIELDS``; while it does, every document that
@@ -42,7 +49,10 @@ from __future__ import annotations
 import json
 import re
 import sys
+import time
+import uuid
 from collections.abc import Mapping
+from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import date
 from importlib.metadata import version
@@ -162,11 +172,53 @@ class ResponseMeta:
     tool_version: str
 
     def as_dict(self) -> dict[str, str]:
-        """Return the ``meta`` object as written to the wire."""
+        """Return the versions, the part of ``meta`` every invocation shares."""
         return {
             "schema_version": str(self.schema_version),
             "tool_version": self.tool_version,
         }
+
+
+@dataclass(frozen=True, slots=True)
+class Invocation:
+    """One run of the CLI: its id and when it started."""
+
+    request_id: uuid.UUID
+    started: float
+    """``time.monotonic()`` at the start, immune to wall-clock changes."""
+
+    @classmethod
+    def start(cls) -> Invocation:
+        """Begin an invocation now, with a fresh random id."""
+        return cls(request_id=uuid.uuid4(), started=time.monotonic())
+
+    def meta(self) -> dict[str, object]:
+        """Return the ``meta`` object for a document written now."""
+        elapsed = time.monotonic() - self.started
+        return {
+            **RESPONSE_META.as_dict(),
+            "request_id": str(self.request_id),
+            "duration_ms": int(elapsed * 1000),
+        }
+
+
+_INVOCATION: ContextVar[Invocation] = ContextVar("cloudfall_invocation")
+
+
+def begin_invocation() -> Invocation:
+    """Start the invocation every document written from now on belongs to."""
+    invocation = Invocation.start()
+    _INVOCATION.set(invocation)
+    return invocation
+
+
+def current_invocation() -> Invocation:
+    """Return the running invocation; writing outside one is a bug."""
+    try:
+        return _INVOCATION.get()
+    except LookupError:
+        message = "no invocation has begun; call begin_invocation() first"
+        raise RuntimeError(message) from None
 
 
 SCHEMA_CHANGELOG: tuple[SchemaChange, ...] = (
@@ -180,6 +232,8 @@ SCHEMA_CHANGELOG: tuple[SchemaChange, ...] = (
             FieldPath("error"),
             FieldPath("meta.schema_version"),
             FieldPath("meta.tool_version"),
+            FieldPath("meta.request_id"),
+            FieldPath("meta.duration_ms"),
             FieldPath("warnings"),
         ),
         removed=(),
@@ -282,7 +336,7 @@ def envelope(
         for deprecated in deprecated_fields
         if deprecated.path.present_in(document)
     ]
-    return {**document, "meta": RESPONSE_META.as_dict(), "warnings": warnings}
+    return {**document, "meta": current_invocation().meta(), "warnings": warnings}
 
 
 _LIFTED_KEYS = frozenset({"status", "error"})

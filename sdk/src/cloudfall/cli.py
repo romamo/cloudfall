@@ -123,6 +123,7 @@ from cloudfall.operator import (
     run_once as operator_run_once,
 )
 from cloudfall.output import (
+    begin_invocation,
     schema_changes_since,
     schema_versions,
     write_error,
@@ -1264,6 +1265,7 @@ def _add_lifecycle_arguments(parser: argparse.ArgumentParser) -> None:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the CLI and return a process exit code."""
+    begin_invocation()
     arguments = parse_arguments(_parser(), argv)
     projectless_command = _PROJECTLESS_COMMANDS.get(arguments.command)
     if projectless_command is not None:
