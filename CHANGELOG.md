@@ -54,12 +54,13 @@ Notable changes to Cloudfall. The format follows
 
 ### Changed
 
-- Every JSON document has the same top level: `ok` (true exactly when the
-  exit code is 0), `status` (the command's verdict, such as `ok`, `plan`,
-  `drift` or `unhealthy`), `data` (the command's payload, which used to sit
-  at the top level beside `status`), `error` on a failure, and `meta` and
-  `warnings`. A failure on stderr is `{"ok": false, "status": "error",
-  "error": {"code", "message"}}`. An agent reads `ok` and `data` without
+- Every JSON document has the same six top-level keys: `ok` (true exactly
+  when the exit code is 0), `status` (the command's verdict, such as `ok`,
+  `plan`, `drift` or `unhealthy`), `data` (the command's payload, which
+  used to sit at the top level beside `status`), `error` (`null` unless
+  the command failed), and `meta` and `warnings`. A failure on stderr is
+  `{"ok": false, "status": "error", "data": null, "error": {"code",
+  "message"}}`. An agent reads `ok` and `data` without
   knowing which command it ran. Anything that read a payload key from the
   top level, such as `.inventory`, now reads it under `data`
 - `--output json` is accepted before the command and after every command.

@@ -55,6 +55,7 @@ class OutputShape:
     The keys are the command's flat payload. The writer lifts ``status`` and
     ``error`` to the top level, moves the rest under ``data``, and adds
     ``ok``, ``meta`` and ``warnings``; the schema describes that document.
+    ``error`` is on every document, ``null`` unless the shape declares it.
     Only the keys are declared; what each one holds is open.
     """
 
@@ -68,9 +69,11 @@ class OutputShape:
             message = f"an output shape declares status: {self.keys}"
             raise ValueError(message)
         data_keys = tuple(key for key in self.keys if key.name not in _LIFTED)
-        top = (_OK, *lifted.values(), _DATA, *_WRITER_KEYS)
+        error = lifted.get("error", _ERROR)
+        top = (_OK, lifted["status"], _DATA, _ERROR, *_WRITER_KEYS)
         data = {**_object_schema(data_keys), **_stability(_DATA)}
-        schema = _object_schema(top, {"data": data})
+        error_schema = {"type": _error_type(lifted.get("error")), **_stability(error)}
+        schema = _object_schema(top, {"data": data, "error": error_schema})
         if self.when is not None:
             schema["description"] = self.when
         return schema
@@ -92,9 +95,17 @@ def _stability(key: OutputKey) -> dict[str, object]:
     return {"x-stability": key.stability.value}
 
 
+def _error_type(declared: OutputKey | None) -> str | list[str]:
+    """``null`` on a shape without an error, the object when it has one."""
+    if declared is None:
+        return "null"
+    return ["object", "null"] if declared.optional else "object"
+
+
 _LIFTED = frozenset({"status", "error"})
 _OK = OutputKey("ok")
 _DATA = OutputKey("data")
+_ERROR = OutputKey("error")
 _WRITER_KEYS = (OutputKey("meta"), OutputKey("warnings"))
 
 

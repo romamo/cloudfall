@@ -168,6 +168,7 @@ def test_json_documents_are_flushed_when_stdout_is_a_pipe(tmp_path: Path) -> Non
         assert json.loads(process.stdout.readline()) == {
             "ok": True,
             "status": "ok",
+            "error": None,
             "data": {},
             "meta": {**RESPONSE_META.as_dict(), "request_id": ANY, "duration_ms": ANY},
             "warnings": [],

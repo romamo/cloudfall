@@ -677,12 +677,12 @@ no hand-written playbook run outside `cloudfall-engine playbook run`.
 Every command prints one JSON document on stdout and nothing else, with the
 same top level whatever the command: `ok` is true exactly when the exit
 code is 0, `status` is the command's verdict (`ok`, `plan`, `drift`,
-`unhealthy`, `paused`, `failed`), and `data` holds the result. A failure
-prints `{{"ok": false, "status": "error", "error": {{"code": …, "message":
-…}}}}` on stderr, and the `code` is stable: branch on it, not on the
-message. A failed `migrate` step is the one failure on stdout, with its
-steps under `data`. `--output json` is accepted and changes nothing. Read
-the exit code first:
+`unhealthy`, `paused`, `failed`), `data` holds the result, and `error` is
+`null`. A failure prints `{{"ok": false, "status": "error", "data": null,
+"error": {{"code": …, "message": …}}}}` on stderr, and the `code` is stable:
+branch on it, not on the message. A failed `migrate` step is the one
+failure on stdout, with its steps under `data`. `--output json` is accepted
+and changes nothing. Read the exit code first:
 
 | Exit | Meaning |
 |---|---|

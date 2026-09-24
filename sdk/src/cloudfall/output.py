@@ -10,11 +10,15 @@ Every document has the same top level, whatever the command:
     ``error``; ``ok`` says whether it succeeded, ``status`` says how.
 
 ``data``
-    The command's payload. Every result has it; an error has it only when
-    the failure comes with more than its code, such as a migration's steps.
+    The command's payload, ``{}`` when a result has none. ``null`` on a
+    failure unless it comes with more than its code, such as a migration's
+    steps.
 
 ``error``
-    ``{"code", "message"}`` on a failure, absent otherwise.
+    ``{"code", "message"}`` on a failure, ``null`` otherwise.
+
+All six top-level keys are on every document, so a caller reads them
+without checking whether they exist.
 
 Each document also carries a ``meta`` object naming the output contract and the
 running tool, so an agent that parsed yesterday's shape can tell when today's
@@ -311,7 +315,7 @@ def envelope(
 
     The payload names its ``status`` and, on a failure, its ``error``; every
     other key moves under ``data``. The writer adds ``ok``, ``meta`` and
-    ``warnings``.
+    ``warnings``, and writes ``data`` and ``error`` as ``null`` when absent.
     """
     for owned in _WRITER_KEYS:
         if owned in payload:
@@ -326,11 +330,12 @@ def envelope(
         message = f"a document with status {status!r} and an error cannot be ok"
         raise ValueError(message)
     data = {key: value for key, value in payload.items() if key not in _LIFTED_KEYS}
-    document: dict[str, object] = {"ok": ok, "status": status}
-    if error is not None:
-        document["error"] = error
-    if data or error is None:
-        document["data"] = data
+    document: dict[str, object] = {
+        "ok": ok,
+        "status": status,
+        "data": data if data or error is None else None,
+        "error": error,
+    }
     warnings = [
         deprecated.warning()
         for deprecated in deprecated_fields

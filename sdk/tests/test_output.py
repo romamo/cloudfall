@@ -50,6 +50,7 @@ def test_version_flag_prints_the_package_and_schema_versions(
     assert json.loads(out) == {
         "ok": True,
         "status": "ok",
+        "error": None,
         "data": {
             "version": version("cloudfall"),
             "schemaVersions": {"current": "1.0", "minimum": "1.0"},
@@ -223,6 +224,7 @@ def test_the_payload_moves_under_data_and_status_and_error_stay_on_top() -> None
     assert result == {
         "ok": True,
         "status": "plan",
+        "error": None,
         "data": {"steps": []},
         "meta": META,
         "warnings": [],
@@ -230,6 +232,7 @@ def test_the_payload_moves_under_data_and_status_and_error_stay_on_top() -> None
     assert failure == {
         "ok": False,
         "status": "error",
+        "data": None,
         "error": {"code": "x", "message": "y"},
         "meta": META,
         "warnings": [],

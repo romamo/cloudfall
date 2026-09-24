@@ -273,6 +273,7 @@ def test_cli_emits_structured_success(
     assert json.loads(captured.out) == {
         "ok": True,
         "status": "ok",
+        "error": None,
         "data": {
             "resources": 12,
             "byKind": {

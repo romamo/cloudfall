@@ -455,6 +455,7 @@ def test_cli_operator_list_emits_structured_output(
     assert json.loads(captured.out) == {
         "ok": True,
         "status": "ok",
+        "error": None,
         "data": {"proposals": []},
         "meta": {**RESPONSE_META.as_dict(), "request_id": ANY, "duration_ms": ANY},
         "warnings": [],
@@ -490,6 +491,7 @@ def test_cli_operator_show_wraps_the_proposal_in_the_result_envelope(
     assert document == {
         "ok": True,
         "status": "ok",
+        "error": None,
         "data": {
             "proposal": store.load(ResourceId.from_boundary(proposal_id)).as_document()
         },
