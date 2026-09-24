@@ -144,3 +144,7 @@ Discovered during §3 evaluation on 2026-09-24.
 ### §23 note — `backup run` takes no `--yes`
 `cloudfall backup run postgresql-main --yes` → `invalid_argument: unrecognized options --yes`. `backup run` executes immediately, as §23 recorded; an agent that adds `--yes` by habit (as `migrate`, `deploy` and `restart` accept) gets a usage error instead of a run.
 Discovered during §3 evaluation on 2026-09-24.
+
+### §3 resolved — `observe` captures the playbook output
+`_run_playbook` now captures stdout and stderr together (`stderr=STDOUT`, stdin `/dev/null`) and returns `PlaybookRun(exit_code, output)`; a failed run keeps the last 2000 characters in `data.detail`. Re-run against `config/examples`: exit 1, one JSON line on stdout, 0 bytes on stderr, `detail` ends with the play recap. The same path serves the `observe` tool of `cloudfall-mcp`, whose stdout is the JSON-RPC stream.
+Fixed on 2026-09-24.

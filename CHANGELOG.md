@@ -82,6 +82,12 @@ Notable changes to Cloudfall. The format follows
 
 ### Fixed
 
+- `cloudfall observe` no longer prints Ansible's play log on stdout ahead
+  of its JSON document, which broke any caller parsing stdout as JSON.
+  The playbook's output is captured, and when the run fails its last 2000
+  characters, ending with the play recap, are kept in `data.detail`. The
+  same capture keeps the `observe` tool of `cloudfall-mcp` from writing
+  Ansible text into the protocol stream
 - `cloudfall-mcp` `operator_watch` and `operator_approve` wrapped engine
   failures in the error envelope twice (`error.error.code`); they now
   return one envelope like every other tool

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -16,6 +17,8 @@ from cloudfall.observe import (
     OVERLAY_FILE,
     ObservationRequest,
     ObserveError,
+    PlaybookRun,
+    _run_playbook,
     collect_observations,
     observation_command,
     overlay_document,
@@ -172,11 +175,11 @@ def test_a_run_reports_which_servers_it_observed(tmp_path: Path) -> None:
     request = _request(tmp_path, source)
     recorded: list[tuple[str, ...]] = []
 
-    def run(argv: Sequence[str], _environment: Mapping[str, str]) -> int:
+    def run(argv: Sequence[str], _environment: Mapping[str, str]) -> PlaybookRun:
         recorded.append(tuple(argv))
         request.output_directory.mkdir(parents=True, exist_ok=True)
         (request.output_directory / "web-1.json").write_text("{}", encoding="utf-8")
-        return 0
+        return PlaybookRun(exit_code=0, output="")
 
     result = collect_observations(fleet, request, tmp_path / "overlay", run)
 
@@ -192,13 +195,13 @@ def test_a_complete_run_is_reported_as_such(tmp_path: Path) -> None:
     fleet, source = _fleet(tmp_path)
     request = _request(tmp_path, source)
 
-    def run(_argv: Sequence[str], _environment: Mapping[str, str]) -> int:
+    def run(_argv: Sequence[str], _environment: Mapping[str, str]) -> PlaybookRun:
         request.output_directory.mkdir(parents=True, exist_ok=True)
         for server in ("web-1", "web-2"):
             (request.output_directory / f"{server}.json").write_text(
                 "{}", encoding="utf-8"
             )
-        return 0
+        return PlaybookRun(exit_code=0, output="")
 
     result = collect_observations(fleet, request, tmp_path / "overlay", run)
 
@@ -211,12 +214,54 @@ def test_a_failed_playbook_keeps_its_exit_code(tmp_path: Path) -> None:
     fleet, source = _fleet(tmp_path)
     request = _request(tmp_path, source)
 
+    recap = "PLAY RECAP web-1 unreachable=1"
+    log = "PLAY [Inspect]\n" + "TASK [Gathering Facts]\n" * 200 + recap
     result = collect_observations(
-        fleet, request, tmp_path / "overlay", lambda _argv, _env: 4
+        fleet,
+        request,
+        tmp_path / "overlay",
+        lambda _argv, _env: PlaybookRun(exit_code=4, output=log),
     )
 
     assert result.exit_code == 4
     assert result.complete is False
+    detail = result.as_dict()["detail"]
+    assert isinstance(detail, str)
+    assert len(detail) <= 2000
+    assert detail.endswith(recap)
+
+
+def test_a_successful_run_keeps_no_detail(tmp_path: Path) -> None:
+    fleet, source = _fleet(tmp_path)
+    request = _request(tmp_path, source)
+
+    result = collect_observations(
+        fleet,
+        request,
+        tmp_path / "overlay",
+        lambda _argv, _env: PlaybookRun(exit_code=0, output="PLAY RECAP ok"),
+    )
+
+    assert "detail" not in result.as_dict()
+
+
+def test_the_playbook_writes_nothing_to_the_cli_streams(
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    """Ansible's output is captured: stdout carries the JSON document only."""
+    script = (
+        "import sys\n"
+        "print('PLAY', flush=True)\n"
+        "print('fatal', file=sys.stderr, flush=True)\n"
+        "print('RECAP', flush=True)\n"
+    )
+
+    run = _run_playbook((sys.executable, "-c", script), {})
+
+    captured = capfd.readouterr()
+    assert (captured.out, captured.err) == ("", "")
+    assert run.exit_code == 0
+    assert run.output.split() == ["PLAY", "fatal", "RECAP"]
 
 
 def test_a_limited_run_is_judged_against_the_hosts_it_asked_for(
@@ -226,10 +271,10 @@ def test_a_limited_run_is_judged_against_the_hosts_it_asked_for(
     fleet, source = _fleet(tmp_path)
     request = _request(tmp_path, source, limit="web-2")
 
-    def run(_argv: Sequence[str], _environment: Mapping[str, str]) -> int:
+    def run(_argv: Sequence[str], _environment: Mapping[str, str]) -> PlaybookRun:
         request.output_directory.mkdir(parents=True, exist_ok=True)
         (request.output_directory / "web-2.json").write_text("{}", encoding="utf-8")
-        return 0
+        return PlaybookRun(exit_code=0, output="")
 
     result = collect_observations(fleet, request, tmp_path / "overlay", run)
 
@@ -245,7 +290,10 @@ def test_a_limit_matching_no_declared_server_is_refused(tmp_path: Path) -> None:
 
     with pytest.raises(ObserveError) as error:
         collect_observations(
-            fleet, request, tmp_path / "overlay", lambda _argv, _env: 0
+            fleet,
+            request,
+            tmp_path / "overlay",
+            lambda _argv, _env: PlaybookRun(exit_code=0, output=""),
         )
 
     assert error.value.code == "observe_no_targets"

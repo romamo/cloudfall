@@ -44,6 +44,8 @@ _SERVER_TYPE_VARIABLE = "cloudfall_server_type"
 _OUTPUT_DIRECTORY_VARIABLE = "cloudfall_inspect_output_directory"
 _ANSIBLE_CONFIG_FILE = "ansible.cfg"
 _SNAPSHOT_SUFFIX = ".json"
+_OUTPUT_TAIL_CHARACTERS = 2000
+"""As much of a failed run's output as a lifecycle error keeps."""
 
 _ERROR_ARGUMENT = "observe_invalid_argument"
 _ERROR_ANSIBLE_MISSING = "observe_ansible_missing"
@@ -101,6 +103,15 @@ class ObservationRequest:
 
 
 @dataclass(frozen=True, slots=True)
+class PlaybookRun:
+    """How an inspection playbook ended, and what it printed."""
+
+    exit_code: int
+    output: str
+    """Ansible's stdout and stderr, interleaved as it wrote them."""
+
+
+@dataclass(frozen=True, slots=True)
 class ObservationResult:
     """What one inspection run produced."""
 
@@ -115,6 +126,8 @@ class ObservationResult:
     """Requested servers the run produced no snapshot for."""
 
     exit_code: int
+    detail: str | None = None
+    """The end of Ansible's output when the playbook failed; it says why."""
 
     @property
     def complete(self) -> bool:
@@ -123,7 +136,7 @@ class ObservationResult:
 
     def as_dict(self) -> dict[str, object]:
         """Serialize the run for system boundaries."""
-        return {
+        result: dict[str, object] = {
             "status": "ok" if self.complete else "incomplete",
             "requested": list(self.requested),
             "observed": list(self.observed),
@@ -131,6 +144,9 @@ class ObservationResult:
             "output": str(self.output_directory),
             "exitCode": self.exit_code,
         }
+        if self.detail is not None:
+            result["detail"] = self.detail
+        return result
 
 
 def overlay_document(inventory: PlatformInventory) -> dict[str, object]:
@@ -207,7 +223,7 @@ def collect_observations(
     inventory: PlatformInventory,
     request: ObservationRequest,
     overlay_directory: Path,
-    run: Callable[[Sequence[str], Mapping[str, str]], int] | None = None,
+    run: Callable[[Sequence[str], Mapping[str, str]], PlaybookRun] | None = None,
 ) -> ObservationResult:
     """Inspect every declared server and report which snapshots exist."""
     requested = requested_servers(inventory, request)
@@ -220,7 +236,7 @@ def collect_observations(
         raise ObserveError(_ERROR_NO_TARGETS, message)
     overlay = write_overlay(inventory, overlay_directory)
     argv, environment = observation_command(request, overlay)
-    exit_code = (run or _run_playbook)(argv, environment)
+    playbook_run = (run or _run_playbook)(argv, environment)
     observed = tuple(
         server
         for server in requested
@@ -231,7 +247,12 @@ def collect_observations(
         requested=requested,
         observed=observed,
         missing=tuple(server for server in requested if server not in set(observed)),
-        exit_code=exit_code,
+        exit_code=playbook_run.exit_code,
+        detail=(
+            playbook_run.output[-_OUTPUT_TAIL_CHARACTERS:].strip() or None
+            if playbook_run.exit_code != 0
+            else None
+        ),
     )
 
 
@@ -256,13 +277,19 @@ def requested_servers(
     return tuple(server for server in declared if server in matched)
 
 
-def _run_playbook(argv: Sequence[str], environment: Mapping[str, str]) -> int:
+def _run_playbook(argv: Sequence[str], environment: Mapping[str, str]) -> PlaybookRun:
+    # Captured, never inherited: the CLI's stdout carries one JSON document
+    # and cloudfall-mcp's carries the protocol, so Ansible may write to neither.
     completed = subprocess.run(  # noqa: S603 - resolved binary, built argv.
         tuple(argv),
         env={**os.environ, **environment},
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
         check=False,
     )
-    return completed.returncode
+    return PlaybookRun(exit_code=completed.returncode, output=completed.stdout)
 
 
 def _configuration(request: ObservationRequest) -> Path | None:

@@ -309,7 +309,16 @@ CLI_COMMANDS: tuple[CommandContract, ...] = (
         CommandEffect.READ,
         "collect one read-only snapshot per server into evidence",
         output=(
-            _shape("status", "requested", "observed", "missing", "output", "exitCode"),
+            _shape(
+                "status",
+                "requested",
+                "observed",
+                "missing",
+                "output",
+                "exitCode",
+                "detail?",
+                when="`detail`, the end of Ansible's output, when the playbook failed",
+            ),
         ),
     ),
     CommandContract(
