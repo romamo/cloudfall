@@ -1194,30 +1194,25 @@ ValueError: invalid resource id: 'Bad ID!'
 ```
 
 ## §2 — Output Format & Parseability
-**Date:** 2026-09-24 (third refresh, after e3a03af)
-**CLI version:** 0.5.1 at e3a03af (output schema 1.0)
-**Check command:** `CLOUDFALL_PROJECT=$PWD/tmp/eval-s2/p uv run cloudfall operator list --output json 2>/dev/null </dev/null` and `... inventory show --output json 2>/dev/null </dev/null`; then `cloudfall --schema --output json` for flag coverage, a TTY/pipe/`CI=true` comparison, and the 30-command sweep (every stdout/stderr line parsed; checks `ok` == exit 0, `data` on results, top level limited to `ok`, `status`, `data`, `error`, `meta`, `warnings`)
-**Exit code:** 0 (both check commands)
+**Date:** 2026-09-24 (fourth refresh, after 5a752bb)
+**CLI version:** 0.5.1 at 5a752bb (output schema 1.0)
+**Check command:** `CLOUDFALL_PROJECT=$PWD/tmp/eval-s2/p uv run cloudfall <cmd> --output json 2>/dev/null </dev/null` for `operator list`, `why` (0 answers), `inventory show` (0/1/3 items), and `operator show ghost` (stderr kept); the 30-command sweep; `changelog` data compared across TTY, pipe and `CI=true`. Rubric level 3 read against the failure mode's envelope example: `data` and `error` "always present"
+**Exit code:** 0 (results), 2 (`operator show ghost`)
 **Score:** 2/3
 
 **stdout** (first 20 lines):
 ```
-[operator list --output json exit 0]
-['data', 'meta', 'ok', 'status', 'warnings'] ok= True {'proposals': 1}
-[inventory show --output json exit 0]
-['data', 'meta', 'ok', 'status', 'warnings'] ok= True {'alertRules': 0, 'applications': 0, 'components': 0, 'domains': 0, 'loggingStacks': 0, 'operatorPolicies': 0, 'serverTypes': 1, 'servers': 3, 'services': 0, 'sshPublicKeys': 1}
---schema: 34 commands; missing --output: [] ; global: True
-meta keys: ['schema_version', 'tool_version']
-TTY vs pipe vs CI=true: identical
+0-items   keys= ['data', 'meta', 'ok', 'status', 'warnings'] meta= ['duration_ms', 'request_id', 'schema_version', 'tool_version'] error-null=False data=True
+why answers: 0 ['data', 'meta', 'ok', 'status', 'warnings']
+N-items   keys= ['data', 'meta', 'ok', 'status', 'warnings'] meta= ['duration_ms', 'request_id', 'schema_version', 'tool_version'] error-null=False data=True
 sweep: 29 OK
 migrate --yes --restart   exit=1 ['out:error'] ['error on stdout']
-  (envelope: {data: {completed, next, step, steps}, error: {code: lifecycle_execution_failed, ...}, meta, ok: false, status: error, warnings})
+TTY/pipe/CI identical data
 ```
 
 **stderr** (first 20 lines):
 ```
-(discarded by the check; in the sweep every failure but migrate --yes is one line)
-{"error": {"code": "invalid_argument", "message": "cloudfall inventory show: argument --output: invalid choice: 'text' (choose from 'json')"}, "meta": {...}, "ok": false, "status": "error", "warnings": []}
+operator show ghost: keys= ['error', 'meta', 'ok', 'status', 'warnings'] meta= ['duration_ms', 'request_id', 'schema_version', 'tool_version'] data=False
 ```
 
 ## §22 — Schema Versioning & Output Stability

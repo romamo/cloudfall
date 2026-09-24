@@ -128,3 +128,7 @@ Discovered during §2 second refresh on 2026-09-23.
 ### §2 resolved to 2/3 — `--output json`, `ok` and `data` shipped in e3a03af
 Every document is `{ok, status, data, error?, meta, warnings}` and `--output json` is accepted everywhere. The path to 3/3 is `meta.request_id` (a per-invocation id an agent can quote in a retry or bug report) and `meta.duration_ms`; both fit the writer in `output.py` as a MINOR (1.1) addition. The `migrate --yes` stdout failure stays a §3 item.
 Discovered during §2 third refresh on 2026-09-24.
+
+### §2 path to 3/3 — write `data` and `error` on every document
+`meta.request_id` and `meta.duration_ms` shipped in 5a752bb, closing the gap named in the third refresh. The rubric's full envelope has `data` and `error` always present: `"error": null` on a result, `"data": null` on a failure without extra payload. The writer (`envelope` in `output.py`) omits the absent one instead. Writing both on every document is a one-place change and makes the top level a fixed set of six keys; `--schema` would declare `error` as `null` or `{code, message}` and `data` as `null` or the payload.
+Discovered during §2 fourth refresh on 2026-09-24.
