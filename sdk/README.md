@@ -140,7 +140,7 @@ dependency-free static dashboard plus `operations.json` for other clients:
 
 ```console
 uv run cloudfall dashboard build --project config/examples \
-  --observed tmp/observed --output tmp/dashboard
+  --observed tmp/observed --output-dir tmp/dashboard
 ```
 
 The report and exit code distinguish compliant state, detected drift, malformed

@@ -222,7 +222,7 @@ def test_cli_migrate_previews_without_executing(
     payload = json.loads(captured.out)
     assert exit_code == 0
     assert payload["status"] == "plan"
-    assert payload["next"] == "baseline"
+    assert payload["data"]["next"] == "baseline"
 
 
 def test_cli_migrate_rejects_malformed_component_pairs(

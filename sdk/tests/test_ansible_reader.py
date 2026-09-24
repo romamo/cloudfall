@@ -300,12 +300,12 @@ def test_the_cli_reads_the_fleet_from_a_named_inventory(
 
     payload = json.loads(capsys.readouterr().out)
     assert exit_code == 0
-    assert [server["id"] for server in payload["inventory"]["servers"]] == [
+    assert [server["id"] for server in payload["data"]["inventory"]["servers"]] == [
         "web-1",
         "web-2",
     ]
-    assert payload["ansible"]["managed"] == ["web-1", "web-2"]
-    assert payload["ansible"]["unmanaged"] == ["build-1"]
+    assert payload["data"]["ansible"]["managed"] == ["web-1", "web-2"]
+    assert payload["data"]["ansible"]["unmanaged"] == ["build-1"]
 
 
 def test_the_cli_finds_the_inventory_an_ansible_cfg_names(
@@ -328,8 +328,8 @@ def test_the_cli_finds_the_inventory_an_ansible_cfg_names(
 
     payload = json.loads(capsys.readouterr().out)
     assert exit_code == 0
-    assert payload["ansible"]["inProcess"] is True
-    assert [server["id"] for server in payload["inventory"]["servers"]] == [
+    assert payload["data"]["ansible"]["inProcess"] is True
+    assert [server["id"] for server in payload["data"]["inventory"]["servers"]] == [
         "web-1",
         "web-2",
     ]

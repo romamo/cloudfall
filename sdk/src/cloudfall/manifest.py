@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
 def build_manifest(parser: argparse.ArgumentParser) -> dict[str, object]:
     """Return the manifest of every ``cloudfall`` leaf command."""
-    leaves = dict(_leaves(parser))
+    leaves = dict(leaf_parsers(parser))
     contracts = {contract.name: contract for contract in CLI_COMMANDS}
     if set(leaves) != set(contracts):
         message = (
@@ -121,9 +121,10 @@ def _json_default(value: object) -> object:
     return str(value)
 
 
-def _leaves(
+def leaf_parsers(
     parser: argparse.ArgumentParser, prefix: str = ""
 ) -> Iterator[tuple[str, argparse.ArgumentParser]]:
+    """Yield every leaf command's space-joined name and parser."""
     subparsers = [
         action
         for action in parser._actions  # noqa: SLF001
@@ -134,4 +135,4 @@ def _leaves(
         return
     for action in subparsers:
         for name, child in action.choices.items():
-            yield from _leaves(child, f"{prefix} {name}")
+            yield from leaf_parsers(child, f"{prefix} {name}")

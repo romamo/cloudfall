@@ -28,7 +28,7 @@ class CommandEffect(Enum):
 
 
 class Stability(Enum):
-    """How long a top-level output key is promised to keep its name and meaning."""
+    """How long an output key is promised to keep its name and meaning."""
 
     STABLE = "stable"
     """Removed or changed only in a MAJOR schema release, after at least one
@@ -40,7 +40,7 @@ class Stability(Enum):
 
 @dataclass(frozen=True, slots=True)
 class OutputKey:
-    """One top-level key of a command's stdout document."""
+    """One key of a command's payload, as the command writes it."""
 
     name: str
     stability: Stability = Stability.STABLE
@@ -52,9 +52,10 @@ class OutputKey:
 class OutputShape:
     """One shape of a command's stdout document, and when it is written.
 
-    Only top-level keys are declared; what each key holds is open. The
-    writer adds ``meta`` and ``warnings`` to every document, so every shape
-    declares them as stable.
+    The keys are the command's flat payload. The writer lifts ``status`` and
+    ``error`` to the top level, moves the rest under ``data``, and adds
+    ``ok``, ``meta`` and ``warnings``; the schema describes that document.
+    Only the keys are declared; what each one holds is open.
     """
 
     keys: tuple[OutputKey, ...]
@@ -62,20 +63,38 @@ class OutputShape:
 
     def json_schema(self) -> dict[str, object]:
         """Return the JSON Schema of this shape, with a stability per key."""
-        keys = (*self.keys, *_WRITER_KEYS)
-        schema: dict[str, object] = {
-            "type": "object",
-            "properties": {
-                key.name: {"x-stability": key.stability.value} for key in keys
-            },
-            "required": sorted(key.name for key in keys if not key.optional),
-            "additionalProperties": False,
-        }
+        lifted = {key.name: key for key in self.keys if key.name in _LIFTED}
+        if "status" not in lifted:
+            message = f"an output shape declares status: {self.keys}"
+            raise ValueError(message)
+        data_keys = tuple(key for key in self.keys if key.name not in _LIFTED)
+        top = (_OK, *lifted.values(), _DATA, *_WRITER_KEYS)
+        data = {**_object_schema(data_keys), **_stability(_DATA)}
+        schema = _object_schema(top, {"data": data})
         if self.when is not None:
             schema["description"] = self.when
         return schema
 
 
+def _object_schema(
+    keys: tuple[OutputKey, ...], nested: dict[str, object] | None = None
+) -> dict[str, object]:
+    properties = {key.name: _stability(key) for key in keys}
+    return {
+        "type": "object",
+        "properties": {**properties, **(nested or {})},
+        "required": sorted(key.name for key in keys if not key.optional),
+        "additionalProperties": False,
+    }
+
+
+def _stability(key: OutputKey) -> dict[str, object]:
+    return {"x-stability": key.stability.value}
+
+
+_LIFTED = frozenset({"status", "error"})
+_OK = OutputKey("ok")
+_DATA = OutputKey("data")
 _WRITER_KEYS = (OutputKey("meta"), OutputKey("warnings"))
 
 

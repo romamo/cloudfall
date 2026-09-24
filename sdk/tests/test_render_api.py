@@ -252,7 +252,7 @@ def test_cli_render_api_reports_missing_key_file(
             "acme",
             "--server",
             "h1",
-            "--output",
+            "--output-dir",
             str(tmp_path / "config"),
             "--env-dir",
             str(tmp_path / "env"),

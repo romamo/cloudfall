@@ -174,9 +174,9 @@ def test_the_cli_answers_in_json_without_a_catalog(
     payload = json.loads(capsys.readouterr().out)
     assert exit_code == 0
     assert payload["status"] == "ok"
-    assert payload["query"] == {"host": "web-1"}
-    assert payload["count"] == 1
-    entry = payload["answers"][0]
+    assert payload["data"]["query"] == {"host": "web-1"}
+    assert payload["data"]["count"] == 1
+    entry = payload["data"]["answers"][0]
     assert entry["id"] == "deploy-20260921143012"
     assert entry["hosts"] == ["web-1", "web-2"]
     assert entry["decision"]["spec"]["approval"]["approver"] == "roman"

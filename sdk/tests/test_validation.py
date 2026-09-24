@@ -270,9 +270,11 @@ def test_cli_emits_structured_success(
     captured = capsys.readouterr()
     assert exit_code == 0
     assert json.loads(captured.out) == {
+        "ok": True,
         "status": "ok",
-        "resources": 12,
-        "byKind": {
+        "data": {
+            "resources": 12,
+            "byKind": {
             "AlertRule": 1,
             "OperatorPolicy": 1,
             "Component": 1,
@@ -283,6 +285,7 @@ def test_cli_emits_structured_success(
             "Server": 2,
             "Service": 2,
             "SshPublicKey": 1,
+            },
         },
         "meta": RESPONSE_META.as_dict(),
         "warnings": [],

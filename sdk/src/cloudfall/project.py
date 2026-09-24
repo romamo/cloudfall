@@ -674,14 +674,19 @@ no hand-written playbook run outside `cloudfall-engine playbook run`.
 
 ## Output contract
 
-Every command prints one JSON document on stdout and nothing else. A
-failure prints a JSON error envelope on stderr, `{{"status": "error",
-"error": {{"code": …, "message": …}}}}`, and the `code` is stable: branch on
-it, not on the message. Read the exit code first:
+Every command prints one JSON document on stdout and nothing else, with the
+same top level whatever the command: `ok` is true exactly when the exit
+code is 0, `status` is the command's verdict (`ok`, `plan`, `drift`,
+`unhealthy`, `paused`, `failed`), and `data` holds the result. A failure
+prints `{{"ok": false, "status": "error", "error": {{"code": …, "message":
+…}}}}` on stderr, and the `code` is stable: branch on it, not on the
+message. A failed `migrate` step is the one failure on stdout, with its
+steps under `data`. `--output json` is accepted and changes nothing. Read
+the exit code first:
 
 | Exit | Meaning |
 |---|---|
-| `0` | the command ran and its result is positive (`status: ok` or `status: plan`) |
+| `0` | the command ran and its result is positive (`ok: true`) |
 | `1` | the command ran and its result is negative: drift, unhealthy, a failed step |
 | `2` | invalid input, usage, or an unmet precondition; nothing ran |
 | `3` | compliance unknown: observations missing or stale (`audit`, `migrate`) |

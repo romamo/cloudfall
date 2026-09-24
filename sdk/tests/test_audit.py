@@ -138,7 +138,8 @@ def test_audit_reports_raid_package_service_and_config_drift(
     )
     captured = capsys.readouterr()
     assert exit_code == 1
-    assert json.loads(captured.out)["status"] == "drift"
+    document = json.loads(captured.out)
+    assert (document["ok"], document["status"]) == (False, "drift")
     assert captured.err == ""
 
 
@@ -414,7 +415,8 @@ def test_missing_observation_is_unknown(
     )
     captured = capsys.readouterr()
     assert exit_code == 3
-    assert json.loads(captured.out)["status"] == "unknown"
+    document = json.loads(captured.out)
+    assert (document["ok"], document["status"]) == (False, "unknown")
     assert captured.err == ""
 
 

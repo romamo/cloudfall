@@ -33,15 +33,17 @@ def test_schema_is_json_stable_and_aliased(
     manifest = json.loads(first)
     assert first == again == alias
     assert manifest["status"] == "ok"
-    assert manifest["etag"].startswith("sha256:")
-    assert set(manifest["commands"]) == {command.name for command in CLI_COMMANDS}
-    assert {"schema", "schema-version", "version"} <= set(manifest["global_flags"])
+    data = manifest["data"]
+    assert data["etag"].startswith("sha256:")
+    assert set(data["commands"]) == {command.name for command in CLI_COMMANDS}
+    global_flags = set(data["global_flags"])
+    assert {"schema", "schema-version", "version", "output"} <= global_flags
     assert "/Users/" not in first
     assert str(ROOT) not in first
 
 
 def test_flags_are_read_from_the_parser(capsys: pytest.CaptureFixture[str]) -> None:
-    deploy = json.loads(_schema(capsys))["commands"]["deploy"]
+    deploy = json.loads(_schema(capsys))["data"]["commands"]["deploy"]
 
     assert deploy["effect"] == "servers"
     assert deploy["flags"]["release"] == {
@@ -72,8 +74,11 @@ def test_every_command_declares_a_valid_output_schema(
 
 
 def _documents(argv: list[str], capsys: pytest.CaptureFixture[str]) -> list[object]:
-    main(argv)
-    return [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    code = main(argv)
+    documents = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    # `ok` is the exit code as a boolean, on every document the command wrote.
+    assert [document["ok"] for document in documents] == [code == 0] * len(documents)
+    return documents
 
 
 def _conforms(name: str, documents: list[object]) -> None:

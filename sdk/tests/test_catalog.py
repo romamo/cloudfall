@@ -215,11 +215,11 @@ def test_the_cli_lists_the_catalog(
 
     payload = json.loads(capsys.readouterr().out)
     assert exit_code == 0
-    assert [operation["id"] for operation in payload["operations"]] == [
+    assert [operation["id"] for operation in payload["data"]["operations"]] == [
         "deploy",
         "facts",
     ]
-    assert [operation["risk"] for operation in payload["operations"]] == [
+    assert [operation["risk"] for operation in payload["data"]["operations"]] == [
         "mutating",
         "read",
     ]
@@ -236,8 +236,9 @@ def test_the_cli_shows_one_operation(
 
     payload = json.loads(capsys.readouterr().out)
     assert exit_code == 0
-    assert payload["operation"]["verify"] == {"playbook": "playbooks/health.yml"}
-    assert payload["operation"]["preconditions"] == ["health:ok"]
+    operation = payload["data"]["operation"]
+    assert operation["verify"] == {"playbook": "playbooks/health.yml"}
+    assert operation["preconditions"] == ["health:ok"]
 
 
 def test_the_cli_refuses_an_undeclared_operation(

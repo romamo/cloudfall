@@ -217,5 +217,5 @@ def test_inventory_cli_emits_structured_output(
     payload = json.loads(captured.out)
     assert exit_code == 0
     assert payload["status"] == "ok"
-    assert payload["inventory"]["components"][0]["id"] == "crm-backend"
+    assert payload["data"]["inventory"]["components"][0]["id"] == "crm-backend"
     assert captured.err == ""

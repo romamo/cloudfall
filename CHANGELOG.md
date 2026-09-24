@@ -40,8 +40,9 @@ Notable changes to Cloudfall. The format follows
 - `cloudfall --schema` (alias `--print-schema`) prints every command in one
   JSON document: its flags, read from the parser; its effect and gate, from
   the command catalog; and an `output_schema` per command, a JSON Schema of
-  each stdout shape with the condition that selects it. Every top-level key
-  carries `x-stability`: `stable` keys change only in a MAJOR release after
+  each stdout shape with the condition that selects it. Every key, at the
+  top level and under `data`, carries `x-stability`: `stable` keys change
+  only in a MAJOR release after
   a deprecation warning, `experimental` keys (unreleased commands such as
   `why` and `changelog`) may change in any release. What each key holds is
   not declared yet. The tests validate real output against these schemas,
@@ -49,13 +50,30 @@ Notable changes to Cloudfall. The format follows
 
 ### Changed
 
+- Every JSON document has the same top level: `ok` (true exactly when the
+  exit code is 0), `status` (the command's verdict, such as `ok`, `plan`,
+  `drift` or `unhealthy`), `data` (the command's payload, which used to sit
+  at the top level beside `status`), `error` on a failure, and `meta` and
+  `warnings`. A failure on stderr is `{"ok": false, "status": "error",
+  "error": {"code", "message"}}`. An agent reads `ok` and `data` without
+  knowing which command it ran. Anything that read a payload key from the
+  top level, such as `.inventory`, now reads it under `data`
+- `--output json` is accepted before the command and after every command.
+  JSON is the only format, so the flag changes nothing; a caller that asks
+  for JSON the usual way no longer gets a usage error. `--output` with any
+  other value is `invalid_argument`
+- The six options that named an output path are renamed so `--output`
+  means one thing everywhere: `--output-dir` on `observe`,
+  `services inspect`, `dashboard build`, `import render` and
+  `import render-api`, and `--output-file` on `secrets render`. Scripts
+  passing `--output DIR` to these commands must switch
 - `operator` errors use the same envelope as every other command,
   `{"status": "error", "error": {"code", "message"}}`, instead of a bare
   `{"code", "message"}`, so one parser reads every failure
-- `operator show` and `operator approve` print `{"status", "proposal"}`
-  with the receipt under `proposal`, instead of the bare receipt with no
-  top-level `status`. `approve` reports `status: failed` when the verify
-  step did not confirm the fix, as the `cloudfall-mcp` tool already did
+- `operator show` and `operator approve` print the receipt under
+  `data.proposal` with a top-level `status`, instead of the bare receipt.
+  `approve` reports `status: failed` when the verify step did not confirm
+  the fix, as the `cloudfall-mcp` tool already did
 
 ### Fixed
 

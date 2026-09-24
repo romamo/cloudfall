@@ -16,7 +16,8 @@ from cloudfall.output import (
     FieldPath,
     SchemaChange,
     SchemaVersion,
-    stamp,
+    envelope,
+    write_error,
     write_result,
 )
 
@@ -41,9 +42,12 @@ def test_version_flag_prints_the_package_and_schema_versions(
 
     assert (code, err) == (0, "")
     assert json.loads(out) == {
+        "ok": True,
         "status": "ok",
-        "version": version("cloudfall"),
-        "schemaVersions": {"current": "1.0", "minimum": "1.0"},
+        "data": {
+            "version": version("cloudfall"),
+            "schemaVersions": {"current": "1.0", "minimum": "1.0"},
+        },
         "meta": META,
         "warnings": [],
     }
@@ -64,7 +68,7 @@ def test_results_and_errors_carry_the_same_meta_and_warnings(
         assert document["warnings"] == []
 
 
-@pytest.mark.parametrize("owned", ["meta", "warnings"])
+@pytest.mark.parametrize("owned", ["ok", "data", "meta", "warnings"])
 def test_a_payload_cannot_set_what_the_writer_owns(owned: str) -> None:
     with pytest.raises(ValueError, match="writer owns it"):
         write_result({"status": "ok", owned: {}})
@@ -72,23 +76,34 @@ def test_a_payload_cannot_set_what_the_writer_owns(owned: str) -> None:
 
 def test_a_deprecated_field_warns_while_it_is_still_written() -> None:
     deprecated = DeprecatedField(
-        path=FieldPath("inventory.servers"),
-        replacement=FieldPath("inventory.hosts"),
+        path=FieldPath("data.inventory.servers"),
+        replacement=FieldPath("data.inventory.hosts"),
         removed_in=SchemaVersion(2, 0),
     )
 
-    with_field = stamp({"inventory": {"servers": []}}, (deprecated,))
-    without_field = stamp({"inventory": {"hosts": []}}, (deprecated,))
+    with_field = envelope(
+        {"status": "ok", "inventory": {"servers": []}},
+        ok=True,
+        deprecated_fields=(deprecated,),
+    )
+    without_field = envelope(
+        {"status": "ok", "inventory": {"hosts": []}},
+        ok=True,
+        deprecated_fields=(deprecated,),
+    )
 
     assert with_field["warnings"] == [
         {
             "code": "FIELD_DEPRECATED",
             "message": (
-                "field 'inventory.servers' is deprecated and is removed in "
-                "schema 2.0; use 'inventory.hosts'"
+                "field 'data.inventory.servers' is deprecated and is removed in "
+                "schema 2.0; use 'data.inventory.hosts'"
             ),
             "removed_in": "2.0",
-            "context": {"field": "inventory.servers", "replacement": "inventory.hosts"},
+            "context": {
+                "field": "data.inventory.servers",
+                "replacement": "data.inventory.hosts",
+            },
         }
     ]
     assert without_field["warnings"] == []
@@ -101,19 +116,27 @@ def test_changelog_lists_contract_changes_newest_first(
     since_code, since_out, _ = _run(["changelog", "--since", "1.0"], capsys)
 
     assert (code, since_code) == (0, 0)
-    entries = json.loads(out)["entries"]
+    entries = json.loads(out)["data"]["entries"]
     assert entries[0] == {
         "version": "1.0",
         "date": "2026-09-23",
         "breaking": False,
-        "added": ["meta.schema_version", "meta.tool_version", "warnings"],
+        "added": [
+            "ok",
+            "status",
+            "data",
+            "error",
+            "meta.schema_version",
+            "meta.tool_version",
+            "warnings",
+        ],
         "removed": [],
         "changed": [],
     }
     assert [entry["version"] for entry in entries] == [
         str(change.version) for change in reversed(SCHEMA_CHANGELOG)
     ]
-    assert json.loads(since_out)["entries"] == []
+    assert json.loads(since_out)["data"]["entries"] == []
 
 
 def test_a_removal_or_change_is_breaking() -> None:
@@ -172,3 +195,70 @@ def test_schema_version_is_major_dot_minor(value: str) -> None:
 
 def test_schema_versions_order_numerically() -> None:
     assert SchemaVersion.parse("1.10") > SchemaVersion.parse("1.9")
+
+
+def test_the_payload_moves_under_data_and_status_and_error_stay_on_top() -> None:
+    result = envelope({"status": "plan", "steps": []}, ok=True)
+    failure = envelope(
+        {"status": "error", "error": {"code": "x", "message": "y"}}, ok=False
+    )
+    failed_step = envelope(
+        {"status": "error", "error": {"code": "x", "message": "y"}, "step": "a"},
+        ok=False,
+    )
+
+    assert result == {
+        "ok": True,
+        "status": "plan",
+        "data": {"steps": []},
+        "meta": META,
+        "warnings": [],
+    }
+    assert failure == {
+        "ok": False,
+        "status": "error",
+        "error": {"code": "x", "message": "y"},
+        "meta": META,
+        "warnings": [],
+    }
+    assert failed_step["data"] == {"step": "a"}
+    assert failed_step["error"] == {"code": "x", "message": "y"}
+
+
+def test_a_document_with_an_error_cannot_be_ok() -> None:
+    with pytest.raises(ValueError, match="cannot be ok"):
+        envelope({"status": "error", "error": {"code": "x"}}, ok=True)
+
+
+def test_a_payload_must_name_its_status() -> None:
+    with pytest.raises(TypeError, match="names its status"):
+        envelope({"inventory": {}}, ok=True)
+
+
+def test_an_error_document_carries_only_its_error() -> None:
+    with pytest.raises(ValueError, match="status and error only"):
+        write_error({"status": "error", "error": {"code": "x"}, "extra": 1})
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["--output", "json", "changelog"],
+        ["changelog", "--output", "json"],
+        ["changelog", "--output=json"],
+    ],
+)
+def test_output_json_is_accepted_before_and_after_the_command(
+    argv: list[str], capsys: pytest.CaptureFixture[str]
+) -> None:
+    code, out, err = _run(argv, capsys)
+
+    assert (code, err) == (0, "")
+    assert json.loads(out)["ok"] is True
+
+
+def test_output_accepts_only_json(capsys: pytest.CaptureFixture[str]) -> None:
+    code, out, err = _run(["changelog", "--output", "text"], capsys)
+
+    assert (code, out) == (2, "")
+    assert json.loads(err)["error"]["code"] == "invalid_argument"

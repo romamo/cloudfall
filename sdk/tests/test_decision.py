@@ -381,8 +381,8 @@ def test_the_cli_proposes_and_then_lists_the_record(
 
     proposed = json.loads(capsys.readouterr().out)
     assert exit_code == 0
-    assert proposed["decision"]["spec"]["status"] == "proposed"
-    assert proposed["decision"]["spec"]["gate"]["requirement"] == (
+    assert proposed["data"]["decision"]["spec"]["status"] == "proposed"
+    assert proposed["data"]["decision"]["spec"]["gate"]["requirement"] == (
         "check-then-approve"
     )
 
@@ -390,8 +390,8 @@ def test_the_cli_proposes_and_then_lists_the_record(
 
     payload = json.loads(capsys.readouterr().out)
     assert listed == 0
-    assert len(payload["decisions"]) == 1
-    assert payload["decisions"][0]["spec"]["operation"]["id"] == "deploy"
+    assert len(payload["data"]["decisions"]) == 1
+    assert payload["data"]["decisions"][0]["spec"]["operation"]["id"] == "deploy"
 
 
 def test_the_cli_reports_a_gate_refusal_as_json(
@@ -430,7 +430,7 @@ def test_the_record_is_readable_without_a_catalog(
 
     payload = json.loads(capsys.readouterr().out)
     assert exit_code == 0
-    assert [entry["metadata"]["id"] for entry in payload["decisions"]] == [
+    assert [entry["metadata"]["id"] for entry in payload["data"]["decisions"]] == [
         "deploy-20260921143012"
     ]
 
@@ -625,7 +625,7 @@ def test_the_cli_shows_the_proposal_before_it_runs_anything(
     payload = json.loads(capsys.readouterr().out)
     assert exit_code == 0
     assert payload["status"] == "pending"
-    assert payload["decision"]["spec"]["status"] == "proposed"
+    assert payload["data"]["decision"]["spec"]["status"] == "proposed"
     assert store.load(proposed.decision_id).status is DecisionStatus.PROPOSED
 
 

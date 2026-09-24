@@ -14,7 +14,7 @@ import argparse
 from typing import TYPE_CHECKING, Any, NoReturn
 
 from cloudfall.domain import ReleaseId, ResourceId
-from cloudfall.manifest import build_manifest
+from cloudfall.manifest import build_manifest, leaf_parsers
 from cloudfall.output import (
     TOOL_VERSION,
     SchemaVersion,
@@ -128,6 +128,30 @@ def root_parser(prog: str) -> StrictArgumentParser:
         ),
     )
     return parser
+
+
+OUTPUT_FORMATS = ("json",)
+"""What ``--output`` accepts. JSON is the only format, so the flag changes
+nothing; it exists so a caller that asks for JSON the usual way gets it."""
+
+
+def add_output_format(parser: argparse.ArgumentParser) -> None:
+    """Accept ``--output json`` before the command and after every leaf command."""
+    _add_output_argument(parser, default=OUTPUT_FORMATS[0])
+    for _name, leaf in leaf_parsers(parser):
+        if leaf is not parser:
+            # SUPPRESS keeps a leaf from resetting the value given before it.
+            _add_output_argument(leaf, default=argparse.SUPPRESS)
+
+
+def _add_output_argument(parser: argparse.ArgumentParser, default: str) -> None:
+    parser.add_argument(
+        "--output",
+        dest="output_format",
+        choices=OUTPUT_FORMATS,
+        default=default,
+        help="output format; JSON is the only one and the default",
+    )
 
 
 def parse_arguments(

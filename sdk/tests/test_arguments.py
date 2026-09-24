@@ -164,7 +164,9 @@ def test_json_documents_are_flushed_when_stdout_is_a_pipe(tmp_path: Path) -> Non
         readable, _, _ = select.select([process.stdout], [], [], 5)
         assert readable, "the JSON document stayed in the stdout buffer"
         assert json.loads(process.stdout.readline()) == {
+            "ok": True,
             "status": "ok",
+            "data": {},
             "meta": RESPONSE_META.as_dict(),
             "warnings": [],
         }
@@ -187,7 +189,7 @@ def test_relative_output_leaving_the_project_is_rejected(
             str(EXAMPLES),
             "--observed",
             str(observed),
-            "--output",
+            "--output-dir",
             "tmp/../../escape",
         ],
         capsys,
@@ -214,7 +216,7 @@ def test_absolute_output_outside_the_project_is_allowed(
             str(SCHEMAS),
             "--observed",
             str(observed),
-            "--output",
+            "--output-dir",
             str(output),
         ]
     )

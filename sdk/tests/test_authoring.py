@@ -182,17 +182,17 @@ def test_cli_add_flow_from_init_to_a_valid_project(
 
     assert main(["add", "ssh-key", str(key_file), "--owner", "roman", *common]) == 0
     key_payload = json.loads(capsys.readouterr().out)
-    assert key_payload["added"][0]["path"] == "ssh-public-keys/roman.yaml"
+    assert key_payload["data"]["added"][0]["path"] == "ssh-public-keys/roman.yaml"
 
     assert main(["add", "server", "h1", "--address", "203.0.113.10", *common]) == 0
     server_payload = json.loads(capsys.readouterr().out)
-    assert [added["kind"] for added in server_payload["added"]] == [
+    assert [added["kind"] for added in server_payload["data"]["added"]] == [
         "ServerType",
         "Server",
     ]
 
     assert main(["config", "validate", *common]) == 0
-    assert json.loads(capsys.readouterr().out)["resources"] == 3
+    assert json.loads(capsys.readouterr().out)["data"]["resources"] == 3
 
 
 def test_cli_add_reports_bad_arguments_as_json(

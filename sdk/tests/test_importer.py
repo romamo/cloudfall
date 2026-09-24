@@ -210,7 +210,7 @@ def test_cli_import_render_emits_structured_output(
             "acme",
             "--server",
             "h1",
-            "--output",
+            "--output-dir",
             str(tmp_path / "config"),
             "--env-dir",
             str(tmp_path / "env"),
@@ -223,5 +223,5 @@ def test_cli_import_render_emits_structured_output(
     payload = json.loads(captured.out)
     assert exit_code == 0
     assert payload["status"] == "ok"
-    assert payload["components"] == ["acme-api", "acme-worker"]
-    assert payload["report"].endswith("IMPORT-REPORT.md")
+    assert payload["data"]["components"] == ["acme-api", "acme-worker"]
+    assert payload["data"]["report"].endswith("IMPORT-REPORT.md")

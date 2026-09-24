@@ -27,6 +27,7 @@ from cloudfall.ansible_api import (
 from cloudfall.ansible_reader import FleetRead, read_fleet
 from cloudfall.arguments import (
     StrictArgumentParser,
+    add_output_format,
     parse_arguments,
     project_path_argument,
     release_id_argument,
@@ -382,7 +383,7 @@ def _add_observe_parser(
     _add_project_directory_argument(observe_parser)
     _add_inventory_argument(observe_parser)
     observe_parser.add_argument(
-        "--output",
+        "--output-dir",
         type=project_path_argument,
         default=Path("tmp/observed"),
         help="snapshot directory to write (default: tmp/observed)",
@@ -530,6 +531,12 @@ def _add_why_parser(
 
 
 def _parser() -> StrictArgumentParser:
+    parser = _command_parser()
+    add_output_format(parser)
+    return parser
+
+
+def _command_parser() -> StrictArgumentParser:
     parser = root_parser("cloudfall")
     commands = parser.add_subparsers(dest="command", required=True)
     _add_projectless_parsers(commands)
@@ -575,7 +582,7 @@ def _parser() -> StrictArgumentParser:
     )
     _add_project_directory_argument(services_inspect_parser)
     services_inspect_parser.add_argument(
-        "--output",
+        "--output-dir",
         type=project_path_argument,
         default=Path("tmp/observed-services"),
         help="service observation directory (default: tmp/observed-services)",
@@ -650,7 +657,7 @@ def _parser() -> StrictArgumentParser:
         help="deployment receipt directory (default: tmp/deployments)",
     )
     dashboard_build_parser.add_argument(
-        "--output",
+        "--output-dir",
         type=project_path_argument,
         default=Path("tmp/dashboard"),
         help="dashboard output directory (default: tmp/dashboard)",
@@ -959,7 +966,7 @@ def _add_import_parsers(
         help="declared server id that receives every imported resource",
     )
     render_parser.add_argument(
-        "--output",
+        "--output-dir",
         type=project_path_argument,
         default=Path("tmp/import/config"),
         help="config fragment output directory (default: tmp/import/config)",
@@ -1005,7 +1012,7 @@ def _add_import_parsers(
         help="declared server id that receives every imported resource",
     )
     render_api_parser.add_argument(
-        "--output",
+        "--output-dir",
         type=project_path_argument,
         default=Path("tmp/import/config"),
         help="config fragment output directory (default: tmp/import/config)",
@@ -1123,7 +1130,7 @@ def _add_secrets_parsers(
         help="sops-encrypted secrets directory (default: secrets)",
     )
     render_parser.add_argument(
-        "--output",
+        "--output-file",
         type=project_path_argument,
         default=None,
         help=("environment file to write (default: tmp/env/<component>.env)"),
@@ -1437,7 +1444,7 @@ def _run_import_render(arguments: Namespace) -> int:
         targets = ImportTargets(
             application_id=arguments.application,
             server_id=arguments.server,
-            project_directory=Path(arguments.output),
+            project_directory=Path(arguments.output_dir),
             environment_directory=Path(arguments.env_dir),
         )
         if arguments.import_command == "render-api":
@@ -1634,8 +1641,9 @@ def _propose_operation(
         observations=repository / Path(arguments.observed),
     )
     decision = propose(request, _decision_store(arguments, repository))
-    write_result(decision.as_dict())
-    return 0 if decision.check.exit_code == 0 else 1
+    code = 0 if decision.check.exit_code == 0 else 1
+    write_result(decision.as_dict(), ok=code == 0)
+    return code
 
 
 def _approve_decision(arguments: Namespace, repository: Path) -> int:
@@ -1670,8 +1678,9 @@ def _approve_decision(arguments: Namespace, repository: Path) -> int:
         ),
         store,
     )
-    write_result(approved.as_dict())
-    return 0 if approved.status is not DecisionStatus.FAILED else 1
+    code = 0 if approved.status is not DecisionStatus.FAILED else 1
+    write_result(approved.as_dict(), ok=code == 0)
+    return code
 
 
 def _decision_store(arguments: Namespace, repository: Path) -> DecisionStore:
@@ -1706,7 +1715,7 @@ def _run_observe(
     try:
         request = ObservationRequest(
             inventory_sources=sources,
-            output_directory=Path(arguments.output).resolve(),
+            output_directory=Path(arguments.output_dir).resolve(),
             engine_directory=Path(arguments.engine),
             limit=arguments.limit,
             configuration=(
@@ -1721,8 +1730,16 @@ def _run_observe(
     except ObserveError as error:
         write_error(error.as_dict())
         return 2
-    write_result(result.as_dict())
-    return 0 if result.complete else 1
+    code = 0 if result.complete else 1
+    write_result(result.as_dict(), ok=code == 0)
+    return code
+
+
+_AUDIT_EXIT_CODES = {
+    AuditStatus.COMPLIANT: 0,
+    AuditStatus.DRIFT: 1,
+    AuditStatus.UNKNOWN: 3,
+}
 
 
 def _run_audit(
@@ -1734,20 +1751,17 @@ def _run_audit(
         observations,
         load_environment_receipts(Path(arguments.env_receipts), schema_directory),
     )
-    write_result(report.as_dict())
-    if report.status is AuditStatus.COMPLIANT:
-        return 0
-    if report.status is AuditStatus.DRIFT:
-        return 1
-    return 3
+    code = _AUDIT_EXIT_CODES[report.status]
+    write_result(report.as_dict(), ok=code == 0)
+    return code
 
 
 def _run_secrets_render(
     arguments: Namespace, _state: ValidatedConfig, schema_directory: Path
 ) -> int:
     output = (
-        Path(arguments.output)
-        if arguments.output is not None
+        Path(arguments.output_file)
+        if arguments.output_file is not None
         else Path("tmp/env") / f"{arguments.component}.env"
     )
     try:
@@ -1946,7 +1960,8 @@ def _run_operator_approve(
         {
             "status": "ok" if verified else "failed",
             "proposal": proposal.as_document(),
-        }
+        },
+        ok=verified,
     )
     return 0 if verified else 1
 
@@ -1956,7 +1971,7 @@ def _run_services_inspect(
 ) -> int:
     paths = inspect_domains(
         PlatformInventory.from_state(state),
-        Path(arguments.output),
+        Path(arguments.output_dir),
         SocketDomainNetworkClient(),
         observed_at=EvidenceTimestamp.now(),
     )
@@ -1986,7 +2001,7 @@ def _run_dashboard_build(
     arguments: Namespace, state: ValidatedConfig, schema_directory: Path
 ) -> int:
     operations = _service_operations(arguments, state, schema_directory)
-    artifacts = build_dashboard(operations, Path(arguments.output))
+    artifacts = build_dashboard(operations, Path(arguments.output_dir))
     write_result(
         {
             "status": "ok",
@@ -2168,7 +2183,7 @@ def _run_health(
         )
     except LifecycleError as error:
         return _lifecycle_exit(error)
-    write_result(result.as_dict())
+    write_result(result.as_dict(), ok=result.healthy)
     return 0 if result.healthy else 1
 
 
@@ -2220,13 +2235,10 @@ def _run_migrate(
     except MigrateError as error:
         write_error(error.as_dict())
         return 2
-    write_result(result)
     status = str(result["status"])
-    if status in {"ok", "plan"}:
-        return 0
-    if status == "paused":
-        return 3
-    return 1
+    code = 0 if status in {"ok", "plan"} else 3 if status == "paused" else 1
+    write_result(result, ok=code == 0)
+    return code
 
 
 def _key_value_pairs(entries: list[str], option: str) -> dict[str, str]:

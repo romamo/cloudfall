@@ -452,8 +452,9 @@ def test_cli_operator_list_emits_structured_output(
     captured = capsys.readouterr()
     assert exit_code == 0
     assert json.loads(captured.out) == {
+        "ok": True,
         "status": "ok",
-        "proposals": [],
+        "data": {"proposals": []},
         "meta": RESPONSE_META.as_dict(),
         "warnings": [],
     }
@@ -486,8 +487,11 @@ def test_cli_operator_show_wraps_the_proposal_in_the_result_envelope(
     assert exit_code == 0
     document = json.loads(captured.out)
     assert document == {
+        "ok": True,
         "status": "ok",
-        "proposal": store.load(ResourceId.from_boundary(proposal_id)).as_document(),
+        "data": {
+            "proposal": store.load(ResourceId.from_boundary(proposal_id)).as_document()
+        },
         "meta": RESPONSE_META.as_dict(),
         "warnings": [],
     }

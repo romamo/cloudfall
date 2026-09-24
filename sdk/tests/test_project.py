@@ -231,10 +231,10 @@ def test_cli_init_pins_the_version_it_runs(
     payload = json.loads(capsys.readouterr().out)
     assert exit_code == 0
     assert payload["status"] == "ok"
-    assert payload["project"]["name"] == "fleet"
-    assert payload["project"]["version"] == installed
-    assert payload["project"]["git"] == "initialized"
-    assert payload["next"][-1] == "uv run cloudfall config validate"
+    assert payload["data"]["project"]["name"] == "fleet"
+    assert payload["data"]["project"]["version"] == installed
+    assert payload["data"]["project"]["git"] == "initialized"
+    assert payload["data"]["next"][-1] == "uv run cloudfall config validate"
     pyproject = (directory / "pyproject.toml").read_text(encoding="utf-8")
     assert f'dependencies = ["cloudfall=={installed}"]' in pyproject
 
@@ -248,7 +248,7 @@ def test_cli_init_accepts_a_description(
 
     payload = json.loads(capsys.readouterr().out)
     assert exit_code == 0
-    assert payload["project"]["git"] == "initialized"
+    assert payload["data"]["project"]["git"] == "initialized"
     assert "Acme CRM hosts" in (directory / "README.md").read_text(encoding="utf-8")
 
     exit_code = main(["init", str(tmp_path / "other"), "--description", " "])
@@ -383,7 +383,7 @@ def test_cli_finds_the_project_in_the_current_directory(
 
     payload = json.loads(capsys.readouterr().out)
     assert exit_code == 0
-    assert payload["resources"] == 12
+    assert payload["data"]["resources"] == 12
 
 
 def test_cli_reports_a_missing_project_as_json(
@@ -434,7 +434,7 @@ def test_init_writes_the_agent_contract_and_the_claude_pointer(
     assert "Ask the human what this project manages" in _section(
         contract, "What this project manages"
     )
-    assert '`{"status": "error",' in _section(contract, "Output contract")
+    assert '`{"ok": false, "status": "error",' in _section(contract, "Output contract")
     assert "| `3` |" in _section(contract, "Output contract")
     assert "`secretRefs`" in _section(contract, "Secrets")
     assert "`tmp/`" in _section(contract, "Evidence")
