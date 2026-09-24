@@ -124,3 +124,7 @@ Discovered during §2 second refresh on 2026-09-23.
 ### §2 path to 2/3 — accept `--output json`, add `ok` and `data`
 The remaining §2 gaps are names, not consistency. (1) Accept `--output json` as a no-op global flag (JSON is already unconditional), so an agent that follows the convention does not get exit 2. (2) Add a boolean `ok` and nest each command's payload under `data`. Under the output contract this is a MINOR (1.1) if `ok`/`data` are added beside the current top-level keys and those are listed in `DEPRECATED_FIELDS` for removal in 2.0.
 Discovered during §2 second refresh on 2026-09-23.
+
+### §2 resolved to 2/3 — `--output json`, `ok` and `data` shipped in e3a03af
+Every document is `{ok, status, data, error?, meta, warnings}` and `--output json` is accepted everywhere. The path to 3/3 is `meta.request_id` (a per-invocation id an agent can quote in a retry or bug report) and `meta.duration_ms`; both fit the writer in `output.py` as a MINOR (1.1) addition. The `migrate --yes` stdout failure stays a §3 item.
+Discovered during §2 third refresh on 2026-09-24.
