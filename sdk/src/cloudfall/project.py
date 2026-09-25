@@ -682,7 +682,10 @@ code is 0, `status` is the command's verdict (`ok`, `plan`, `drift`,
 "error": {{"code": …, "message": …}}}}` on stderr, and the `code` is stable:
 branch on it, not on the message. A failed `migrate` step is the one
 failure on stdout, with its steps under `data`. `--output json` is accepted
-and changes nothing. Read the exit code first:
+and changes nothing; `--quiet` writes nothing to stderr, not even the error,
+and `--warnings-as-errors` fails a result that carries a warning. `--help`
+is not JSON: use `cloudfall --schema` for the interface. Read the exit code
+first:
 
 | Exit | Meaning |
 |---|---|

@@ -55,7 +55,8 @@ class OutputShape:
     The keys are the command's flat payload. The writer lifts ``status`` and
     ``error`` to the top level, moves the rest under ``data``, and adds
     ``ok``, ``meta`` and ``warnings``; the schema describes that document.
-    ``error`` is on every document, ``null`` unless the shape declares it.
+    ``error`` is on every document: an object where the shape declares one,
+    otherwise ``null`` unless ``--warnings-as-errors`` failed the result.
     Only the keys are declared; what each one holds is open.
     """
 
@@ -96,10 +97,14 @@ def _stability(key: OutputKey) -> dict[str, object]:
 
 
 def _error_type(declared: OutputKey | None) -> str | list[str]:
-    """``null`` on a shape without an error, the object when it has one."""
-    if declared is None:
-        return "null"
-    return ["object", "null"] if declared.optional else "object"
+    """Type ``error``: an object where declared, else null or an object.
+
+    Any result can become a failure under ``--warnings-as-errors``, so only a
+    declared, required error rules out ``null``.
+    """
+    if declared is not None and not declared.optional:
+        return "object"
+    return ["null", "object"]
 
 
 _LIFTED = frozenset({"status", "error"})

@@ -18,10 +18,13 @@ from cloudfall.output import (
     SCHEMA_CHANGELOG,
     DeprecatedField,
     FieldPath,
+    OutputOptions,
     SchemaChange,
     SchemaVersion,
     begin_invocation,
+    configure_output,
     envelope,
+    exit_code,
     write_error,
     write_result,
 )
@@ -320,3 +323,99 @@ def test_writing_outside_an_invocation_is_a_bug() -> None:
     assert completed.returncode != 0
     assert completed.stdout == ""
     assert "no invocation has begun" in completed.stderr
+
+
+def test_help_goes_to_stderr_when_stdout_is_not_a_terminal(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    code, out, err = _run(["inventory", "show", "--help"], capsys)
+
+    assert (code, out) == (0, "")
+    assert err.startswith("usage: cloudfall inventory show")
+
+
+def test_quiet_silences_help_off_a_terminal(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert _run(["--quiet", "--help"], capsys) == (0, "", "")
+
+
+def test_help_stays_on_stdout_for_a_person_at_a_terminal() -> None:
+    import os  # noqa: PLC0415 - test-local.
+    import pty  # noqa: PLC0415 - test-local.
+
+    pid, descriptor = pty.fork()
+    if pid == 0:
+        entry = "from cloudfall.cli import run; run()"
+        # Python 3.14's argparse colors help on a terminal; NO_COLOR keeps
+        # the text comparable.
+        os.execve(  # noqa: S606 - fixed interpreter and entry point.
+            sys.executable,
+            [sys.executable, "-c", entry, "--help"],
+            {**os.environ, "NO_COLOR": "1"},
+        )
+    printed = b""
+    while True:
+        try:
+            chunk = os.read(descriptor, 65536)
+        except OSError:
+            break
+        if not chunk:
+            break
+        printed += chunk
+    _, status = os.waitpid(pid, 0)
+
+    assert os.waitstatus_to_exitcode(status) == 0
+    assert printed.decode().startswith("usage: cloudfall")
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["--quiet", "config", "validate", "--project", str(ROOT / "missing")],
+        ["config", "validate", "--project", str(ROOT / "missing"), "--quiet"],
+        ["--quiet", "inventory", "shoe"],
+    ],
+)
+def test_quiet_leaves_only_the_exit_code(
+    argv: list[str], capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert _run(argv, capsys) == (2, "", "")
+
+
+def test_quiet_keeps_the_result_on_stdout(capsys: pytest.CaptureFixture[str]) -> None:
+    code, out, err = _run(["changelog", "--quiet"], capsys)
+
+    assert (code, err) == (0, "")
+    assert json.loads(out)["ok"] is True
+
+
+def test_warnings_as_errors_fails_a_result_that_carries_a_warning() -> None:
+    deprecated = DeprecatedField(
+        path=FieldPath("data.inventory"),
+        replacement=FieldPath("data.fleet"),
+        removed_in=SchemaVersion(2, 0),
+    )
+    begin_invocation()
+    configure_output(OutputOptions(warnings_as_errors=True))
+
+    document = envelope(
+        {"status": "ok", "inventory": {}}, ok=True, deprecated_fields=(deprecated,)
+    )
+
+    assert (document["ok"], document["status"]) == (False, "ok")
+    assert document["data"] == {"inventory": {}}
+    assert document["error"] == {
+        "code": "warnings_as_errors",
+        "message": "--warnings-as-errors: 1 warning(s) (FIELD_DEPRECATED)",
+    }
+    assert (exit_code(0), exit_code(2)) == (1, 2)
+
+
+def test_warnings_as_errors_leaves_a_clean_result_alone(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    code, out, _ = _run(["changelog", "--warnings-as-errors"], capsys)
+
+    assert code == 0
+    assert (json.loads(out)["ok"], json.loads(out)["error"]) == (True, None)

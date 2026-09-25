@@ -184,12 +184,28 @@ class ResponseMeta:
 
 
 @dataclass(frozen=True, slots=True)
+class OutputOptions:
+    """What the caller asked of the output channels, beyond the format."""
+
+    quiet: bool = False
+    """``--quiet``: write nothing to stderr, not even an error document."""
+
+    warnings_as_errors: bool = False
+    """``--warnings-as-errors``: a result carrying a warning is a failure."""
+
+
+@dataclass(slots=True)
 class Invocation:
-    """One run of the CLI: its id and when it started."""
+    """One run of the CLI: its id, when it started, and its output options."""
 
     request_id: uuid.UUID
     started: float
     """``time.monotonic()`` at the start, immune to wall-clock changes."""
+
+    options: OutputOptions = OutputOptions()
+
+    failed_on_warnings: bool = False
+    """Whether ``--warnings-as-errors`` turned a result into a failure."""
 
     @classmethod
     def start(cls) -> Invocation:
@@ -223,6 +239,16 @@ def current_invocation() -> Invocation:
     except LookupError:
         message = "no invocation has begun; call begin_invocation() first"
         raise RuntimeError(message) from None
+
+
+def configure_output(options: OutputOptions) -> None:
+    """Apply the caller's output options to the running invocation."""
+    current_invocation().options = options
+
+
+def exit_code(code: int) -> int:
+    """Return the process exit code, 1 where a warning failed a successful run."""
+    return 1 if code == 0 and current_invocation().failed_on_warnings else code
 
 
 SCHEMA_CHANGELOG: tuple[SchemaChange, ...] = (
@@ -302,7 +328,9 @@ def write_error(payload: Mapping[str, object]) -> None:
     if set(payload) != {"status", "error"} or payload["status"] != "error":
         message = f"an error payload is status and error only, got {sorted(payload)}"
         raise ValueError(message)
-    _write(sys.stderr, envelope(payload, ok=False))
+    document = envelope(payload, ok=False)
+    if not current_invocation().options.quiet:
+        _write(sys.stderr, document)
 
 
 def envelope(
@@ -341,7 +369,20 @@ def envelope(
         for deprecated in deprecated_fields
         if deprecated.path.present_in(document)
     ]
-    return {**document, "meta": current_invocation().meta(), "warnings": warnings}
+    invocation = current_invocation()
+    if ok and warnings and invocation.options.warnings_as_errors:
+        invocation.failed_on_warnings = True
+        codes = ", ".join(sorted({str(warning["code"]) for warning in warnings}))
+        document["ok"] = False
+        document["error"] = {
+            "code": WARNINGS_AS_ERRORS,
+            "message": f"--warnings-as-errors: {len(warnings)} warning(s) ({codes})",
+        }
+    return {**document, "meta": invocation.meta(), "warnings": warnings}
+
+
+WARNINGS_AS_ERRORS = "warnings_as_errors"
+"""The error code of a result that ``--warnings-as-errors`` failed."""
 
 
 _LIFTED_KEYS = frozenset({"status", "error"})

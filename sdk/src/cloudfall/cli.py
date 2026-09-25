@@ -27,7 +27,7 @@ from cloudfall.ansible_api import (
 from cloudfall.ansible_reader import FleetRead, read_fleet
 from cloudfall.arguments import (
     StrictArgumentParser,
-    add_output_format,
+    add_output_options,
     parse_arguments,
     project_path_argument,
     release_id_argument,
@@ -124,6 +124,8 @@ from cloudfall.operator import (
 )
 from cloudfall.output import (
     begin_invocation,
+    current_invocation,
+    exit_code,
     schema_changes_since,
     schema_versions,
     write_error,
@@ -533,7 +535,7 @@ def _add_why_parser(
 
 def _parser() -> StrictArgumentParser:
     parser = _command_parser()
-    add_output_format(parser)
+    add_output_options(parser)
     return parser
 
 
@@ -1266,6 +1268,10 @@ def _add_lifecycle_arguments(parser: argparse.ArgumentParser) -> None:
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the CLI and return a process exit code."""
     begin_invocation()
+    return exit_code(_main(argv))
+
+
+def _main(argv: Sequence[str] | None) -> int:
     arguments = parse_arguments(_parser(), argv)
     projectless_command = _PROJECTLESS_COMMANDS.get(arguments.command)
     if projectless_command is not None:
@@ -2028,7 +2034,9 @@ def _run_dashboard_serve(
     )
     endpoint = ListenEndpoint(host=str(arguments.host), port=int(arguments.port))
     refresh = RefreshInterval.from_boundary(int(arguments.refresh))
-    server = create_dashboard_server(sources, endpoint, refresh)
+    server = create_dashboard_server(
+        sources, endpoint, refresh, quiet=current_invocation().options.quiet
+    )
     bound_port = int(server.server_address[1])
     write_result(
         {

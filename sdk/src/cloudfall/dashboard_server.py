@@ -144,9 +144,13 @@ class DashboardHTTPServer(ThreadingHTTPServer):
 
     daemon_threads = True
 
-    def __init__(self, endpoint: ListenEndpoint, cache: SnapshotCache) -> None:
+    def __init__(
+        self, endpoint: ListenEndpoint, cache: SnapshotCache, *, quiet: bool = False
+    ) -> None:
         """Bind the endpoint and expose the cache to request handlers."""
         self.cache = cache
+        self.quiet = quiet
+        """``--quiet``: handlers log no request line to stderr."""
         super().__init__((endpoint.host, endpoint.port), _DashboardRequestHandler)
 
 
@@ -172,6 +176,13 @@ class _DashboardRequestHandler(BaseHTTPRequestHandler):
             return
         self._respond(HTTPStatus.OK, "text/html; charset=utf-8", snapshot.html)
 
+    def log_message(self, format: str, *args: object) -> None:  # noqa: A002 - base signature
+        """Log the request line to stderr unless the server runs ``--quiet``."""
+        server = self.server
+        if isinstance(server, DashboardHTTPServer) and server.quiet:
+            return
+        super().log_message(format, *args)
+
     def _cache(self) -> SnapshotCache:
         server = self.server
         if not isinstance(server, DashboardHTTPServer):
@@ -194,8 +205,10 @@ def create_dashboard_server(
     endpoint: ListenEndpoint,
     refresh: RefreshInterval,
     clock: Callable[[], float] = time.monotonic,
+    *,
+    quiet: bool = False,
 ) -> DashboardHTTPServer:
     """Build one snapshot eagerly (fail fast), then bind the HTTP server."""
     cache = SnapshotCache(sources=sources, refresh=refresh, clock=clock)
     cache.current()
-    return DashboardHTTPServer(endpoint, cache)
+    return DashboardHTTPServer(endpoint, cache, quiet=quiet)

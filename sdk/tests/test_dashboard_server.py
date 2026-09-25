@@ -190,3 +190,28 @@ def test_eager_first_snapshot_fails_fast(tmp_path: Path) -> None:
             ListenEndpoint(host="127.0.0.1", port=0),
             RefreshInterval(10),
         )
+
+
+@pytest.mark.parametrize(("quiet", "logged"), [(False, True), (True, False)])
+def test_quiet_keeps_request_lines_off_stderr(
+    quiet: bool,  # noqa: FBT001 - parametrized
+    logged: bool,  # noqa: FBT001 - parametrized
+    tmp_path: Path,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    server = create_dashboard_server(
+        _sources(tmp_path),
+        ListenEndpoint(host="127.0.0.1", port=0),
+        RefreshInterval(60),
+        quiet=quiet,
+    )
+    thread = _serve(server)
+    try:
+        status, _ = _get(int(server.server_address[1]), "/missing")
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+    assert status == 404
+    assert ("GET /missing" in capfd.readouterr().err) is logged

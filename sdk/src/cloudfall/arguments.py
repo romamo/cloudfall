@@ -11,13 +11,17 @@ use, and names unrecognized options without their values.
 from __future__ import annotations
 
 import argparse
+import sys
 from typing import TYPE_CHECKING, Any, NoReturn
 
 from cloudfall.domain import ReleaseId, ResourceId
 from cloudfall.manifest import build_manifest, leaf_parsers
 from cloudfall.output import (
     TOOL_VERSION,
+    OutputOptions,
     SchemaVersion,
+    configure_output,
+    current_invocation,
     schema_versions,
     supported_schema_major,
     write_error,
@@ -28,6 +32,8 @@ from cloudfall.project import project_path
 if TYPE_CHECKING:
     from collections.abc import Sequence
     from pathlib import Path
+
+    from _typeshed import SupportsWrite
 
 INVALID_ARGUMENT = "invalid_argument"
 
@@ -43,6 +49,21 @@ class StrictArgumentParser(argparse.ArgumentParser):
         """Create the parser with long-option abbreviations disabled."""
         kwargs["allow_abbrev"] = False
         super().__init__(*args, **kwargs)
+
+    def print_help(self, file: SupportsWrite[str] | None = None) -> None:
+        """Print help to stdout for a person, to stderr when stdout is not a TTY.
+
+        A caller capturing stdout expects JSON there, so help text goes to
+        stderr instead, and ``--quiet`` silences it like any other stderr.
+        """
+        if file is None:
+            if sys.stdout.isatty():
+                file = sys.stdout
+            elif current_invocation().options.quiet:
+                return
+            else:
+                file = sys.stderr
+        super().print_help(file)
 
     def error(self, message: str) -> NoReturn:
         """Emit the usage error as a JSON envelope and exit with code 2."""
@@ -134,30 +155,62 @@ OUTPUT_FORMATS = ("json",)
 """What ``--output`` accepts. JSON is the only format, so the flag changes
 nothing; it exists so a caller that asks for JSON the usual way gets it."""
 
+_QUIET = "--quiet"
+_WARNINGS_AS_ERRORS = "--warnings-as-errors"
 
-def add_output_format(parser: argparse.ArgumentParser) -> None:
-    """Accept ``--output json`` before the command and after every leaf command."""
-    _add_output_argument(parser, default=OUTPUT_FORMATS[0])
+
+def add_output_options(parser: argparse.ArgumentParser) -> None:
+    """Accept the output options before the command and after every leaf command.
+
+    ``--output json``, ``--quiet`` and ``--warnings-as-errors`` describe the
+    output channels, not the command, so every command takes them.
+    """
+    _add_output_arguments(parser, root=True)
     for _name, leaf in leaf_parsers(parser):
         if leaf is not parser:
-            # SUPPRESS keeps a leaf from resetting the value given before it.
-            _add_output_argument(leaf, default=argparse.SUPPRESS)
+            _add_output_arguments(leaf, root=False)
 
 
-def _add_output_argument(parser: argparse.ArgumentParser, default: str) -> None:
+def _add_output_arguments(parser: argparse.ArgumentParser, *, root: bool) -> None:
+    # On a leaf, SUPPRESS keeps an absent flag from resetting the value
+    # given before the command.
     parser.add_argument(
         "--output",
         dest="output_format",
         choices=OUTPUT_FORMATS,
-        default=default,
+        default=OUTPUT_FORMATS[0] if root else argparse.SUPPRESS,
         help="output format; JSON is the only one and the default",
+    )
+    parser.add_argument(
+        _QUIET,
+        action="store_true",
+        default=False if root else argparse.SUPPRESS,
+        help="write nothing to stderr, not even an error; read the exit code",
+    )
+    parser.add_argument(
+        _WARNINGS_AS_ERRORS,
+        action="store_true",
+        default=False if root else argparse.SUPPRESS,
+        help="fail, exit 1, when a result carries any warning",
     )
 
 
 def parse_arguments(
     parser: StrictArgumentParser, argv: Sequence[str] | None
 ) -> argparse.Namespace:
-    """Parse ``argv``, rejecting unrecognized input without echoing values."""
+    """Parse ``argv``, rejecting unrecognized input without echoing values.
+
+    The output options apply before parsing, read from the raw tokens, so a
+    usage error honors ``--quiet``; once parsing succeeds, the parsed values
+    replace them.
+    """
+    tokens = list(sys.argv[1:] if argv is None else argv)
+    given = tokens[: tokens.index("--")] if "--" in tokens else tokens
+    configure_output(
+        OutputOptions(
+            quiet=_QUIET in given, warnings_as_errors=_WARNINGS_AS_ERRORS in given
+        )
+    )
     arguments, unrecognized = parser.parse_known_args(argv)
     if unrecognized:
         options = sorted(
@@ -172,6 +225,12 @@ def parse_arguments(
         if values:
             parts.append(f"{values} unexpected value(s), not shown")
         parser.error("; ".join(parts))
+    configure_output(
+        OutputOptions(
+            quiet=bool(getattr(arguments, "quiet", False)),
+            warnings_as_errors=bool(getattr(arguments, "warnings_as_errors", False)),
+        )
+    )
     return arguments
 
 

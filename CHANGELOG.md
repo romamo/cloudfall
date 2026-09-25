@@ -52,6 +52,13 @@ Notable changes to Cloudfall. The format follows
   not declared yet. The tests validate real output against these schemas,
   and an `etag` changes only when a command, flag or declared output does
 
+- `--quiet` writes nothing to stderr: no error document, no help text, and
+  no request lines from `dashboard serve`. The exit code still says what
+  happened, and results still go to stdout
+- `--warnings-as-errors` fails a result that carries a warning: the
+  document says `ok: false` with the error `warnings_as_errors`, its
+  `status` and `data` unchanged, and the command exits 1 instead of 0
+
 ### Changed
 
 - Every JSON document has the same six top-level keys: `ok` (true exactly
@@ -63,6 +70,9 @@ Notable changes to Cloudfall. The format follows
   "message"}}`. An agent reads `ok` and `data` without
   knowing which command it ran. Anything that read a payload key from the
   top level, such as `.inventory`, now reads it under `data`
+- `--help` prints to stderr when stdout is not a terminal, so a caller
+  capturing stdout never finds usage text where it expects JSON. At a
+  terminal it stays on stdout
 - `--output json` is accepted before the command and after every command.
   JSON is the only format, so the flag changes nothing; a caller that asks
   for JSON the usual way no longer gets a usage error. `--output` with any
