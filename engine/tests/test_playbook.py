@@ -153,3 +153,15 @@ def test_cli_reports_unknown_playbook(
     assert exit_code == 2
     payload = json.loads(capsys.readouterr().err)
     assert payload["error"]["code"] == "playbook_missing"
+
+
+def test_a_usage_error_is_a_json_document(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit) as exit_info:
+        main(["playbook", "list", "--bogus"])
+
+    captured = capsys.readouterr()
+    assert exit_info.value.code == 2
+    assert captured.out == ""
+    assert json.loads(captured.err)["error"]["code"] == "invalid_argument"

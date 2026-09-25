@@ -14,6 +14,7 @@ from cloudfall.arguments import (
     project_path_argument,
 )
 from cloudfall.inventory import PlatformInventory
+from cloudfall.output import begin_invocation
 from cloudfall.project import (
     PROJECT_DIRECTORY_VARIABLE,
     ProjectError,
@@ -249,6 +250,9 @@ def _run_playbook(arguments: argparse.Namespace) -> int:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Run one engine command and return a process exit code."""
+    # The shared parser reports usage errors through cloudfall's writer,
+    # which stamps each document with its invocation.
+    begin_invocation()
     arguments = parse_arguments(_parser(), argv)
     if arguments.command == "playbook":
         if arguments.playbook_command == "list":
