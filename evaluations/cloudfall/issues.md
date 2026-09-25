@@ -148,3 +148,7 @@ Discovered during §3 evaluation on 2026-09-24.
 ### §3 resolved — `observe` captures the playbook output
 `_run_playbook` now captures stdout and stderr together (`stderr=STDOUT`, stdin `/dev/null`) and returns `PlaybookRun(exit_code, output)`; a failed run keeps the last 2000 characters in `data.detail`. Re-run against `config/examples`: exit 1, one JSON line on stdout, 0 bytes on stderr, `detail` ends with the play recap. The same path serves the `observe` tool of `cloudfall-mcp`, whose stdout is the JSON-RPC stream.
 Fixed on 2026-09-24.
+
+### §3 path to 3/3 — help on stderr off a TTY, `--quiet`, `--warnings-as-errors`
+After d38d9c0 stdout carries only JSON except under an explicit `--help`, which argparse prints to stdout even when stdout is a pipe. Level 3 also needs `--quiet` (silence stderr, which today holds only JSON errors and `dashboard serve`'s request log) and `--warnings-as-errors` (exit non-zero when `warnings[]` is non-empty; `DEPRECATED_FIELDS` is the only source of warnings today). All three fit next to `--output` in `add_output_format`/`root_parser`.
+Discovered during §3 refresh on 2026-09-25.
