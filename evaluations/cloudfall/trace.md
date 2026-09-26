@@ -1078,35 +1078,37 @@ cloudfall: error: argument command: invalid choice: 'check-permissions' (choose 
 ```
 
 ## §1 — Exit Codes & Status Signaling
-**Date:** 2026-09-26 (second refresh, at 8c94884)
-**CLI version:** 0.5.1 at 8c94884 (output schema 1.0)
-**Check command:** `uv run cloudfall <cmd> --project $PWD/config/examples </dev/null`, exit code read with the last JSON line of stdout or stderr: missing args, invalid values, nonexistent resources, simulated network failures (unresolvable hosts, unreachable health probe, Render API without network access), a conflict, a read-only project copy (`add`) and a read-only parent (`init`), and an audit without observations; then `--help` and `--schema` searched for an exit-code table
+**Date:** 2026-09-26 (third refresh, at 578cd4a)
+**CLI version:** 0.5.1 at 578cd4a (output schema 1.0)
+**Check command:** `uv run cloudfall <cmd> --project $PWD/config/examples </dev/null`, exit code read with the last JSON line: missing args, nonexistent resources, a conflict, unresolvable hosts, Render API without network access, `init` under a read-only dir, `audit` without observations; then `cloudfall --help` and `cloudfall health --help` (stdout discarded) and `--schema`
 **Exit code:** per case below
 **Score:** 1/3
 
 **stdout** (first 20 lines):
 ```
-missing required arg (deploy)                 exit=2 ok=False status=error code=invalid_argument
-invalid value (--release r1)                  exit=2 ok=False status=error code=invalid_argument
-nonexistent component (health ghost)          exit=2 ok=False status=error code=lifecycle_component_missing
-nonexistent proposal (operator show)          exit=2 ok=False status=error code=operator_proposal_missing
-nonexistent service (backup run)              exit=2 ok=False status=error code=lifecycle_service_missing
-missing project dir                           exit=2 ok=False status=error code=project_directory_missing
-network: unresolvable hosts (restart --yes)   exit=1 ok=False status=error code=lifecycle_execution_failed
-network: health probe unreachable             exit=1 ok=False status=unhealthy code=None
-network: render API unreachable               exit=2 ok=False status=error code=render_api_unreachable
-conflict: add existing server                 exit=2 ok=False status=error code=resource_exists
-permission: add into read-only project        exit=2 ok=False status=error code=project_write_failed
-permission: init under read-only dir          exit=1 ok=False status=error code=path_not_writable
-audit unknown (no observations)               exit=3 ok=False status=unknown code=None
+missing required arg (deploy)                  exit=2 status=error code=invalid_argument
+nonexistent component (health ghost)           exit=2 status=error code=lifecycle_component_missing
+nonexistent proposal (operator show)           exit=2 status=error code=operator_proposal_missing
+conflict: add existing server                  exit=2 status=error code=resource_exists
+network: unresolvable hosts (restart --yes)    exit=1 status=error code=lifecycle_execution_failed
+network: render API unreachable                exit=2 status=error code=render_api_unreachable
+permission: init under read-only dir           exit=1 status=error code=path_not_writable
+audit unknown (no observations)                exit=3 status=unknown code=None
 exit_code in any JSON body: never
---help: one mention of "exit code" (the --quiet help line), no table
---schema: no exit_codes key
+cloudfall health --help: 4 exit-code rows
+exit_codes in --schema: False
 ```
 
 **stderr** (first 20 lines):
 ```
-(every failure above: one JSON error line; no tracebacks)
+exit codes:
+  0  the command ran and its result is positive (ok: true)
+  1  the command ran and its result is negative: drift, unhealthy, a failed
+     step, or a path it had to write turned out read-only partway
+  2  nothing ran: invalid input or usage, a resource not found or already
+     there, or another unmet precondition
+  3  the result is unknown: observations missing or stale (audit), or a
+     migration paused before its next step (migrate)
 ```
 
 ## §2 — Output Format & Parseability
