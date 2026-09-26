@@ -12,8 +12,10 @@ from __future__ import annotations
 
 import argparse
 import sys
+import textwrap
 from typing import TYPE_CHECKING, Any, NoReturn
 
+from cloudfall.commands import EXIT_CODES
 from cloudfall.domain import ReleaseId, ResourceId
 from cloudfall.manifest import build_manifest, leaf_parsers
 from cloudfall.output import (
@@ -66,6 +68,13 @@ class StrictArgumentParser(argparse.ArgumentParser):
             else:
                 file = sys.stderr
         super().print_help(file)
+
+    def format_help(self) -> str:
+        """Return the help text, ending with the exit codes where they apply."""
+        text = super().format_help()
+        if not self.output_options:
+            return text
+        return f"{text}\n{exit_code_help()}"
 
     def error(self, message: str) -> NoReturn:
         """Emit the usage error as a JSON envelope and exit with code 2."""
@@ -165,13 +174,32 @@ def add_output_options(parser: StrictArgumentParser) -> None:
     """Accept the output options before the command and after every leaf command.
 
     ``--output json``, ``--quiet`` and ``--warnings-as-errors`` describe the
-    output channels, not the command, so every command takes them.
+    output channels, not the command, so every command takes them, and
+    every command's ``--help`` ends with the exit codes.
     """
     parser.output_options = True
     _add_output_arguments(parser, root=True)
     for _name, leaf in leaf_parsers(parser):
         if leaf is not parser:
+            if isinstance(leaf, StrictArgumentParser):
+                leaf.output_options = True
             _add_output_arguments(leaf, root=False)
+
+
+def exit_code_help() -> str:
+    """Return the exit codes as the closing section of ``--help``."""
+    lines = ["exit codes:"]
+    for exit_code in EXIT_CODES:
+        meaning = exit_code.meaning.replace("`", "")
+        lines.extend(
+            textwrap.wrap(
+                meaning,
+                width=78,
+                initial_indent=f"  {exit_code.code}  ",
+                subsequent_indent="     ",
+            )
+        )
+    return "\n".join(lines) + "\n"
 
 
 def _add_output_arguments(parser: argparse.ArgumentParser, *, root: bool) -> None:

@@ -25,7 +25,7 @@ from importlib import metadata
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from cloudfall.commands import CommandEffect, commands_with_effect
+from cloudfall.commands import EXIT_CODES, CommandEffect, commands_with_effect
 from cloudfall.domain import ResourceKind
 
 if TYPE_CHECKING:
@@ -608,6 +608,9 @@ def _agent_contract(options: InitOptions) -> str:
     reads = _command_rows(CommandEffect.READ)
     writes = _command_rows(CommandEffect.PROJECT)
     mutations = _command_rows(CommandEffect.SERVERS, with_gate=True)
+    exit_rows = "\n".join(
+        f"| `{exit_code.code}` | {exit_code.meaning} |" for exit_code in EXIT_CODES
+    )
     return f"""# Agent operating contract
 
 This is a [Cloudfall](https://cloudfall.dev) project: `{options.name}`.
@@ -689,10 +692,7 @@ first:
 
 | Exit | Meaning |
 |---|---|
-| `0` | the command ran and its result is positive (`ok: true`) |
-| `1` | the command ran and its result is negative: drift, unhealthy, a failed step |
-| `2` | invalid input, usage, or an unmet precondition; nothing ran |
-| `3` | compliance unknown: observations missing or stale (`audit`, `migrate`) |
+{exit_rows}
 
 ## Evidence
 

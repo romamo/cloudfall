@@ -13,6 +13,7 @@ from unittest.mock import ANY
 
 import pytest
 from cloudfall.cli import main
+from cloudfall.commands import EXIT_CODES
 from cloudfall.output import (
     RESPONSE_META,
     SCHEMA_CHANGELOG,
@@ -419,3 +420,16 @@ def test_warnings_as_errors_leaves_a_clean_result_alone(
 
     assert code == 0
     assert (json.loads(out)["ok"], json.loads(out)["error"]) == (True, None)
+
+
+@pytest.mark.parametrize("argv", [["--help"], ["inventory", "show", "--help"]])
+def test_help_ends_with_every_exit_code(
+    argv: list[str], capsys: pytest.CaptureFixture[str]
+) -> None:
+    code, _, err = _run(argv, capsys)
+
+    assert code == 0
+    table = err[err.index("\nexit codes:\n") :]
+    for declared in EXIT_CODES:
+        first_words = " ".join(declared.meaning.replace("`", "").split()[:4])
+        assert f"  {declared.code}  {first_words}" in table

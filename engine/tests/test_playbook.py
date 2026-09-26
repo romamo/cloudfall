@@ -180,3 +180,14 @@ def test_quiet_is_an_unknown_option_the_engine_names(
     error = json.loads(captured.err)["error"]
     assert error["code"] == "invalid_argument"
     assert "--quiet" in error["message"]
+
+
+def test_engine_help_carries_no_cloudfall_exit_codes(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The table describes cloudfall; the engine does not claim it."""
+    with pytest.raises(SystemExit) as exit_info:
+        main(["--help"])
+
+    assert exit_info.value.code == 0
+    assert "exit codes:" not in capsys.readouterr().err

@@ -13,6 +13,36 @@ from dataclasses import dataclass
 from enum import Enum
 
 
+@dataclass(frozen=True, slots=True)
+class ExitCode:
+    """One process exit code and what it tells the caller."""
+
+    code: int
+    meaning: str
+    """One clause; Markdown code spans for values and command names."""
+
+
+EXIT_CODES: tuple[ExitCode, ...] = (
+    ExitCode(0, "the command ran and its result is positive (`ok: true`)"),
+    ExitCode(
+        1,
+        "the command ran and its result is negative: drift, unhealthy, a failed "
+        "step, or a path it had to write turned out read-only partway",
+    ),
+    ExitCode(
+        2,
+        "nothing ran: invalid input or usage, a resource not found or already "
+        "there, or another unmet precondition",
+    ),
+    ExitCode(
+        3,
+        "the result is unknown: observations missing or stale (`audit`), or a "
+        "migration paused before its next step (`migrate`)",
+    ),
+)
+"""Every exit code ``cloudfall`` uses; ``--help`` and ``AGENTS.md`` print it."""
+
+
 class CommandEffect(Enum):
     """The furthest a command's side effects reach."""
 

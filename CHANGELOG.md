@@ -52,6 +52,10 @@ Notable changes to Cloudfall. The format follows
   not declared yet. The tests validate real output against these schemas,
   and an `etag` changes only when a command, flag or declared output does
 
+- Every `cloudfall` `--help` ends with the exit codes and what each one
+  means: 0 positive, 1 ran with a negative result, 2 nothing ran, 3
+  unknown. The generated `AGENTS.md` renders the same table from the same
+  source, so the two cannot drift
 - `--quiet` writes nothing to stderr: no error document, no help text, and
   no request lines from `dashboard serve`. The exit code still says what
   happened, and results still go to stdout
