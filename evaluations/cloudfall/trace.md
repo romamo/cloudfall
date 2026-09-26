@@ -1078,44 +1078,35 @@ cloudfall: error: argument command: invalid choice: 'check-permissions' (choose 
 ```
 
 ## §1 — Exit Codes & Status Signaling
-**Date:** 2026-09-26 (refresh, at 3060c65)
-**CLI version:** 0.5.1 at 3060c65 (output schema 1.0)
-**Check command:** `uv run cloudfall <cmd> --project $PWD/config/examples </dev/null`, exit code read with the last JSON line of stdout or stderr: missing required args, invalid values, nonexistent resources, simulated network failures (unresolvable hosts, refused gateway, Render API without network access), a conflict, a read-only project, and an audit without observations; then `--help` and `--schema` searched for an exit-code table
+**Date:** 2026-09-26 (second refresh, at 8c94884)
+**CLI version:** 0.5.1 at 8c94884 (output schema 1.0)
+**Check command:** `uv run cloudfall <cmd> --project $PWD/config/examples </dev/null`, exit code read with the last JSON line of stdout or stderr: missing args, invalid values, nonexistent resources, simulated network failures (unresolvable hosts, unreachable health probe, Render API without network access), a conflict, a read-only project copy (`add`) and a read-only parent (`init`), and an audit without observations; then `--help` and `--schema` searched for an exit-code table
 **Exit code:** per case below
 **Score:** 1/3
 
 **stdout** (first 20 lines):
 ```
-missing required arg (deploy, no component)   exit=2 ok=False status=error code=invalid_argument
-missing required option (operator run)        exit=2 ok=False status=error code=invalid_argument
+missing required arg (deploy)                 exit=2 ok=False status=error code=invalid_argument
 invalid value (--release r1)                  exit=2 ok=False status=error code=invalid_argument
 nonexistent component (health ghost)          exit=2 ok=False status=error code=lifecycle_component_missing
 nonexistent proposal (operator show)          exit=2 ok=False status=error code=operator_proposal_missing
 nonexistent service (backup run)              exit=2 ok=False status=error code=lifecycle_service_missing
-nonexistent operation (operations show)       exit=2 ok=False status=error code=operations_directory_missing
 missing project dir                           exit=2 ok=False status=error code=project_directory_missing
 network: unresolvable hosts (restart --yes)   exit=1 ok=False status=error code=lifecycle_execution_failed
 network: health probe unreachable             exit=1 ok=False status=unhealthy code=None
-network: operator gateway refused             exit=2 ok=False status=error code=operator_gateway_material_invalid
 network: render API unreachable               exit=2 ok=False status=error code=render_api_unreachable
 conflict: add existing server                 exit=2 ok=False status=error code=resource_exists
-audit (no observations)                       exit=3 ok=False status=unknown code=None
-migrate plan (component unbuilt)              exit=2 ok=False status=error code=migrate_component_unbuilt
-permission: add into read-only project        exit=1 (no JSON; traceback below)
+permission: add into read-only project        exit=2 ok=False status=error code=project_write_failed
+permission: init under read-only dir          exit=1 ok=False status=error code=path_not_writable
+audit unknown (no observations)               exit=3 ok=False status=unknown code=None
 exit_code in any JSON body: never
---help: no exit-code table (only "--quiet ... read the exit code", "--warnings-as-errors ... exit 1")
+--help: one mention of "exit code" (the --quiet help line), no table
 --schema: no exit_codes key
 ```
 
 **stderr** (first 20 lines):
 ```
-PermissionError: [Errno 13] Permission denied: '.../tmp/eval-s1ro/p/servers/h9.yaml'
-(traceback from pathlib write_text; exit 1)
-Documented table, generated AGENTS.md only (sdk/src/cloudfall/project.py):
-| `0` | the command ran and its result is positive (`ok: true`) |
-| `1` | the command ran and its result is negative: drift, unhealthy, a failed step |
-| `2` | invalid input, usage, or an unmet precondition; nothing ran |
-| `3` | compliance unknown: observations missing or stale (`audit`, `migrate`) |
+(every failure above: one JSON error line; no tracebacks)
 ```
 
 ## §2 — Output Format & Parseability
