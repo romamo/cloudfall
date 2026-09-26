@@ -92,6 +92,13 @@ Notable changes to Cloudfall. The format follows
 
 ### Fixed
 
+- `cloudfall add` into a read-only or full project failed with a Python
+  traceback and could leave a new server type behind when only the
+  server file failed. It now removes what it wrote and fails with
+  `project_write_failed` (exit 2), naming the file and the reason. Any
+  other command that cannot write a path because it is read-only or not
+  the caller's reports `path_not_writable` as JSON (exit 1, since part of
+  the work may be done) instead of a traceback
 - `cloudfall observe` no longer prints Ansible's play log on stdout ahead
   of its JSON document, which broke any caller parsing stdout as JSON.
   The playbook's output is captured, and when the run fails its last 2000

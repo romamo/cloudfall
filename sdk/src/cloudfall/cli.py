@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import os
 import sys
 import time
@@ -1268,7 +1269,23 @@ def _add_lifecycle_arguments(parser: argparse.ArgumentParser) -> None:
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the CLI and return a process exit code."""
     begin_invocation()
-    return exit_code(_main(argv))
+    try:
+        code = _main(argv)
+    except OSError as error:
+        # A path the command must write is read-only or not ours: a fact
+        # about the environment, reported like any other failure. Every
+        # other OS error is a bug and keeps its traceback.
+        if error.errno not in _NOT_WRITABLE:
+            raise
+        message = f"cannot write {error.filename}: {error.strerror}"
+        error_body = {"code": "path_not_writable", "message": message}
+        write_error({"status": "error", "error": error_body})
+        # Exit 1, not 2: the command may have done part of its work first.
+        code = 1
+    return exit_code(code)
+
+
+_NOT_WRITABLE = frozenset({errno.EACCES, errno.EPERM, errno.EROFS})
 
 
 def _main(argv: Sequence[str] | None) -> int:

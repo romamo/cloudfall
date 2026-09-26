@@ -172,3 +172,7 @@ Discovered during §1 refresh on 2026-09-26.
 ### §1 path to 2/3 — distinct codes for not-found, conflict, timeout, permission, and a table in `--help`
 Four codes serve cloudfall well within their own meaning (0 ok, 1 ran negative, 2 nothing ran, 3 unknown), and `ok` plus `error.code` already let an agent branch precisely. The rubric's level 2 wants the spec table: not-found (5), conflict (6), permission (7), timeout (10), distinct from usage (2), and network failures on one code instead of 1 or 2 depending on the command. That is a breaking change to exit codes, so it wants the same deprecation care as the output contract. Documenting the table in `cloudfall --help` (an epilog) and adding `exit_code` to the JSON error body and a per-command `exit_codes` list to `--schema` are additive.
 Discovered during §1 refresh on 2026-09-26.
+
+### §1/§18 resolved — a read-only project is a JSON error, not a traceback
+`add` catches the write failure in `_commit`, removes the files it already wrote, and raises `project_write_failed` (exit 2); the live rerun against a read-only copy of `config/examples` gives exit 2, the JSON error naming `servers/h9.yaml: Permission denied`, and an unchanged `servers/`. `main` turns any other `EACCES`/`EPERM`/`EROFS` into `path_not_writable` (exit 1); other `OSError`s keep their traceback as bugs.
+Fixed on 2026-09-26.

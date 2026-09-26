@@ -207,3 +207,78 @@ def test_cli_add_reports_bad_arguments_as_json(
     assert exit_code == 2
     assert payload["error"]["code"] == "invalid_argument"
     assert not (project / "servers" / "H1.yaml").exists()
+
+
+def _files(directory: Path) -> set[str]:
+    return {path.relative_to(directory).as_posix() for path in directory.rglob("*")}
+
+
+def test_cli_add_into_a_read_only_project_changes_nothing(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    project = _project(tmp_path)
+    before = _files(project)
+    for directory in (project, *(p for p in project.rglob("*") if p.is_dir())):
+        directory.chmod(0o555)
+    try:
+        code = main(
+            [
+                *("add", "server", "h1", "--address", "203.0.113.10"),
+                *("--project", str(project), "--schemas", str(SCHEMAS)),
+            ]
+        )
+    finally:
+        for directory in (project, *(p for p in project.rglob("*") if p.is_dir())):
+            directory.chmod(0o755)
+
+    captured = capsys.readouterr()
+    assert (code, captured.out) == (2, "")
+    error = json.loads(captured.err)["error"]
+    assert error["code"] == "project_write_failed"
+    assert "Permission denied" in error["message"]
+    assert _files(project) == before
+
+
+def test_add_removes_what_it_wrote_when_a_later_file_fails(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A new server type is written first; if the server fails, it goes too."""
+    project = _project(tmp_path)
+    servers = project / "servers"
+    servers.mkdir(exist_ok=True)
+    before = _files(project)
+    servers.chmod(0o555)
+    try:
+        code = main(
+            [
+                *("add", "server", "h1", "--address", "203.0.113.10"),
+                *("--project", str(project), "--schemas", str(SCHEMAS)),
+            ]
+        )
+    finally:
+        servers.chmod(0o755)
+
+    assert code == 2
+    assert json.loads(capsys.readouterr().err)["error"]["code"] == (
+        "project_write_failed"
+    )
+    assert _files(project) == before
+
+
+def test_any_command_reports_a_read_only_path_as_json(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    parent = tmp_path / "read-only"
+    parent.mkdir()
+    parent.chmod(0o555)
+    try:
+        code = main(["init", str(parent / "project")])
+    finally:
+        parent.chmod(0o755)
+
+    captured = capsys.readouterr()
+    assert (code, captured.out) == (1, "")
+    document = json.loads(captured.err)
+    assert document["ok"] is False
+    assert document["error"]["code"] == "path_not_writable"
+    assert str(parent / "project") in document["error"]["message"]

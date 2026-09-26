@@ -49,6 +49,7 @@ BASELINE_ROOT_MINIMUM_BYTES = 20_000_000_000
 _ERROR_KEY_FILE_MISSING = "ssh_key_file_missing"
 _ERROR_KEY_FILE_INVALID = "ssh_key_file_invalid"
 _ERROR_RESOURCE_EXISTS = "resource_exists"
+_ERROR_PROJECT_WRITE_FAILED = "project_write_failed"
 
 
 class AuthoringError(RuntimeError):
@@ -332,6 +333,13 @@ def _commit(
         for path in written:
             path.unlink()
         raise
+    except OSError as error:
+        # A read-only or full project: leave it as it was, then say which
+        # file could not be written and why.
+        for path in written:
+            path.unlink()
+        message = f"cannot write {error.filename}: {error.strerror}"
+        raise AuthoringError(_ERROR_PROJECT_WRITE_FAILED, message) from error
     return AddResult(
         project=project,
         added=tuple(
