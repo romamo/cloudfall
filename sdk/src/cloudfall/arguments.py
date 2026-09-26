@@ -49,6 +49,8 @@ class StrictArgumentParser(argparse.ArgumentParser):
         """Create the parser with long-option abbreviations disabled."""
         kwargs["allow_abbrev"] = False
         super().__init__(*args, **kwargs)
+        self.output_options = False
+        """Whether ``add_output_options`` gave this command tree ``--quiet``."""
 
     def print_help(self, file: SupportsWrite[str] | None = None) -> None:
         """Print help to stdout for a person, to stderr when stdout is not a TTY.
@@ -159,12 +161,13 @@ _QUIET = "--quiet"
 _WARNINGS_AS_ERRORS = "--warnings-as-errors"
 
 
-def add_output_options(parser: argparse.ArgumentParser) -> None:
+def add_output_options(parser: StrictArgumentParser) -> None:
     """Accept the output options before the command and after every leaf command.
 
     ``--output json``, ``--quiet`` and ``--warnings-as-errors`` describe the
     output channels, not the command, so every command takes them.
     """
+    parser.output_options = True
     _add_output_arguments(parser, root=True)
     for _name, leaf in leaf_parsers(parser):
         if leaf is not parser:
@@ -200,17 +203,19 @@ def parse_arguments(
 ) -> argparse.Namespace:
     """Parse ``argv``, rejecting unrecognized input without echoing values.
 
-    The output options apply before parsing, read from the raw tokens, so a
-    usage error honors ``--quiet``; once parsing succeeds, the parsed values
-    replace them.
+    Where the parser defines the output options, they apply before parsing,
+    read from the raw tokens, so a usage error honors ``--quiet``; once
+    parsing succeeds, the parsed values replace them. A parser without them
+    reports ``--quiet`` as the unrecognized option it is.
     """
     tokens = list(sys.argv[1:] if argv is None else argv)
     given = tokens[: tokens.index("--")] if "--" in tokens else tokens
-    configure_output(
-        OutputOptions(
-            quiet=_QUIET in given, warnings_as_errors=_WARNINGS_AS_ERRORS in given
+    if parser.output_options:
+        configure_output(
+            OutputOptions(
+                quiet=_QUIET in given, warnings_as_errors=_WARNINGS_AS_ERRORS in given
+            )
         )
-    )
     arguments, unrecognized = parser.parse_known_args(argv)
     if unrecognized:
         options = sorted(

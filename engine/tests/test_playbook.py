@@ -165,3 +165,18 @@ def test_a_usage_error_is_a_json_document(
     assert exit_info.value.code == 2
     assert captured.out == ""
     assert json.loads(captured.err)["error"]["code"] == "invalid_argument"
+
+
+def test_quiet_is_an_unknown_option_the_engine_names(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The engine has no --quiet, so it must say so instead of going silent."""
+    with pytest.raises(SystemExit) as exit_info:
+        main(["playbook", "list", "--quiet"])
+
+    captured = capsys.readouterr()
+    assert exit_info.value.code == 2
+    assert captured.out == ""
+    error = json.loads(captured.err)["error"]
+    assert error["code"] == "invalid_argument"
+    assert "--quiet" in error["message"]

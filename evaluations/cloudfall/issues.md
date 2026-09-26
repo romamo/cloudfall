@@ -160,3 +160,7 @@ Discovered during §3 second refresh on 2026-09-26.
 ### §3/§1 candidate — `cloudfall-engine ... --quiet` exits 2 in silence
 `cloudfall-engine playbook list --quiet` → exit 2, 0 bytes on stdout and stderr. The engine parser does not define `--quiet`, so parsing fails with "unrecognized options --quiet"; but the shared `parse_arguments` (`sdk/src/cloudfall/arguments.py`) reads `--quiet` from the raw tokens before parsing so that cloudfall usage errors honor it, and that pre-scan silences the very error saying the flag is unknown. Compare `--bogus`, which prints the JSON `invalid_argument`. Either the engine gains the output options (`add_output_options`), or the pre-scan applies only when the parser defines `--quiet`.
 Discovered during §3 second refresh on 2026-09-26.
+
+### §3/§1 resolved — `cloudfall-engine` names an unknown `--quiet`
+`parse_arguments` reads `--quiet` from the raw tokens only when the parser defines the output options (`StrictArgumentParser.output_options`, set by `add_output_options`). `cloudfall-engine playbook list --quiet` now exits 2 with `invalid_argument: cloudfall-engine: unrecognized options --quiet` on stderr; `cloudfall --quiet inventory shoe` still exits 2 in silence, as asked.
+Fixed on 2026-09-26.
