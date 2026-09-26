@@ -164,3 +164,11 @@ Discovered during §3 second refresh on 2026-09-26.
 ### §3/§1 resolved — `cloudfall-engine` names an unknown `--quiet`
 `parse_arguments` reads `--quiet` from the raw tokens only when the parser defines the output options (`StrictArgumentParser.output_options`, set by `add_output_options`). `cloudfall-engine playbook list --quiet` now exits 2 with `invalid_argument: cloudfall-engine: unrecognized options --quiet` on stderr; `cloudfall --quiet inventory shoe` still exits 2 in silence, as asked.
 Fixed on 2026-09-26.
+
+### §1/§18 candidate — a read-only project crashes `add` with a traceback
+`cloudfall add server h9 --address 192.0.2.9 --project <read-only copy of config/examples>` → exit 1, no JSON, a `PermissionError` traceback from `pathlib.write_text` (`servers/h9.yaml`). Authoring errors are otherwise JSON (`resource_exists` exit 2). Any `OSError` from writing the project should become a JSON error with its own code, such as `project_not_writable`.
+Discovered during §1 refresh on 2026-09-26.
+
+### §1 path to 2/3 — distinct codes for not-found, conflict, timeout, permission, and a table in `--help`
+Four codes serve cloudfall well within their own meaning (0 ok, 1 ran negative, 2 nothing ran, 3 unknown), and `ok` plus `error.code` already let an agent branch precisely. The rubric's level 2 wants the spec table: not-found (5), conflict (6), permission (7), timeout (10), distinct from usage (2), and network failures on one code instead of 1 or 2 depending on the command. That is a breaking change to exit codes, so it wants the same deprecation care as the output contract. Documenting the table in `cloudfall --help` (an epilog) and adding `exit_code` to the JSON error body and a per-command `exit_codes` list to `--schema` are additive.
+Discovered during §1 refresh on 2026-09-26.

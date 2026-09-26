@@ -1078,119 +1078,44 @@ cloudfall: error: argument command: invalid choice: 'check-permissions' (choose 
 ```
 
 ## §1 — Exit Codes & Status Signaling
-**Date:** 2026-09-14
-**CLI version:** 0.1.0
-**Check command:** `cloudfall deploy < /dev/null`; `cloudfall health nonexistent --project tmp/eval/proj < /dev/null`; `cloudfall health 'Bad ID!' --project tmp/eval/proj < /dev/null`; `cloudfall config validate --project tmp/eval < /dev/null`; `cloudfall audit --project tmp/eval/proj --observed tmp/eval/nope < /dev/null`; `cloudfall operator show ghost --project tmp/eval/proj < /dev/null`; `cloudfall health crm-backend --project tmp/eval/proj < /dev/null`
-**Exit code:** s1-missing-args=2, s1-unknown-component=2, s1-invalid-id=1, s1-not-a-project=2, s1-observed-missing=2, s1-proposal-missing=2, s1-network-dns-fail=1
+**Date:** 2026-09-26 (refresh, at 3060c65)
+**CLI version:** 0.5.1 at 3060c65 (output schema 1.0)
+**Check command:** `uv run cloudfall <cmd> --project $PWD/config/examples </dev/null`, exit code read with the last JSON line of stdout or stderr: missing required args, invalid values, nonexistent resources, simulated network failures (unresolvable hosts, refused gateway, Render API without network access), a conflict, a read-only project, and an audit without observations; then `--help` and `--schema` searched for an exit-code table
+**Exit code:** per case below
 **Score:** 1/3
 
-### s1-missing-args (exit 2, 0.19s, 0 stdout bytes)
-
 **stdout** (first 20 lines):
 ```
-
+missing required arg (deploy, no component)   exit=2 ok=False status=error code=invalid_argument
+missing required option (operator run)        exit=2 ok=False status=error code=invalid_argument
+invalid value (--release r1)                  exit=2 ok=False status=error code=invalid_argument
+nonexistent component (health ghost)          exit=2 ok=False status=error code=lifecycle_component_missing
+nonexistent proposal (operator show)          exit=2 ok=False status=error code=operator_proposal_missing
+nonexistent service (backup run)              exit=2 ok=False status=error code=lifecycle_service_missing
+nonexistent operation (operations show)       exit=2 ok=False status=error code=operations_directory_missing
+missing project dir                           exit=2 ok=False status=error code=project_directory_missing
+network: unresolvable hosts (restart --yes)   exit=1 ok=False status=error code=lifecycle_execution_failed
+network: health probe unreachable             exit=1 ok=False status=unhealthy code=None
+network: operator gateway refused             exit=2 ok=False status=error code=operator_gateway_material_invalid
+network: render API unreachable               exit=2 ok=False status=error code=render_api_unreachable
+conflict: add existing server                 exit=2 ok=False status=error code=resource_exists
+audit (no observations)                       exit=3 ok=False status=unknown code=None
+migrate plan (component unbuilt)              exit=2 ok=False status=error code=migrate_component_unbuilt
+permission: add into read-only project        exit=1 (no JSON; traceback below)
+exit_code in any JSON body: never
+--help: no exit-code table (only "--quiet ... read the exit code", "--warnings-as-errors ... exit 1")
+--schema: no exit_codes key
 ```
 
 **stderr** (first 20 lines):
 ```
-usage: cloudfall deploy [-h] [--project PROJECT] [--schemas SCHEMAS]
-                        [--engine ENGINE] [--inventory-file INVENTORY_FILE]
-                        --release RELEASE [--artifacts ARTIFACTS]
-                        [--env-file ENV_FILE] [--receipts RECEIPTS]
-                        component
-cloudfall deploy: error: the following arguments are required: component, --release
-```
-
-### s1-unknown-component (exit 2, 0.29s, 0 stdout bytes)
-
-**stdout** (first 20 lines):
-```
-
-```
-
-**stderr** (first 20 lines):
-```
-{"error": {"code": "lifecycle_component_missing", "message": "component does not exist: nonexistent"}, "status": "error"}
-```
-
-### s1-invalid-id (exit 1, 0.29s, 0 stdout bytes)
-
-**stdout** (first 20 lines):
-```
-
-```
-
-**stderr** (first 20 lines):
-```
-Traceback (most recent call last):
-  File "/Users/roman/PycharmProjects/Atlas/.venv/bin/cloudfall", line 10, in <module>
-    sys.exit(run())
-             ~~~^^
-  File "/Users/roman/PycharmProjects/Atlas/sdk/src/cloudfall/cli.py", line 1649, in run
-    raise SystemExit(main())
-                     ~~~~^^
-  File "/Users/roman/PycharmProjects/Atlas/sdk/src/cloudfall/cli.py", line 982, in main
-    return _dispatch(arguments, state, schema_directory)
-  File "/Users/roman/PycharmProjects/Atlas/sdk/src/cloudfall/cli.py", line 1128, in _dispatch
-    return handler(arguments, state, schema_directory)
-  File "/Users/roman/PycharmProjects/Atlas/sdk/src/cloudfall/cli.py", line 1567, in _run_health
-    ResourceId.from_boundary(arguments.component),
-    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/roman/PycharmProjects/Atlas/sdk/src/cloudfall/domain.py", line 59, in from_boundary
-    return cls(value)
-  File "<string>", line 4, in __init__
-  File "/Users/roman/PycharmProjects/Atlas/sdk/src/cloudfall/domain.py", line 48, in __post_init__
-    raise ValueError(message)
-ValueError: invalid resource id: 'Bad ID!'
-```
-
-### s1-not-a-project (exit 2, 0.22s, 0 stdout bytes)
-
-**stdout** (first 20 lines):
-```
-
-```
-
-**stderr** (first 20 lines):
-```
-{"error": {"code": "project_empty", "message": "project contains no YAML resources: /Users/roman/PycharmProjects/Atlas/tmp/eval"}, "status": "error"}
-```
-
-### s1-observed-missing (exit 2, 0.23s, 0 stdout bytes)
-
-**stdout** (first 20 lines):
-```
-
-```
-
-**stderr** (first 20 lines):
-```
-{"error": {"code": "observation_directory_missing", "message": "observation directory does not exist: /Users/roman/PycharmProjects/Atlas/tmp/eval/nope"}, "status": "error"}
-```
-
-### s1-proposal-missing (exit 2, 0.3s, 0 stdout bytes)
-
-**stdout** (first 20 lines):
-```
-
-```
-
-**stderr** (first 20 lines):
-```
-{"code": "operator_proposal_missing", "message": "proposal does not exist: tmp/operator/proposals/ghost.json"}
-```
-
-### s1-network-dns-fail (exit 1, 1.07s, 2192 stdout bytes)
-
-**stdout** (first 20 lines):
-```
-{"action": "health", "component": "crm-backend", "detail": "run health.yml failed: red servers] ********************\nincluded: cloudfall_deploy for h1, h2 => (item=crm-backend)\n\nTASK [cloudfall_deploy : Validating arguments against arg spec 'health' - Probe one component's declared health check] ***\nok: [h1]\nok: [h2]\n\nTASK [cloudfall_deploy : Probe the component's declared health check] **********\nincluded: /Users/roman/PycharmProjects/Atlas/engine/ansible/roles/cloudfall_deploy/tasks/health_gate.yml for h1, h2\n\nTASK [cloudfall_deploy : Gate the component on its declared HTTP health check] ***\n[ERROR]: Task failed: Failed to connect to the host via ssh: ssh: Could not resolve hostname h1.example.internal: nodename nor servname provided, or not known\nOrigin: /Users/roman/PycharmProjects/Atlas/engine/ansible/roles/cloudfall_deploy/tasks/health_gate.yml:2:3\n\n1 ---\n2 - name: Gate the component on its declared HTTP health check\n    ^ column 3\n\nfatal: [h1]: UNREACHABLE! => {\"changed\": false, \"msg\": \"Task failed: Failed to connect to the host via ssh: ssh: Could not resolve hostname h1.example.internal: nodename nor servname provided, or not known\", \"unreachable\": true}\n[ERROR]: Task failed: Failed to connect to the host via ssh: ssh: Could not resolve hostname h2.example.internal: nodename nor servname provided, or not known\nOrigin: /Users/roman/PycharmProjects/Atlas/engine/ansible/roles/cloudfall_deploy/tasks/health_gate.yml:2:3\n\n1 ---\n2 - name: Gate
-[truncated — 2191 characters total]
-```
-
-**stderr** (first 20 lines):
-```
-
+PermissionError: [Errno 13] Permission denied: '.../tmp/eval-s1ro/p/servers/h9.yaml'
+(traceback from pathlib write_text; exit 1)
+Documented table, generated AGENTS.md only (sdk/src/cloudfall/project.py):
+| `0` | the command ran and its result is positive (`ok: true`) |
+| `1` | the command ran and its result is negative: drift, unhealthy, a failed step |
+| `2` | invalid input, usage, or an unmet precondition; nothing ran |
+| `3` | compliance unknown: observations missing or stale (`audit`, `migrate`) |
 ```
 
 ## §2 — Output Format & Parseability
