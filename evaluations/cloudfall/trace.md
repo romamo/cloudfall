@@ -1258,34 +1258,32 @@ error (stderr) | keys: ['data', 'error', 'meta', 'ok', 'status', 'warnings'] | o
 ```
 
 ## §3 — Stderr vs Stdout Discipline
-**Date:** 2026-09-25 (refresh, after d38d9c0)
-**CLI version:** 0.5.1 at d38d9c0 (output schema 1.0)
-**Check command:** `uv run cloudfall <cmd> --project $PWD/config/examples </dev/null >out 2>err`, every stdout line parsed as JSON; 12 commands including `observe --output-dir tmp/eval-s3/obs` and `restart crm-backend --yes` (hosts do not resolve); then `dashboard serve --port 0` with `GET /` and `GET /missing`
-**Exit code:** `observe` 1; `restart --yes` 1; `health` 1; others 0 or 2
-**Score:** 2/3
+**Date:** 2026-09-26 (second refresh, after 40163ca)
+**CLI version:** 0.5.1 at 40163ca (output schema 1.0)
+**Check command:** a script running `uv run cloudfall <cmd>` for 13 paths against `--project $PWD/config/examples` (stdin `/dev/null`, stdout and stderr captured apart, every stdout line parsed as JSON), once plain and once with `--quiet` appended; then `dashboard serve --port 0 --quiet` with `GET /missing`, and `inventory show --warnings-as-errors`
+**Exit code:** per path below
+**Score:** 3/3
 
 **stdout** (first 20 lines):
 ```
-observe (engine inspect)                     exit=1 out_lines=1 non_json_out=[] err=[]
-restart crm-backend --yes (engine runs)      exit=1 out_lines=0 non_json_out=[] err=['json']
-health crm-backend                           exit=1 out_lines=1 non_json_out=[] err=[]
-config validate                              exit=0 out_lines=1 non_json_out=[] err=[]
-inventory show                               exit=0 out_lines=1 non_json_out=[] err=[]
-audit (observations missing)                 exit=2 out_lines=0 non_json_out=[] err=['json']
-bad invocation (inventory shoe)              exit=2 out_lines=0 non_json_out=[] err=['json']
-no args                                      exit=2 out_lines=0 non_json_out=[] err=['json']
---help                                       exit=0 out_lines=42 non_json_out=['usage: cloudfall [-h] [--version] [--schema] [--schema-version MAJOR]', ...] err=[]
-inventory show --help                        exit=0 out_lines=15 non_json_out=['usage: cloudfall inventory show [-h] [--project PROJECT]', ...] err=[]
---quiet                                      exit=2 out_lines=0 non_json_out=[] err=['json']
---warnings-as-errors                         exit=2 out_lines=0 non_json_out=[] err=['json']
-dashboard serve stdout: {"data": {"dashboard": {"inspectServices": false, "refreshSeconds": 10, "url": "http://127.0.0.1:61761/"}}, "error": null, "meta": {...}, ...}
+=== plain                                  exit  out  non_json_out  err
+observe --output-dir tmp/eval-s3/obs          1    1  0             0
+restart crm-backend --yes                     1    0  0             1 json
+health crm-backend                            1    1  0             0
+config validate / inventory show              0    1  0             0
+audit (observations missing) / health ghost   2    0  0             1 json
+inventory shoe / (no args)                    2    0  0             1 json
+--help                                        0    0  0             45 prose
+inventory show --help                         0    0  0             19 prose
+migrate --yes --restart / --output text       2    0  0             1 json
+=== with --quiet: same exits and stdout; stderr 0 lines on all 13 paths
+dashboard serve --quiet: GET /missing 404 | stderr=0B
+--warnings-as-errors accepted: ok True warnings []
 ```
 
 **stderr** (first 20 lines):
 ```
-restart --yes / audit / inventory shoe / no args / --quiet / --warnings-as-errors: one JSON error line each
-dashboard serve:
-127.0.0.1 - - [25/Sep/2026 09:48:51] "GET / HTTP/1.1" 200 -
-127.0.0.1 - - [25/Sep/2026 09:48:51] "GET /missing HTTP/1.1" 404 -
+(plain) one JSON error line per failure; help text on --help; nothing on success
+(--quiet) empty on every path
 ```
 

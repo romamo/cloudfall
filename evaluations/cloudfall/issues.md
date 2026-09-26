@@ -152,3 +152,11 @@ Fixed on 2026-09-24.
 ### §3 path to 3/3 — help on stderr off a TTY, `--quiet`, `--warnings-as-errors`
 After d38d9c0 stdout carries only JSON except under an explicit `--help`, which argparse prints to stdout even when stdout is a pipe. Level 3 also needs `--quiet` (silence stderr, which today holds only JSON errors and `dashboard serve`'s request log) and `--warnings-as-errors` (exit non-zero when `warnings[]` is non-empty; `DEPRECATED_FIELDS` is the only source of warnings today). All three fit next to `--output` in `add_output_format`/`root_parser`.
 Discovered during §3 refresh on 2026-09-25.
+
+### §3 resolved at 3/3 — what remains around the edges
+40163ca meets the level-3 condition. Left open: a failed `migrate --yes` step still writes its failure envelope to stdout, the one failure that does; an uncaught exception still prints a Python traceback on stderr under `--quiet` (a bug path, so arguably right); and `--warnings-as-errors` cannot be exercised live until something emits a warning, since `DEPRECATED_FIELDS` is empty. `cloudfall-engine` shares the parser and routes help to stderr off a TTY (`--help`: stdout 0 B, 10 lines on stderr), but does not define `--quiet`, `--output` or `--warnings-as-errors`.
+Discovered during §3 second refresh on 2026-09-26.
+
+### §3/§1 candidate — `cloudfall-engine ... --quiet` exits 2 in silence
+`cloudfall-engine playbook list --quiet` → exit 2, 0 bytes on stdout and stderr. The engine parser does not define `--quiet`, so parsing fails with "unrecognized options --quiet"; but the shared `parse_arguments` (`sdk/src/cloudfall/arguments.py`) reads `--quiet` from the raw tokens before parsing so that cloudfall usage errors honor it, and that pre-scan silences the very error saying the flag is unknown. Compare `--bogus`, which prints the JSON `invalid_argument`. Either the engine gains the output options (`add_output_options`), or the pre-scan applies only when the parser defines `--quiet`.
+Discovered during §3 second refresh on 2026-09-26.
