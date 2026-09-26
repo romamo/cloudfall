@@ -98,12 +98,12 @@ def test_a_deprecated_field_warns_while_it_is_still_written() -> None:
 
     with_field = envelope(
         {"status": "ok", "inventory": {"servers": []}},
-        ok=True,
+        exit_code=0,
         deprecated_fields=(deprecated,),
     )
     without_field = envelope(
         {"status": "ok", "inventory": {"hosts": []}},
-        ok=True,
+        exit_code=0,
         deprecated_fields=(deprecated,),
     )
 
@@ -141,6 +141,7 @@ def test_changelog_lists_contract_changes_newest_first(
             "status",
             "data",
             "error",
+            "error.exit_code",
             "meta.schema_version",
             "meta.tool_version",
             "meta.request_id",
@@ -216,13 +217,13 @@ def test_schema_versions_order_numerically() -> None:
 
 def test_the_payload_moves_under_data_and_status_and_error_stay_on_top() -> None:
     begin_invocation()
-    result = envelope({"status": "plan", "steps": []}, ok=True)
+    result = envelope({"status": "plan", "steps": []}, exit_code=0)
     failure = envelope(
-        {"status": "error", "error": {"code": "x", "message": "y"}}, ok=False
+        {"status": "error", "error": {"code": "x", "message": "y"}}, exit_code=2
     )
     failed_step = envelope(
         {"status": "error", "error": {"code": "x", "message": "y"}, "step": "a"},
-        ok=False,
+        exit_code=1,
     )
 
     assert result == {
@@ -237,27 +238,28 @@ def test_the_payload_moves_under_data_and_status_and_error_stay_on_top() -> None
         "ok": False,
         "status": "error",
         "data": None,
-        "error": {"code": "x", "message": "y"},
+        "error": {"code": "x", "message": "y", "exit_code": 2},
         "meta": META,
         "warnings": [],
     }
     assert failed_step["data"] == {"step": "a"}
-    assert failed_step["error"] == {"code": "x", "message": "y"}
+    assert failed_step["error"] == {"code": "x", "message": "y", "exit_code": 1}
 
 
 def test_a_document_with_an_error_cannot_be_ok() -> None:
     with pytest.raises(ValueError, match="cannot be ok"):
-        envelope({"status": "error", "error": {"code": "x"}}, ok=True)
+        envelope({"status": "error", "error": {"code": "x"}}, exit_code=0)
 
 
 def test_a_payload_must_name_its_status() -> None:
     with pytest.raises(TypeError, match="names its status"):
-        envelope({"inventory": {}}, ok=True)
+        envelope({"inventory": {}}, exit_code=0)
 
 
 def test_an_error_document_carries_only_its_error() -> None:
+    begin_invocation()
     with pytest.raises(ValueError, match="status and error only"):
-        write_error({"status": "error", "error": {"code": "x"}, "extra": 1})
+        write_error({"status": "error", "error": {"code": "x"}, "extra": 1}, 2)
 
 
 @pytest.mark.parametrize(
@@ -286,8 +288,8 @@ def test_output_accepts_only_json(capsys: pytest.CaptureFixture[str]) -> None:
 
 def test_one_invocation_has_one_request_id_and_a_growing_duration() -> None:
     invocation = begin_invocation()
-    first = envelope({"status": "ok"}, ok=True)["meta"]
-    second = envelope({"status": "ok"}, ok=True)["meta"]
+    first = envelope({"status": "ok"}, exit_code=0)["meta"]
+    second = envelope({"status": "ok"}, exit_code=0)["meta"]
 
     assert isinstance(first, dict)
     assert isinstance(second, dict)
@@ -401,7 +403,7 @@ def test_warnings_as_errors_fails_a_result_that_carries_a_warning() -> None:
     configure_output(OutputOptions(warnings_as_errors=True))
 
     document = envelope(
-        {"status": "ok", "inventory": {}}, ok=True, deprecated_fields=(deprecated,)
+        {"status": "ok", "inventory": {}}, exit_code=0, deprecated_fields=(deprecated,)
     )
 
     assert (document["ok"], document["status"]) == (False, "ok")
@@ -409,6 +411,7 @@ def test_warnings_as_errors_fails_a_result_that_carries_a_warning() -> None:
     assert document["error"] == {
         "code": "warnings_as_errors",
         "message": "--warnings-as-errors: 1 warning(s) (FIELD_DEPRECATED)",
+        "exit_code": 1,
     }
     assert (exit_code(0), exit_code(2)) == (1, 2)
 
@@ -433,3 +436,37 @@ def test_help_ends_with_every_exit_code(
     for declared in EXIT_CODES:
         first_words = " ".join(declared.meaning.replace("`", "").split()[:4])
         assert f"  {declared.code}  {first_words}" in table
+
+
+def test_the_error_carries_the_code_the_process_exits_with(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    read_only = tmp_path / "read-only"
+    read_only.mkdir()
+    read_only.chmod(0o555)
+    try:
+        cases = [
+            (_run(["deploy"], capsys), 2),
+            (_run(["inventory", "show", "--project", str(tmp_path)], capsys), 2),
+            (_run(["init", str(read_only / "project")], capsys), 1),
+        ]
+    finally:
+        read_only.chmod(0o755)
+
+    for (code, _, err), expected in cases:
+        assert code == expected
+        assert json.loads(err)["error"]["exit_code"] == code
+
+
+def test_an_error_cannot_exit_zero() -> None:
+    begin_invocation()
+    with pytest.raises(ValueError, match="cannot exit 0"):
+        write_error({"status": "error", "error": {"code": "x", "message": "y"}}, 0)
+
+
+def test_the_writer_owns_exit_code() -> None:
+    begin_invocation()
+    with pytest.raises(ValueError, match="exit_code is added"):
+        envelope(
+            {"status": "error", "error": {"code": "x", "exit_code": 9}}, exit_code=2
+        )

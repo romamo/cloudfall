@@ -15,7 +15,8 @@ Every document has the same top level, whatever the command:
     steps.
 
 ``error``
-    ``{"code", "message"}`` on a failure, ``null`` otherwise.
+    ``{"code", "message", "exit_code"}`` on a failure, ``null`` otherwise;
+    ``exit_code`` is the code the process exits with.
 
 All six top-level keys are on every document, so a caller reads them
 without checking whether they exist.
@@ -260,6 +261,7 @@ SCHEMA_CHANGELOG: tuple[SchemaChange, ...] = (
             FieldPath("status"),
             FieldPath("data"),
             FieldPath("error"),
+            FieldPath("error.exit_code"),
             FieldPath("meta.schema_version"),
             FieldPath("meta.tool_version"),
             FieldPath("meta.request_id"),
@@ -315,36 +317,47 @@ def schema_versions() -> dict[str, str]:
     }
 
 
-def write_result(payload: Mapping[str, object], *, ok: bool = True) -> None:
-    """Write a result document to stdout; ``ok`` is whether the command exits 0."""
-    _write(sys.stdout, envelope(payload, ok=ok))
+def write_result(payload: Mapping[str, object], *, exit_code: int = 0) -> None:
+    """Write a result document to stdout for a command exiting with ``exit_code``."""
+    _write(sys.stdout, envelope(payload, exit_code=exit_code))
     # A pipe makes stdout block-buffered; flush so long-running commands such
     # as `operator run --interval` deliver each document when it is written.
     sys.stdout.flush()
 
 
-def write_error(payload: Mapping[str, object]) -> None:
-    """Write an error document, ``{"status": "error", "error": ...}``, to stderr."""
+def write_error(payload: Mapping[str, object], exit_code: int) -> int:
+    """Write an error document to stderr and return the code to exit with.
+
+    The payload is ``{"status": "error", "error": ...}``; returning
+    ``exit_code`` lets a caller write ``return write_error(payload, 2)``, so
+    the code in the document is the code the process exits with.
+    """
     if set(payload) != {"status", "error"} or payload["status"] != "error":
         message = f"an error payload is status and error only, got {sorted(payload)}"
         raise ValueError(message)
-    document = envelope(payload, ok=False)
+    if exit_code == 0:
+        message = "an error document cannot exit 0"
+        raise ValueError(message)
+    document = envelope(payload, exit_code=exit_code)
     if not current_invocation().options.quiet:
         _write(sys.stderr, document)
+    return exit_code
 
 
 def envelope(
     payload: Mapping[str, object],
     *,
-    ok: bool,
+    exit_code: int,
     deprecated_fields: tuple[DeprecatedField, ...] = DEPRECATED_FIELDS,
 ) -> dict[str, object]:
     """Return the document for a command's flat ``payload``.
 
     The payload names its ``status`` and, on a failure, its ``error``; every
-    other key moves under ``data``. The writer adds ``ok``, ``meta`` and
-    ``warnings``, and writes ``data`` and ``error`` as ``null`` when absent.
+    other key moves under ``data``. The writer adds ``ok`` (``exit_code`` is
+    0), ``meta`` and ``warnings``, adds ``exit_code`` to the error, and
+    writes ``data`` and ``error`` as ``null`` when absent.
     """
+    ok = exit_code == 0
     for owned in _WRITER_KEYS:
         if owned in payload:
             message = f"command payloads must not set {owned!r}; the writer owns it"
@@ -357,6 +370,11 @@ def envelope(
     if ok and (error is not None or status == "error"):
         message = f"a document with status {status!r} and an error cannot be ok"
         raise ValueError(message)
+    if error is not None:
+        if not isinstance(error, Mapping) or "exit_code" in error:
+            message = f"an error names code and message; exit_code is added: {error!r}"
+            raise ValueError(message)
+        error = {**error, "exit_code": exit_code}
     data = {key: value for key, value in payload.items() if key not in _LIFTED_KEYS}
     document: dict[str, object] = {
         "ok": ok,
@@ -377,6 +395,7 @@ def envelope(
         document["error"] = {
             "code": WARNINGS_AS_ERRORS,
             "message": f"--warnings-as-errors: {len(warnings)} warning(s) ({codes})",
+            "exit_code": 1,
         }
     return {**document, "meta": invocation.meta(), "warnings": warnings}
 

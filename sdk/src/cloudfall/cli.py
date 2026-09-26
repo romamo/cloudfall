@@ -1279,9 +1279,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             raise
         message = f"cannot write {error.filename}: {error.strerror}"
         error_body = {"code": "path_not_writable", "message": message}
-        write_error({"status": "error", "error": error_body})
         # Exit 1, not 2: the command may have done part of its work first.
-        code = 1
+        code = write_error({"status": "error", "error": error_body}, 1)
     return exit_code(code)
 
 
@@ -1317,8 +1316,7 @@ def _main(argv: Sequence[str] | None) -> int:
         DecisionError,
         WhyError,
     ) as error:
-        write_error(error.as_dict())
-        return 2
+        return write_error(error.as_dict(), 2)
 
 
 _ERROR_SOURCE_AMBIGUOUS = "project_source_ambiguous"
@@ -1403,11 +1401,9 @@ def _run_init(arguments: Namespace) -> int:
             "status": "error",
             "error": {"code": "invalid_argument", "message": str(error)},
         }
-        write_error(payload)
-        return 2
+        return write_error(payload, 2)
     except ProjectError as error:
-        write_error(error.as_dict())
-        return 2
+        return write_error(error.as_dict(), 2)
     write_result(scaffold.as_dict())
     return 0
 
@@ -1455,11 +1451,9 @@ def _run_add(arguments: Namespace, project_directory: Path) -> int:
             "status": "error",
             "error": {"code": "invalid_argument", "message": str(error)},
         }
-        write_error(payload)
-        return 2
+        return write_error(payload, 2)
     except AuthoringError as error:
-        write_error(error.as_dict())
-        return 2
+        return write_error(error.as_dict(), 2)
     write_result(result.as_dict())
     return 0
 
@@ -1481,8 +1475,7 @@ def _run_import_render(arguments: Namespace) -> int:
                 Path(arguments.blueprint), targets, Path(arguments.schemas)
             )
     except (RenderImportError, ConfigValidationError) as error:
-        write_error(error.as_dict())
-        return 2
+        return write_error(error.as_dict(), 2)
     write_result(result.as_dict())
     return 0
 
@@ -1667,7 +1660,7 @@ def _propose_operation(
     )
     decision = propose(request, _decision_store(arguments, repository))
     code = 0 if decision.check.exit_code == 0 else 1
-    write_result(decision.as_dict(), ok=code == 0)
+    write_result(decision.as_dict(), exit_code=code)
     return code
 
 
@@ -1704,7 +1697,7 @@ def _approve_decision(arguments: Namespace, repository: Path) -> int:
         store,
     )
     code = 0 if approved.status is not DecisionStatus.FAILED else 1
-    write_result(approved.as_dict(), ok=code == 0)
+    write_result(approved.as_dict(), exit_code=code)
     return code
 
 
@@ -1753,10 +1746,9 @@ def _run_observe(
             Path(_OVERLAY_DIRECTORY),
         )
     except ObserveError as error:
-        write_error(error.as_dict())
-        return 2
+        return write_error(error.as_dict(), 2)
     code = 0 if result.complete else 1
-    write_result(result.as_dict(), ok=code == 0)
+    write_result(result.as_dict(), exit_code=code)
     return code
 
 
@@ -1777,7 +1769,7 @@ def _run_audit(
         load_environment_receipts(Path(arguments.env_receipts), schema_directory),
     )
     code = _AUDIT_EXIT_CODES[report.status]
-    write_result(report.as_dict(), ok=code == 0)
+    write_result(report.as_dict(), exit_code=code)
     return code
 
 
@@ -1798,8 +1790,7 @@ def _run_secrets_render(
             receipt_directory=Path(arguments.receipts),
         )
     except SecretsError as error:
-        write_error(error.as_dict())
-        return 2
+        return write_error(error.as_dict(), 2)
     write_result(result)
     return 0
 
@@ -1865,8 +1856,7 @@ def _require_gateway_material(arguments: Namespace) -> None:
 
 
 def _operator_exit(error: OperatorError) -> int:
-    write_error(error.as_dict())
-    return 2
+    return write_error(error.as_dict(), 2)
 
 
 def _run_operator_run(
@@ -1986,7 +1976,7 @@ def _run_operator_approve(
             "status": "ok" if verified else "failed",
             "proposal": proposal.as_document(),
         },
-        ok=verified,
+        exit_code=0 if verified else 1,
     )
     return 0 if verified else 1
 
@@ -2103,8 +2093,8 @@ def _engine_context(arguments: Namespace, schema_directory: Path) -> EngineConte
 
 
 def _lifecycle_exit(error: LifecycleError) -> int:
-    write_error(error.as_dict())
-    return 1 if error.code == "lifecycle_execution_failed" else 2
+    code = 1 if error.code == "lifecycle_execution_failed" else 2
+    return write_error(error.as_dict(), code)
 
 
 def _run_data_migrate(
@@ -2210,8 +2200,9 @@ def _run_health(
         )
     except LifecycleError as error:
         return _lifecycle_exit(error)
-    write_result(result.as_dict(), ok=result.healthy)
-    return 0 if result.healthy else 1
+    code = 0 if result.healthy else 1
+    write_result(result.as_dict(), exit_code=code)
+    return code
 
 
 def _run_migrate(
@@ -2235,8 +2226,7 @@ def _run_migrate(
             "status": "error",
             "error": {"code": "invalid_argument", "message": str(error)},
         }
-        write_error(payload)
-        return 2
+        return write_error(payload, 2)
     config = AgentConfig(
         project_directory=Path(arguments.project_directory),
         schema_directory=schema_directory,
@@ -2260,11 +2250,10 @@ def _run_migrate(
     try:
         result = execute_migration(config, options)
     except MigrateError as error:
-        write_error(error.as_dict())
-        return 2
+        return write_error(error.as_dict(), 2)
     status = str(result["status"])
     code = 0 if status in {"ok", "plan"} else 3 if status == "paused" else 1
-    write_result(result, ok=code == 0)
+    write_result(result, exit_code=code)
     return code
 
 

@@ -682,8 +682,9 @@ same top level whatever the command: `ok` is true exactly when the exit
 code is 0, `status` is the command's verdict (`ok`, `plan`, `drift`,
 `unhealthy`, `paused`, `failed`), `data` holds the result, and `error` is
 `null`. A failure prints `{{"ok": false, "status": "error", "data": null,
-"error": {{"code": …, "message": …}}}}` on stderr, and the `code` is stable:
-branch on it, not on the message. A failed `migrate` step is the one
+"error": {{"code": …, "message": …, "exit_code": …}}}}` on stderr, with the
+code the process exits with; the `code` is stable: branch on it, not on
+the message. A failed `migrate` step is the one
 failure on stdout, with its steps under `data`. `--output json` is accepted
 and changes nothing; `--quiet` writes nothing to stderr, not even the error,
 and `--warnings-as-errors` fails a result that carries a warning. `--help`

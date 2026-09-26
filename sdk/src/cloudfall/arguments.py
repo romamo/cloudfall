@@ -82,8 +82,7 @@ class StrictArgumentParser(argparse.ArgumentParser):
             "status": "error",
             "error": {"code": INVALID_ARGUMENT, "message": f"{self.prog}: {message}"},
         }
-        write_error(payload)
-        raise SystemExit(2)
+        raise SystemExit(write_error(payload, 2))
 
 
 class VersionAction(argparse.Action):

@@ -52,6 +52,11 @@ Notable changes to Cloudfall. The format follows
   not declared yet. The tests validate real output against these schemas,
   and an `etag` changes only when a command, flag or declared output does
 
+- Every error carries `exit_code`, the code the process exits with, so a
+  caller that reads the JSON needs no second channel: `{"code",
+  "message", "exit_code"}`. Results that exit non-zero, such as an
+  `audit` that finds drift, say so with `ok: false` and keep `error`
+  `null`
 - Every `cloudfall` `--help` ends with the exit codes and what each one
   means: 0 positive, 1 ran with a negative result, 2 nothing ran, 3
   unknown. The generated `AGENTS.md` renders the same table from the same

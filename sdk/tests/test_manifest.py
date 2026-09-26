@@ -82,6 +82,12 @@ def _documents(argv: list[str], capsys: pytest.CaptureFixture[str]) -> list[obje
     assert [document["ok"] for document in documents] == [code == 0] * len(documents)
     top = {"ok", "status", "data", "error", "meta", "warnings"}
     assert all(set(document) == top for document in documents)
+    # An error on stdout names the code the process exits with.
+    assert all(
+        document["error"]["exit_code"] == code
+        for document in documents
+        if document["error"] is not None
+    )
     return documents
 
 
